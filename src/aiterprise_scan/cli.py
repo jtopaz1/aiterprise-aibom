@@ -358,8 +358,12 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(errors="replace")  # type: ignore[attr-defined]
-        except (AttributeError, ValueError):
+            if stream is sys.stdout and not stream.isatty():
+                # a redirected stdout gets the ANSI code page on Windows; reports must be UTF-8
+                stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+            else:
+                stream.reconfigure(errors="replace")  # type: ignore[attr-defined]
+        except (AttributeError, ValueError, OSError):
             pass
     if argv and argv[0] not in COMMANDS and not argv[0].startswith("-"):
         argv.insert(0, "scan")  # `aiterprise-scan .` is the main command

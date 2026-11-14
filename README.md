@@ -1,33 +1,38 @@
 # AIterprise AIBOM Scanner — `aiterprise-scan`
 
+<!-- mcp-name: io.github.jtopaz1/aiterprise-scan -->
+
 The open-source AI supply-chain scanner you can run offline: an AI-BOM with teeth. One command walks
-a repository, a model file, an agent configuration or a third-party AI-BOM, inventories every AI
-component, and judges it — every finding carries its evidence.
+a repository, a model file, a package archive, an agent configuration or a third-party AI-BOM,
+inventories every AI component, and judges it — every finding carries its evidence, what was
+consulted to reach it, and the rule's measured false-positive rate where one exists.
 
 ```bash
-pipx install aiterprise-scan        # or: pip install .
+pipx install aiterprise-scan        # or: pip install .   · or a single-file binary from Releases
 aiterprise-scan .                   # scan the current repository
+aiterprise-scan ui                  # local web UI: history, findings, diff, suppressions
 ```
 
-Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+
+Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ · docs in [`docs/`](docs/index.md)
 
 ## What it finds
 
 | Area | What is judged | Rule ids |
 |---|---|---|
-| Packages | Known-malicious versions (OSV `MAL-` snapshot; a withdrawn record is reported as `withdrawn`, never active); ranges that admit a malicious version | `ait.pkg.malicious*` |
-| Vulnerabilities | OSV advisories per exact version, alias-deduplicated, fix versions; CISA KEV upgrades to critical | `ait.vuln.*` |
-| Model files | Pickle opcodes (raw and zip-wrapped, protocol 0–5) with dangerous callables, safetensors/GGUF/ONNX/HDF5/Keras/TFLite inventory, Keras `Lambda`, ONNX custom ops, GGUF chat-template injection, malformed containers | `ait.model.*` |
-| MCP servers | Every agent's config (Claude Desktop/Code, Cursor, VS Code, Codex, Windsurf, Gemini): dangerous commands, poisoned descriptions, literal secrets, scope — **without launching anything** | `ait.mcp.*` |
+| Packages | Known-malicious versions (OSV `MAL-` snapshot; withdrawn records reported as `withdrawn`, never active); ranges that admit a malicious version; names that do not exist on PyPI/npm (slopsquatting), packages published in the last 72 h, npm security holders, typosquats of popular and AI packages | `ait.pkg.*` |
+| Vulnerabilities | OSV advisories per exact version, alias-deduplicated, fix versions; CISA KEV upgrades to critical; a bundled AI-package advisory subset keeps this working offline and during OSV outages | `ait.vuln.*` |
+| Model files | Pickle opcodes (raw and zip-wrapped, protocol 0–5) with dangerous callables, safetensors/GGUF/ONNX/HDF5/Keras/TFLite inventory, Keras `Lambda`, ONNX custom ops, GGUF chat-template injection, malformed containers; SecDB known-bad hashes when logged in | `ait.model.*` |
+| Package archives | Wheels, sdists, tarballs, eggs: `.pth` start-up payloads, `setup.py` and npm lifecycle commands, path traversal, model files inside | `ait.archive.*` |
+| MCP servers | Every agent's config (Claude Desktop/Code, Cursor, VS Code, Codex, Windsurf, Gemini) and MCPB/DXT bundles: dangerous commands, poisoned descriptions, literal secrets, scope — **without launching anything**; SecDB reputation when logged in | `ait.mcp.*` |
 | Agent skills | `SKILL.md` trees, Claude Code plugins/commands: instruction poisoning, install-script commands, risk score | `ait.skill.*` |
-| Licences | Model and dataset licence verdicts (Llama, Gemma, OpenRAIL, Mistral, Qwen, DBRX, DeepSeek, Falcon, CC-BY-NC, …) against your `use_context` — advisory, not legal advice | `ait.licence.*` |
+| Licences | Model and dataset licence verdicts (Llama, Gemma, OpenRAIL, Mistral, Qwen, DBRX, DeepSeek, Falcon, CC-BY-NC, …) against your `use_context` — advisory, not legal advice; written into the AI-BOM's `licenses[]` | `ait.licence.*` |
 | Secrets | AI-provider keys in configs and code, reported redacted | `ait.secret.*` |
 
 Inputs: `requirements*.txt`, `pyproject.toml` (PEP 621 + Poetry), `Pipfile(.lock)`, `poetry.lock`,
 `uv.lock`, `environment.yml`, `package.json`, `package-lock.json` v1–v3, `pnpm-lock.yaml`,
-`yarn.lock`; Python/JS imports and notebooks (manifest-free discovery); CycloneDX 1.4–1.7 and SPDX
-JSON BOMs — including AI-BOMs from cdxgen, Snyk and OWASP generators. A lockfile always wins over a
-manifest, and a range is never treated as an exact version.
+`yarn.lock`; Python/JS imports and notebooks; `.whl`/`.tar.gz`/`.egg`/`.mcpb`/`.dxt` archives;
+CycloneDX 1.4–1.7 and SPDX JSON BOMs (cdxgen, Snyk, OWASP generators). A lockfile always wins over
+a manifest, and a range is never treated as an exact version.
 
 ## Usage
 
@@ -35,18 +40,38 @@ manifest, and a range is never treated as an exact version.
 aiterprise-scan .                                   # table report on stdout, exit 0/1/2
 aiterprise-scan . --offline                         # bundled definitions + cache only, no network
 aiterprise-scan scan --bom cdxgen-aibom.json        # judge someone else's AI-BOM
+aiterprise-scan scan dist/mypkg-1.0-py3-none-any.whl  # judge a package before you publish or install it
 aiterprise-scan . --format sarif --out reports/     # report.sarif for GitHub code scanning
-aiterprise-scan . --emit-bom aibom.cdx.json         # CycloneDX 1.7 AI-BOM with findings attached
+aiterprise-scan . --emit-bom aibom.cdx.json         # CycloneDX 1.7 AI-BOM: findings, licence verdicts, modelCard
+aiterprise-scan . --save                            # keep the scan in the local history (`ui`)
 aiterprise-scan mcp --agent-configs                 # this machine's MCP servers and skills
 aiterprise-scan bom . --out aibom.cdx.json          # inventory only (fast compliance mode)
 aiterprise-scan . --write-baseline .aiterprise/baseline.json   # adopt gating without fixing everything
+aiterprise-scan ui                                  # local web UI on 127.0.0.1
 aiterprise-scan policy lint aibom.policy.yaml
-aiterprise-scan defs status
+aiterprise-scan defs status | verify | install | update | rollback   # signed definition bundles
 ```
 
 Exit codes: `0` clean · `1` policy failure (`--fail-on`, default `high`) · `2` error or incomplete
 scan (an analyzer failed, or a source such as OSV could not be reached; `--offline` is not an error).
 Files the scanner had to skip are reported as `ait.*.not-analysable` findings, never passed as clean.
+
+## SecDB (optional)
+
+Logged in, the scanner also asks [SecDB](https://secdb.aiterprise.net) about model-file hashes,
+private MCP URLs (by an 8-hex SHA-256 prefix only — the URL never leaves the machine) and packages.
+
+```bash
+aiterprise-scan login                   # paste an API key (aik_…); checked with /v1/me before it is saved
+aiterprise-scan status                  # plan, per-minute limit, usage this month
+aiterprise-scan . --upload              # send the JSON report (SecDB Pro+, or --cloud URL); local paths stripped
+aiterprise-scan report-fp ait.mcp.cmd.pipe-to-shell --notes "…"   # with your consent
+aiterprise-scan logout
+```
+
+In CI set `AITERPRISE_API_KEY` from a secret. Limits come from your plan (`/v1/me`): when the
+per-minute budget or quota runs out, the rest is reported **UNVERIFIED, not safe** — never as clean.
+`--offline` and `--no-secdb` never call SecDB.
 
 ## Policy
 
@@ -70,10 +95,11 @@ suppressions:                    # expiry is mandatory
 baseline: .aiterprise/baseline.json
 ```
 
-A known-malicious finding (verdict `malicious`) is never silenced by `ignore`, `allow_packages`, a
-rule-, path- or advisory-wide suppression, or a baseline; only an expiring suppression that names
-its fingerprint accepts it. `.snyk` ignore files can be imported with
-`--snyk .snyk` (30-day default expiry).
+Suppressions made in the UI go to `.aiterprise/suppressions.json` (same rules: a reason, and an
+expiry at most 365 days ahead); commit it so CI applies them. A known-malicious finding (verdict
+`malicious`) is never silenced by `ignore`, `allow_packages`, a rule-, path- or advisory-wide
+suppression, or a baseline; only an expiring suppression that names its fingerprint accepts it.
+`.snyk` ignore files can be imported with `--snyk .snyk` (30-day default expiry).
 
 ## CI
 
@@ -83,6 +109,7 @@ GitHub Action (uploads SARIF, then gates):
 - uses: jtopaz1/aiterprise-aibom/action@main
   with:
     fail-on: high
+    api-key: ${{ secrets.AITERPRISE_API_KEY }}   # optional: SecDB judgements
 ```
 
 pre-commit:
@@ -93,25 +120,34 @@ pre-commit:
   hooks: [{ id: aiterprise-scan }]
 ```
 
+Docker (published with the first tagged release): `docker run --rm -v "$PWD:/src" ghcr.io/jtopaz1/aiterprise-scan:latest`
+
+MCP: `aiterprise-scan mcp serve` exposes `scan_ai_supply_chain` to any MCP client over stdio
+(registry manifest: [`server.json`](server.json)).
+
 ## Principles
 
 - **Local-first.** Source never leaves the machine. Online mode sends package names and versions to
-  OSV in POST bodies; `--offline` sends nothing.
-- **Never execute what we scan.** No unpickling, no imports, no MCP server launches.
+  OSV and the PyPI/npm registries, and (when logged in) hashes, purls and URL prefixes to SecDB —
+  all in POST bodies or registry paths, never your code. `--offline` sends nothing.
+- **Never execute what we scan.** No unpickling, no imports, no MCP server launches, no archive
+  extraction to disk except model members, which are only read.
 - **"No match" is not "never checked".** Every report lists which sources were consulted and how
   many items had data; unverified checks are reported as unverified, never as safe.
+- **No invented numbers.** A rule shows a false-positive rate only after it was measured on a
+  corpus (`tools/measure_fp.py`); otherwise `fp_rate_measured: null`.
 
 ## Development
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -e .
 PYTHONPATH=src python -m unittest discover -s tests -p "test_*.py"
+python tools/killer_demo.py            # the five-problem acceptance demo; exit 0 only if all five hit
 python tools/build_malicious.py --zip PyPI-all.zip --zip npm-all.zip --replace   # refresh the MAL snapshot
+python tools/build_vuln_subset.py --zip PyPI-all.zip --zip npm-all.zip           # refresh the AI advisory subset
 python tools/build_kev.py --url                                                  # refresh CISA KEV
-aiterprise-scan defs status                                                      # what is bundled, with input hashes
+python tools/check_licences.py                                                   # release licence check
 ```
 
-Bundled definitions (2026-11-14): 235,476 OSV `MAL-` records for npm and PyPI (363 withdrawn
-records kept apart and reported as `withdrawn`, never as active findings) and 1,781 CISA KEV CVEs. Details and refresh steps: [docs/STATUS.md](docs/STATUS.md).
-
+What is built, what is not, and the data provenance: [docs/STATUS.md](docs/STATUS.md).
 Design of record: `aiterprise-doc/13-APP-AIBOM.md` (AI2).

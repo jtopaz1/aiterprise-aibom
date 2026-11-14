@@ -71,6 +71,15 @@ class _Runner:
             return default
 
 
+def _account(result: ScanResult, source: str, ctype: str, comps: list[Component], finds: list[Finding]) -> None:
+    """Record how many components of `ctype` a source judged and how many it had something to say about."""
+    judged = [c for c in comps if c.ctype == ctype]
+    flagged = {f.component.key() for f in finds if f.component is not None}
+    ex = result.examine(source)
+    ex.checked += len(judged)
+    ex.with_data += sum(1 for c in judged if c.key() in flagged)
+
+
 def _dedupe(findings: list[Finding]) -> list[Finding]:
     by_fp: dict[str, Finding] = {}
     for f in findings:
@@ -225,6 +234,7 @@ def run_scan(opts: ScanOptions) -> ScanResult:
         findings += mf
         components += run.step("model-refs", lambda: licences.discover_model_refs(root, files), [])
         sc, sf = run.step("skills", lambda: skills.analyze_skills(root, files), ([], []))
+        _account(result, "skills", "agent-skill", sc, sf)
         components += sc
         findings += sf
         from . import archives
@@ -256,12 +266,14 @@ def run_scan(opts: ScanOptions) -> ScanResult:
                     finds += f
                 return comps, finds
             mc_, mf_ = run.step("mcp", machine_only, ([], []))
+        _account(result, "mcp", "mcp-server", mc_, mf_)
         components += mc_
         findings += mf_
         if opts.mcp_only and root is not None:
             from . import skills
 
             sc, sf = run.step("skills", lambda: skills.analyze_skills(root, files), ([], []))
+            _account(result, "skills", "agent-skill", sc, sf)
             components += sc
             findings += sf
 

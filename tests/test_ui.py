@@ -29,6 +29,14 @@ def finding(fp, title="t", rule="ait.test.rule", verdict="suspicious"):
             "confidence": 80, "evidence": [], "status": "new", "location": "requirements.txt:1"}
 
 
+class QualityTextTests(unittest.TestCase):
+    def test_measured_and_unmeasured(self):
+        self.assertEqual(ui.quality_text({"fp_rate_measured": None}), "false-positive rate not yet measured")
+        self.assertEqual(ui.quality_text(None), "false-positive rate not yet measured")
+        self.assertEqual(ui.quality_text({"fp_rate_measured": 0.012, "corpus": "c (80 projects)", "scope": "family"}),
+                         "false-positive rate 1.2% (rule family) on c (80 projects)")
+
+
 class HistoryTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

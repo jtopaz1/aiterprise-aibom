@@ -1,0 +1,30 @@
+# Privacy
+
+Source code never leaves the machine. The scanner does not execute what it scans: no unpickling,
+no imports, no MCP server launches, no install scripts.
+
+## What is sent, and when
+
+| Mode | Sent to | What |
+|---|---|---|
+| `--offline` | nobody | nothing |
+| default (online) | `api.osv.dev` | package names and exact versions, in POST bodies |
+| default (online) | `pypi.org`, `registry.npmjs.org` | direct dependency names (registry paths) — existence and age checks; `--no-registry` turns this off |
+| logged in to SecDB | `secdb.aiterprise.net` | model-file SHA-256 hashes, package purls, MCP server names, and the first 8 hex digits of the SHA-256 of each private MCP URL; `--no-secdb` turns this off |
+| `--upload` | SecDB or your `--cloud` | the JSON report: component names, versions, hashes, findings — target reduced to its directory name, home paths to `~/…` |
+| `report-fp` | SecDB | the rule id and your notes, after you consent |
+
+There is no telemetry. The table report says so on its second line (`telemetry: off`).
+
+## What is stored locally
+
+| Path | Content |
+|---|---|
+| `~/.aiterprise/credentials.json` | the SecDB key or install token — DPAPI-encrypted on Windows, mode 0600 elsewhere |
+| `~/.aiterprise/history/` | scans saved with `--save` or from the UI |
+| `~/.aiterprise/defs/` | installed definition bundles |
+| the cache directory | OSV and registry responses (`AITERPRISE_CACHE_DIR`) |
+| `.aiterprise/` in a project | suppressions and baselines you create |
+
+Secrets found by the scan are reported redacted and identified by a digest; the raw value is never
+stored or sent.

@@ -1,0 +1,46 @@
+{
+  "version": "2026.11.14",
+  "method": "fp_rate_measured = clean projects where the rule fired / clean projects whose scan examined something that rule family judges; written only with at least min-samples such projects (tools/measure_fp.py)",
+  "rules": {
+    "ait.secret.*": {
+      "corpus": "local site-packages sample (two Python environments), 2026-11 (210 projects)",
+      "evaluated_at": "2026-11-14",
+      "samples": 205,
+      "fp_rate_measured": 0.0341,
+      "flagged": 7,
+      "scope": "family"
+    },
+    "ait.secret.anthropic": {
+      "corpus": "local site-packages sample (two Python environments), 2026-11 (210 projects)",
+      "evaluated_at": "2026-11-14",
+      "samples": 205,
+      "fp_rate_measured": 0.0049,
+      "flagged": 1,
+      "scope": "rule"
+    },
+    "ait.secret.openai": {
+      "corpus": "local site-packages sample (two Python environments), 2026-11 (210 projects)",
+      "evaluated_at": "2026-11-14",
+      "samples": 205,
+      "fp_rate_measured": 0.0049,
+      "flagged": 1,
+      "scope": "rule"
+    },
+    "ait.secret.private-key": {
+      "corpus": "local site-packages sample (two Python environments), 2026-11 (210 projects)",
+      "evaluated_at": "2026-11-14",
+      "samples": 205,
+      "fp_rate_measured": 0.0341,
+      "flagged": 7,
+      "scope": "rule"
+    },
+    "ait.secret.slack": {
+      "corpus": "local site-packages sample (two Python environments), 2026-11 (210 projects)",
+      "evaluated_at": "2026-11-14",
+      "samples": 205,
+      "fp_rate_measured": 0.0049,
+      "flagged": 1,
+      "scope": "rule"
+    }
+  }
+}

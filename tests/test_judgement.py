@@ -2,6 +2,7 @@
 
 import datetime as dt
 import gzip
+import shutil
 import importlib.util
 import io
 import json
@@ -16,6 +17,8 @@ from aiterprise_scan import policy as pol
 from aiterprise_scan.cache import Cache
 from aiterprise_scan.model import Component, Finding, Location, ScanResult
 from aiterprise_scan.scanner import ScanOptions, run_scan
+
+GOLDEN = Path(__file__).parent / "golden"
 
 
 def load_builder():
@@ -345,6 +348,22 @@ class ScanHonestyTests(unittest.TestCase):
     def scan(self, **kw):
         kw.setdefault("registry", False)  # no live registry lookups from unit tests
         return run_scan(ScanOptions(target=self.root, cache=Cache(enabled=False), **kw))
+
+    def test_clean_mcp_servers_and_skills_count_as_checked(self):
+        shutil.copytree(GOLDEN / "F04b-clean-mcp", self.root / "mcp", dirs_exist_ok=True)
+        skill = self.root / "skills" / "notes"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("---\nname: notes\ndescription: Summarise meeting notes.\n---\n"
+                                        "Read the notes the user gives you and write a short summary.\n",
+                                        encoding="utf-8")
+        result = self.scan(offline=True)
+        mcp_ex, skill_ex = result.examined.get("mcp"), result.examined.get("skills")
+        self.assertIsNotNone(mcp_ex)
+        self.assertGreaterEqual(mcp_ex.checked, 1)
+        self.assertEqual(mcp_ex.with_data, 0)
+        self.assertIsNotNone(skill_ex)
+        self.assertEqual(skill_ex.checked, 1)
+        self.assertEqual(skill_ex.with_data, 0)
 
     def test_scan_runs_registry_checks_and_typosquat_names(self):
         (self.root / "requirements.txt").write_text("reqeusts==2.0.0\nnot-a-real-pkg-xyz==1.0\n")

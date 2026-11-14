@@ -1,0 +1,26 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.jtopaz1/aiterprise-scan",
+  "title": "AIterprise AIBOM Scanner",
+  "description": "Scan a repository's AI supply chain (models, MCP servers, agent skills, AI packages) and return an AI-BOM with judged findings.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/jtopaz1/aiterprise-aibom",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "aiterprise-scan",
+      "version": "0.1.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {"type": "positional", "value": "mcp"},
+        {"type": "positional", "value": "serve"}
+      ]
+    }
+  ]
+}

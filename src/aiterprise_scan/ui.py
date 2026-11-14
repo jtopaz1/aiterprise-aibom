@@ -89,6 +89,16 @@ def _e(value) -> str:
     return escape("" if value is None else str(value), quote=True)
 
 
+def quality_text(quality) -> str:
+    """`quality` as one line: a measured false-positive rate with its corpus, or 'not yet measured'."""
+    if not isinstance(quality, dict) or quality.get("fp_rate_measured") is None:
+        return "false-positive rate not yet measured"
+    rate = float(quality["fp_rate_measured"]) * 100
+    where = f" on {quality['corpus']}" if quality.get("corpus") else ""
+    scope = " (rule family)" if quality.get("scope") == "family" else ""
+    return f"false-positive rate {rate:.1f}%{scope}{where}"
+
+
 def _sev_chips(counts: dict) -> str:
     parts = [f'<span class="chip {s}">{counts.get(s, 0)} {s}</span>' for s in SEVERITIES if counts.get(s)]
     return "".join(parts) or '<span class="small okc">no active findings</span>'
@@ -448,9 +458,7 @@ class Handler(BaseHTTPRequestHandler):
             ex = f.get("examined") or {}
             ex_txt = (f'{ex.get("sources", 0)} source(s) consulted, {ex.get("with_data", 0)} with data'
                       + (f'; skipped: {", ".join(map(str, ex.get("skipped") or []))}' if ex.get("skipped") else ""))
-            quality = f.get("quality")
-            q_txt = (f'precision {quality.get("precision")}' if isinstance(quality, dict) and quality.get("precision")
-                     is not None else "not yet measured")
+            q_txt = quality_text(f.get("quality"))
             protected = f.get("verdict") == "malicious"
             suppress = ""
             if f.get("status") in ("new", "existing", None):
@@ -477,8 +485,8 @@ class Handler(BaseHTTPRequestHandler):
                 f'{_e(f.get("verdict"))} · confidence {_e(f.get("confidence"))} · status {_e(f.get("status"))}</div>'
                 f'<details><summary>Details</summary><div class="box">'
                 + (f'<p><b>Fix:</b> {_e(f.get("remediation"))}</p>' if f.get("remediation") else "")
-                + f'<div class="small">Fingerprint <code>{_e(f.get("fingerprint"))}</code> · {_e(ex_txt)} · rule '
-                  f'quality {_e(q_txt)}</div><pre>{_e(json.dumps(detail, indent=2, ensure_ascii=False))}</pre>'
+                + f'<div class="small">Fingerprint <code>{_e(f.get("fingerprint"))}</code> · {_e(ex_txt)} · '
+                  f'{_e(q_txt)}</div><pre>{_e(json.dumps(detail, indent=2, ensure_ascii=False))}</pre>'
                   f'</div></details>{suppress}</td>'
                 f'<td class="hide"><code>{_e(comp_txt)}</code></td>'
                 f'<td class="hide"><code>{_e(f.get("location"))}</code></td></tr>')

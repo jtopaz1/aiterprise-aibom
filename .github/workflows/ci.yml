@@ -36,7 +36,7 @@ jobs:
           python-version: "3.12"
       - name: Build wheel
         run: |
-          python -m pip install --quiet build
+          python -m pip install --quiet build==1.6.1
           python -m build --wheel
       - name: Install into a clean venv and check bundled data
         run: |
@@ -57,3 +57,61 @@ jobs:
           PYTHONPATH: src
         # tests/ holds deliberately malicious fixtures, so it is excluded from the self-scan
         run: python -m aiterprise_scan scan . --offline --exclude "tests/**" --fail-on high --format table
+
+  killer-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: One offline scan finds all five planted problems
+        run: python tools/killer_demo.py
+
+  licence-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: No runtime dependencies; every bundled data file attributed in NOTICE
+        run: python tools/check_licences.py
+
+  minisign-interop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the reference minisign
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+      - name: Our signatures verify with minisign, and minisign's with ours
+        run: python tools/minisign_interop.py
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the documentation site (strict)
+        run: |
+          python -m pip install --quiet -r docs/requirements.txt
+          mkdocs build --strict --site-dir /tmp/site
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image and scan the killer demo with it
+        run: |
+          docker build -t aiterprise-scan:ci .
+          python3 -c "import sys; sys.path.insert(0, 'tools'); import killer_demo, pathlib; killer_demo.build_repo(pathlib.Path('kd'))"
+          set +e
+          docker run --rm -v "$PWD/kd:/src:ro" aiterprise-scan:ci scan . --offline --format table
+          code=$?
+          set -e
+          test "$code" = "1"
