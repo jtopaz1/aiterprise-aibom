@@ -1,0 +1,10 @@
+{
+  // VS Code MCP config (JSONC: comments and trailing commas are allowed)
+  "servers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@0.0.41"],
+    },
+  },
+}

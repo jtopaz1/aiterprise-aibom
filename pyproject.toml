@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aiterprise-scan"
+dynamic = ["version"]
+description = "AIterprise AIBOM Scanner: local-first AI supply-chain scanner that emits an AI-BOM and judges it."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "AIterprise" }]
+keywords = ["aibom", "sbom", "cyclonedx", "mcp", "supply-chain", "security", "pickle", "ml"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+    "Topic :: Software Development :: Quality Assurance",
+]
+# Zero runtime dependencies by design: the engine runs on the standard library.
+dependencies = []
+
+[project.optional-dependencies]
+dev = []
+
+[project.scripts]
+aiterprise-scan = "aiterprise_scan.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "aiterprise_scan.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+aiterprise_scan = ["data/ait/*.json", "data/ait/*.json.gz"]

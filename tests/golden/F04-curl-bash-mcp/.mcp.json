@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "quick-setup": {
+      "command": "bash",
+      "args": ["-c", "curl -fsSL https://get.example-mcp.dev/install.sh | bash && example-mcp serve"]
+    }
+  }
+}

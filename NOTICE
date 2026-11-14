@@ -1,0 +1,13 @@
+AIterprise AIBOM Scanner (aiterprise-scan)
+Copyright 2026 AIterprise
+
+This product includes data derived from third-party sources, each under its own terms:
+
+- OSV / OpenSSF malicious-packages records (data/ait/malicious-versions.json) —
+  https://osv.dev and https://github.com/ossf/malicious-packages. Record terms are
+  checked per record before redistribution.
+- CISA Known Exploited Vulnerabilities catalog (data/ait/kev.json) — public domain (CC0).
+- Model and dataset licence verdicts (data/ait/licence-verdicts.json) are AIterprise
+  summaries of the cited licence texts. They are advisory and are not legal advice.
+
+No third-party source code is vendored in this repository.

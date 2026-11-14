@@ -1,0 +1,4 @@
+# demo: an AI app that pinned a malicious litellm release
+openai==1.50.0
+litellm==1.82.7
+transformers==4.44.0

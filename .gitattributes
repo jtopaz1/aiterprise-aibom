@@ -1,0 +1,10 @@
+# Same bytes on every OS: the scanner reports line numbers and the golden fixtures are byte-exact.
+* text=auto eol=lf
+
+# Never convert these.
+*.gz binary
+*.whl binary
+*.pkl binary
+*.pt binary
+*.safetensors binary
+tests/golden/F10-bom-config-utf16/** binary

@@ -1,0 +1,3 @@
+version: 1
+use_context: commercial
+fail_on: [critical, high]

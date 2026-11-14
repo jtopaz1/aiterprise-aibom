@@ -1,0 +1,9 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "components": [
+    {"type": "library", "name": "litellm", "purl": "pkg:pypi/litellm"},
+    {"type": "library", "name": "langchain", "purl": "pkg:pypi/langchain"}
+  ]
+}

@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Unit and golden tests
+        env:
+          PYTHONPATH: src
+          AITERPRISE_CACHE_DIR: ${{ runner.temp }}/aiterprise-cache
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build wheel
+        run: |
+          python -m pip install --quiet build
+          python -m build --wheel
+      - name: Install into a clean venv and check bundled data
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install --quiet dist/*.whl
+          /tmp/clean/bin/aiterprise-scan defs status
+          /tmp/clean/bin/aiterprise-scan scan tests/golden/F01-malicious-requirements --offline --fail-on none
+
+  self-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Scan our own repository (eat our own cooking)
+        env:
+          PYTHONPATH: src
+        # tests/ holds deliberately malicious fixtures, so it is excluded from the self-scan
+        run: python -m aiterprise_scan scan . --offline --exclude "tests/**" --fail-on high --format table

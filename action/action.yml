@@ -1,0 +1,74 @@
+name: AIterprise AIBOM Scanner
+description: Scan a repository for AI supply-chain risks, upload SARIF to code scanning, then gate the build.
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  path:
+    description: Directory or file to scan.
+    default: "."
+  fail-on:
+    description: "Lowest severity that fails the build: critical, high, medium, low, info or none."
+    default: high
+  offline:
+    description: "true = bundled definitions only, no network."
+    default: "false"
+  upload-sarif:
+    description: "true = upload report.sarif to GitHub code scanning (needs security-events: write)."
+    default: "true"
+  args:
+    description: Extra arguments passed to `aiterprise-scan scan`.
+    default: ""
+
+outputs:
+  exit-code:
+    description: "0 clean, 1 policy failure, 2 error"
+    value: ${{ steps.scan.outputs.exit-code }}
+  report-dir:
+    description: Directory holding report.txt, report.sarif and aibom.cdx.json.
+    value: aiterprise-report
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install aiterprise-scan
+      shell: bash
+      run: python -m pip install --quiet "${GITHUB_ACTION_PATH}/.."
+
+    - name: Scan
+      id: scan
+      shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        OFFLINE: ${{ inputs.offline }}
+        EXTRA_ARGS: ${{ inputs.args }}
+      run: |
+        set +e
+        offline_flag=""
+        if [ "$OFFLINE" = "true" ]; then offline_flag="--offline"; fi
+        # shellcheck disable=SC2086 # EXTRA_ARGS is intentionally word-split
+        aiterprise-scan scan "$SCAN_PATH" --format table --format sarif --out aiterprise-report \
+          --emit-bom aiterprise-report/aibom.cdx.json --fail-on "$FAIL_ON" $offline_flag $EXTRA_ARGS
+        code=$?
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        if [ -f aiterprise-report/report.txt ]; then cat aiterprise-report/report.txt; fi
+        exit 0
+
+    - name: Upload SARIF
+      if: inputs.upload-sarif == 'true' && hashFiles('aiterprise-report/report.sarif') != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: aiterprise-report/report.sarif
+        category: aiterprise-scan
+
+    - name: Gate
+      shell: bash
+      env:
+        CODE: ${{ steps.scan.outputs.exit-code }}
+      run: exit "${CODE:-2}"

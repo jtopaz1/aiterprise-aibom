@@ -1,0 +1,7 @@
+- id: aiterprise-scan
+  name: aiterprise-scan (AI supply chain)
+  description: Judge AI packages, model files and MCP/agent configs before they are committed.
+  entry: aiterprise-scan scan . --offline --fail-on high
+  language: python
+  pass_filenames: false
+  always_run: true
