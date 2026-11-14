@@ -215,6 +215,17 @@ class Finding:
         if self.location is None and self.component is not None and self.component.locations:
             self.location = self.component.locations[0]
 
+    def withdraw(self, when: str | None) -> None:
+        """The advisory behind this finding was withdrawn: keep the finding (same fingerprint, so
+        history follows it) but take it out of every active count and gate (design doc 13 §4.3)."""
+        self.status = "withdrawn"
+        self.severity = "info"
+        self.verdict = "unknown"
+        self.title = f"[withdrawn advisory] {self.title}"
+        self.suppression = {"reason": f"advisory withdrawn{' ' + when[:10] if when else ''}", "origin": "advisory"}
+        if self.evidence:
+            self.evidence[0].detail["withdrawn"] = when[:10] if when else True
+
     @property
     def subject(self) -> str:
         if self.component is None:
@@ -263,6 +274,23 @@ class Finding:
         if self.suppression:
             d["suppression"] = dict(self.suppression)
         return d
+
+
+def not_analysable(area: str, path: str, what: str, reason: str, component: "Component | None" = None) -> Finding:
+    """A file the scanner had to skip. Never a clean result: whatever it holds was not checked
+    ("no match" is not "never checked"), so the gap is reported where the file is."""
+    return Finding(
+        rule_id=f"ait.{area}.not-analysable",
+        title=f"{what} was not analysed ({reason}); its contents are unknown, not clean",
+        severity="medium",
+        verdict="unknown",
+        confidence=90,
+        component=component,
+        location=Location(path),
+        evidence=[Evidence("ait-scan", "not-analysable", None, {"reason": reason})],
+        remediation="Check this file by hand or with a tool that can read it; the scan says nothing about it.",
+        discriminator=path,
+    )
 
 
 @dataclass

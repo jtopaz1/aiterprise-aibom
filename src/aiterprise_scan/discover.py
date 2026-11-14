@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Callable, NamedTuple
 
 from . import miniyaml, taxonomy, textio
-from .model import Component, Location, normalize_name
+from .model import Component, Finding, Location, normalize_name, not_analysable
 from .walk import rel_posix
 
 __all__ = ["discover_packages", "discover_imports"]
@@ -72,8 +72,12 @@ _CONDA_TO_PYPI = {
 # --------------------------------------------------------------------------------------------
 
 
-def discover_packages(root: Path, files: list[Path]) -> list[Component]:
-    """Packages declared by manifests and lockfiles under `root` (lockfile wins)."""
+def discover_packages(root: Path, files: list[Path], gaps: list[Finding] | None = None) -> list[Component]:
+    """Packages declared by manifests and lockfiles under `root` (lockfile wins).
+
+    A manifest that is too large or unreadable is appended to `gaps` as a not-analysable finding:
+    the packages it lists were never checked.
+    """
     root = Path(root)
     found: list[_Found] = []
     infos: dict[Path, _FileInfo] = {}
@@ -91,9 +95,15 @@ def discover_packages(root: Path, files: list[Path]) -> list[Component]:
         if key in seen:
             continue
         seen.add(key)
-        ctx = _run(parser, kind, root, path)
-        if ctx is None:
+        try:
+            text = textio.read_text(path, MAX_MANIFEST_BYTES)
+        except (OSError, textio.TooLarge) as err:
+            if gaps is not None:
+                reason = (f"larger than {MAX_MANIFEST_BYTES:,} bytes" if isinstance(err, textio.TooLarge)
+                          else f"unreadable: {type(err).__name__}")
+                gaps.append(not_analysable("pkg", _rel(path, root), f"{kind.capitalize()} {path.name}", reason))
             continue
+        ctx = _run(parser, kind, root, path, text)
         found.extend(ctx.found)
         infos[ctx.path] = ctx.info
         if depth < MAX_INCLUDE_DEPTH:
@@ -255,11 +265,7 @@ class _Ctx:
         self.includes.append(resolved)
 
 
-def _run(parser: Callable[[_Ctx, str], None], kind: str, root: Path, path: Path) -> _Ctx | None:
-    try:
-        text = textio.read_text(path, MAX_MANIFEST_BYTES)
-    except (OSError, textio.TooLarge):
-        return None
+def _run(parser: Callable[[_Ctx, str], None], kind: str, root: Path, path: Path, text: str) -> _Ctx:
     ctx = _Ctx(root, path, kind)
     try:
         parser(ctx, text)

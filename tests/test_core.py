@@ -158,6 +158,14 @@ class WalkTests(unittest.TestCase):
             self.assertIn("x.log", all_rels)
             self.assertNotIn("node_modules/p/index.js", all_rels)
 
+    def test_oversized_gitignore_is_not_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".gitignore").write_text("*.log\n" + "#" * (1024 * 1024))
+            (root / "x.log").write_text("x")
+            rels = sorted(p.relative_to(root).as_posix() for p in walk(root))
+        self.assertIn("x.log", rels)  # rules from an unbounded file are not applied
+
     @unittest.skipUnless(os.name == "nt", "8.3 short names are Windows-only")
     def test_paths_keep_the_callers_root_spelling(self):
         # GitHub's Windows runners hand out TEMP as C:\Users\RUNNER~1\...; resolving the root

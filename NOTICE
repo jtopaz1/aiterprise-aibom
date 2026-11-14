@@ -3,7 +3,7 @@ Copyright 2026 AIterprise
 
 This product includes data derived from third-party sources, each under its own terms:
 
-- OSV / OpenSSF malicious-packages records (data/ait/malicious-versions.json) —
+- OSV / OpenSSF malicious-packages records (data/ait/malicious-versions.json.gz) —
   https://osv.dev and https://github.com/ossf/malicious-packages. Record terms are
   checked per record before redistribution.
 - CISA Known Exploited Vulnerabilities catalog (data/ait/kev.json) — public domain (CC0).

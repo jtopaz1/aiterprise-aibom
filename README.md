@@ -15,7 +15,7 @@ Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+
 
 | Area | What is judged | Rule ids |
 |---|---|---|
-| Packages | Known-malicious versions (OSV `MAL-` snapshot, withdrawn records excluded); ranges that admit a malicious version | `ait.pkg.malicious*` |
+| Packages | Known-malicious versions (OSV `MAL-` snapshot; a withdrawn record is reported as `withdrawn`, never active); ranges that admit a malicious version | `ait.pkg.malicious*` |
 | Vulnerabilities | OSV advisories per exact version, alias-deduplicated, fix versions; CISA KEV upgrades to critical | `ait.vuln.*` |
 | Model files | Pickle opcodes (raw and zip-wrapped, protocol 0–5) with dangerous callables, safetensors/GGUF/ONNX/HDF5/Keras/TFLite inventory, Keras `Lambda`, ONNX custom ops, GGUF chat-template injection, malformed containers | `ait.model.*` |
 | MCP servers | Every agent's config (Claude Desktop/Code, Cursor, VS Code, Codex, Windsurf, Gemini): dangerous commands, poisoned descriptions, literal secrets, scope — **without launching anything** | `ait.mcp.*` |
@@ -44,7 +44,9 @@ aiterprise-scan policy lint aibom.policy.yaml
 aiterprise-scan defs status
 ```
 
-Exit codes: `0` clean · `1` policy failure (`--fail-on`, default `high`) · `2` error or incomplete scan.
+Exit codes: `0` clean · `1` policy failure (`--fail-on`, default `high`) · `2` error or incomplete
+scan (an analyzer failed, or a source such as OSV could not be reached; `--offline` is not an error).
+Files the scanner had to skip are reported as `ait.*.not-analysable` findings, never passed as clean.
 
 ## Policy
 
@@ -68,8 +70,9 @@ suppressions:                    # expiry is mandatory
 baseline: .aiterprise/baseline.json
 ```
 
-A known-malicious finding is never silenced by `ignore` or `allow_packages`; only an explicit,
-expiring suppression of that exact finding accepts it. `.snyk` ignore files can be imported with
+A known-malicious finding (verdict `malicious`) is never silenced by `ignore`, `allow_packages`, a
+rule-, path- or advisory-wide suppression, or a baseline; only an expiring suppression that names
+its fingerprint accepts it. `.snyk` ignore files can be imported with
 `--snyk .snyk` (30-day default expiry).
 
 ## CI
@@ -108,7 +111,7 @@ python tools/build_kev.py --url                                                 
 aiterprise-scan defs status                                                      # what is bundled, with input hashes
 ```
 
-Bundled definitions (2026-11-14): 235,476 OSV `MAL-` records for npm and PyPI (withdrawn records
-excluded) and 1,781 CISA KEV CVEs. Details and refresh steps: [docs/STATUS.md](docs/STATUS.md).
+Bundled definitions (2026-11-14): 235,476 OSV `MAL-` records for npm and PyPI (363 withdrawn
+records kept apart and reported as `withdrawn`, never as active findings) and 1,781 CISA KEV CVEs. Details and refresh steps: [docs/STATUS.md](docs/STATUS.md).
 
 Design of record: `aiterprise-doc/13-APP-AIBOM.md` (AI2).

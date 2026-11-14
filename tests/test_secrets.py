@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from aiterprise_scan import secrets
-from aiterprise_scan.model import OWASP_SENSITIVE_INFO
+from aiterprise_scan.model import OWASP_SENSITIVE_INFO, ScanResult
 from aiterprise_scan.walk import walk
 
 # Non-placeholder character pool (no 'abcdef'/'123456', no long repeats).
@@ -147,12 +147,14 @@ class ScanSecretsTests(unittest.TestCase):
         findings = secrets.scan_secrets(self.root, walk(self.root, all_files=True))
         self.assertEqual(findings, [])
 
-    def test_large_file_skipped(self):
+    def test_large_file_skipped_and_reported(self):
         key = tok("sk-proj-", 40)
         padding = "x" * (secrets.MAX_SECRET_BYTES + 1000)
         self._write("big.env", key + "\n" + padding)
-        findings = secrets.scan_secrets(self.root, walk(self.root, all_files=True))
+        result = ScanResult("t", "offline")
+        findings = secrets.scan_secrets(self.root, walk(self.root, all_files=True), result)
         self.assertEqual(findings, [])
+        self.assertTrue(any("big.env" in n and "not scanned" in n for n in result.notes))
 
     def test_two_secrets_two_findings(self):
         self._write("config.yaml", f"a: {tok('sk-proj-', 40)}\nb: {tok('hf_', 34)}\n")

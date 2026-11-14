@@ -101,6 +101,15 @@ class SkillAnalysisTests(_Repo):
         self.assertEqual(skill.properties["recommendation"], "LIKELY SAFE")
         self.assertEqual([f for f in finds if f.rule_id.startswith("ait.skill.")], [])
 
+    def test_oversized_script_is_not_called_safe(self):
+        self.write("skills/good/SKILL.md", BENIGN_SKILL_MD)
+        self.write("skills/good/big.sh", "echo hi\n" * (skills._MAX_SCRIPT_BYTES // 8 + 1))
+        comps, finds = skills.analyze_skills(self.root, self.files())
+        skill = next(c for c in comps if c.name == "good-skill")
+        self.assertNotEqual(skill.properties["recommendation"], "LIKELY SAFE")
+        self.assertEqual([f.location.path for f in finds if f.rule_id == "ait.skill.not-analysable"],
+                         ["skills/good/big.sh"])
+
     def test_plugin_hook_command(self):
         self.write("myplugin/.claude-plugin/plugin.json", json.dumps({
             "name": "myplugin", "description": "A plugin",

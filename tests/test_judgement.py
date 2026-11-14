@@ -1,16 +1,29 @@
 """Malicious snapshot, OSV/KEV judgement (with a fake OSV), policy, BOM ingest/emit, SARIF."""
 
 import datetime as dt
+import gzip
+import importlib.util
+import io
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
-from aiterprise_scan import bom, ingest, intel_malicious, report, vulns
+from aiterprise_scan import bom, discover, ingest, intel_malicious, net, report, vulns
 from aiterprise_scan import policy as pol
 from aiterprise_scan.cache import Cache
 from aiterprise_scan.model import Component, Finding, Location, ScanResult
+from aiterprise_scan.scanner import ScanOptions, run_scan
+
+
+def load_builder():
+    spec = importlib.util.spec_from_file_location(
+        "build_malicious", Path(__file__).resolve().parents[1] / "tools" / "build_malicious.py")
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    return builder
 
 
 def lib(name, version=None, eco="pypi", spec=None, path="requirements.txt"):
@@ -41,12 +54,19 @@ class MaliciousSnapshotTests(unittest.TestCase):
         self.assertIn("1.82.8", crit.evidence[0].detail["affected_versions"])
         self.assertEqual(result.examined["ait-malicious"].checked, 5)
 
-    def test_withdrawn_records_refused(self):
+    def test_withdrawn_record_reported_as_withdrawn(self):
+        # design doc 13 §4.3: findings on withdrawn records flip to `withdrawn`, never silently dropped
         snap = intel_malicious.parse_snapshot({"records": [
             {"id": "MAL-1", "ecosystem": "pypi", "name": "fastapi", "versions": ["0.136.3"], "withdrawn": "2026-10-01"},
         ]})
-        self.assertEqual(snap.refused_withdrawn, 1)
-        self.assertEqual(intel_malicious.judge([lib("fastapi", "0.136.3")], snapshot=snap), [])
+        result = ScanResult("t", "offline")
+        fs = intel_malicious.judge([lib("fastapi", "0.136.3")], result, snapshot=snap)
+        self.assertEqual([(f.rule_id, f.advisory_id, f.status) for f in fs],
+                         [("ait.pkg.malicious", "MAL-1", "withdrawn")])
+        self.assertEqual(fs[0].evidence[0].detail["withdrawn"], "2026-10-01")
+        result.findings = fs
+        self.assertEqual(pol.apply(result, pol.Policy()), [])
+        self.assertEqual(result.severity_counts()["critical"], 0)
 
     def test_all_versions_record(self):
         snap = intel_malicious.parse_snapshot({"records": [
@@ -56,13 +76,7 @@ class MaliciousSnapshotTests(unittest.TestCase):
         self.assertEqual([f.severity for f in fs], ["critical"])
 
     def test_v2_builder_round_trip(self):
-        import gzip
-        import importlib.util
-
-        spec = importlib.util.spec_from_file_location(
-            "build_malicious", Path(__file__).resolve().parents[1] / "tools" / "build_malicious.py")
-        builder = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(builder)
+        builder = load_builder()
         osv = [
             {"id": "MAL-9", "published": "2026-01-02T00:00:00Z", "aliases": ["GHSA-x"],
              "affected": [{"package": {"ecosystem": "PyPI", "name": "Evil_Pkg"}, "versions": ["1.0.1"]}]},
@@ -77,15 +91,31 @@ class MaliciousSnapshotTests(unittest.TestCase):
         doc = json.loads(gzip.decompress(blob))
         self.assertEqual(doc["schema"], "ait-malicious-versions/2")
         snap = intel_malicious.parse_snapshot(doc)
-        self.assertEqual((snap.record_count, snap.all_versions_count), (2, 1))
+        self.assertEqual((snap.record_count, snap.all_versions_count, snap.withdrawn_count), (2, 1, 1))
         self.assertIn(("pypi", "evil-pkg"), snap.records)
-        self.assertNotIn(("pypi", "fastapi"), snap.records)
         rec = snap.records[("pypi", "evil-pkg")][0]
-        self.assertEqual((rec.id, rec.versions, rec.published, rec.aliases),
-                         ("MAL-9", ("1.0.1",), "2026-01-02", ("GHSA-x",)))
-        fs = intel_malicious.judge([lib("evil.pkg", "1.0.1"), lib("@scope/spam", "9.9.9", eco="npm")],
-                                   snapshot=snap)
-        self.assertEqual(sorted(f.advisory_id for f in fs), ["MAL-10", "MAL-9"])
+        self.assertEqual((rec.id, rec.versions, rec.published, rec.aliases, rec.withdrawn),
+                         ("MAL-9", ("1.0.1",), "2026-01-02", ("GHSA-x",), None))
+        fs = intel_malicious.judge([lib("evil.pkg", "1.0.1"), lib("@scope/spam", "9.9.9", eco="npm"),
+                                    lib("fastapi", "0.136.3")], snapshot=snap)
+        self.assertEqual({f.advisory_id: f.status for f in fs},
+                         {"MAL-9": "new", "MAL-10": "new", "MAL-11": "withdrawn"})
+
+    def test_top_up_applies_a_later_withdrawal(self):
+        builder = load_builder()
+        active = {"id": "MAL-11", "affected": [
+            {"package": {"ecosystem": "PyPI", "name": "fastapi"}, "versions": ["0.136.3"]}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "mal.json.gz"
+            out.write_bytes(builder.encode(builder.records_from_osv(active), []))
+            export = Path(tmp) / "all.zip"
+            with zipfile.ZipFile(export, "w") as zf:
+                zf.writestr("MAL-11.json", json.dumps(dict(active, withdrawn="2026-02-01T00:00:00Z")))
+            with mock.patch("sys.stdout", io.StringIO()):
+                builder.main(["--zip", str(export), "--out", str(out)])
+            snap = intel_malicious.parse_snapshot(json.loads(gzip.decompress(out.read_bytes())))
+        self.assertEqual([(r.id, r.withdrawn) for r in snap.records[("pypi", "fastapi")]],
+                         [("MAL-11", "2026-02-01")])
 
     def test_bundled_snapshot_never_marks_popular_packages_all_versions(self):
         # data-quality gate: a bad build that flags every version of a popular package would turn
@@ -98,6 +128,8 @@ class MaliciousSnapshotTests(unittest.TestCase):
         for eco, names in popular.items():
             for name in names:
                 for rec in snap.records.get((eco, name), []):
+                    if rec.withdrawn:
+                        continue  # reported as withdrawn, never as malicious
                     self.assertFalse(rec.all_versions, f"{eco}/{name} {rec.id} marks every version malicious")
                     self.assertTrue(rec.versions, f"{eco}/{name} {rec.id} lists no versions")
 
@@ -234,8 +266,39 @@ class PolicyTests(unittest.TestCase):
             self.assertEqual(pol.write_baseline(r, path), 3)
             r2, mal2, _, vuln2 = self._result()
             failing = pol.apply(r2, pol.Policy(), pol.load_baseline(path))
-        self.assertEqual(failing, [])
-        self.assertEqual(mal2.status, "acknowledged")
+        self.assertEqual(vuln2.status, "acknowledged")
+        # a baseline never expires, so it never accepts a known-malicious finding
+        self.assertEqual(mal2.status, "new")
+        self.assertEqual(failing, [mal2])
+
+    def test_broad_suppressions_never_silence_malicious(self):
+        r, mal, _, vuln = self._result()
+        p = pol.parse_policy({"suppressions": [
+            {"rule": "ait.*", "until": "2027-06-30", "reason": "noisy"},
+            {"path": "*", "until": "2027-06-30", "reason": "everything"},
+            {"finding": "MAL-2026-2144", "until": "2027-06-30", "reason": "advisory-wide"},
+        ]})
+        failing = pol.apply(r, p, today=dt.date(2026, 11, 14))
+        self.assertEqual(vuln.status, "suppressed")
+        self.assertEqual(mal.status, "new")
+        self.assertEqual(failing, [mal])
+        self.assertTrue(any(mal.fingerprint in n for n in r.notes))
+
+    def test_fingerprint_suppression_accepts_malicious(self):
+        r, mal, _, _ = self._result()
+        p = pol.parse_policy({"suppressions": [
+            {"finding": mal.fingerprint, "until": "2027-06-30", "reason": "isolated sandbox"}]})
+        failing = pol.apply(r, p, today=dt.date(2026, 11, 14))
+        self.assertEqual(mal.status, "suppressed")
+        self.assertNotIn(mal, failing)
+
+    def test_every_malicious_verdict_is_protected(self):
+        r = ScanResult("t", "offline")
+        pickle_hit = Finding("ait.model.pickle.dangerous-global", "os.system in a pickle", "critical",
+                             verdict="malicious", location=Location("models/m.pt"))
+        r.findings = [pickle_hit]
+        failing = pol.apply(r, pol.parse_policy({"ignore": [{"rule": "ait.model.*"}]}))
+        self.assertEqual(failing, [pickle_hit])
 
     def test_deny_packages_and_ranges(self):
         p = pol.parse_policy({"deny_packages": ["pkg:pypi/litellm@1.82.7", "pkg:npm/axios@>=1.14.0"]})
@@ -258,6 +321,79 @@ class PolicyTests(unittest.TestCase):
         p = pol.Policy(suppressions=sups)
         pol.apply(r, p, today=dt.date(2026, 11, 14))
         self.assertEqual(vuln.status, "suppressed")
+
+
+def _fake_osv(ids: dict, docs: dict):
+    """Patch the live OSV calls (only the network layer is replaced)."""
+    return (
+        mock.patch.object(vulns.OSVClient, "query_ids",
+                          lambda self, queries, result=None: {q: ids.get((q[1], q[2]), []) for q in queries}),
+        mock.patch.object(vulns.OSVClient, "details", lambda self, wanted: {i: docs[i] for i in wanted if i in docs}),
+    )
+
+
+class ScanHonestyTests(unittest.TestCase):
+    """End-to-end: what the scan could not check is reported, never passed as clean."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def scan(self, **kw):
+        return run_scan(ScanOptions(target=self.root, cache=Cache(enabled=False), **kw))
+
+    def test_unreachable_osv_is_an_incomplete_scan(self):
+        (self.root / "requirements.txt").write_text("openai==1.50.0\n")
+        with mock.patch.object(vulns.OSVClient, "query_ids", side_effect=net.NetError("connection refused")):
+            result = self.scan()
+        self.assertEqual(result.exit_code, 2)
+        self.assertTrue(any("UNVERIFIED" in n for n in result.notes))
+
+    def test_offline_scan_is_not_an_error(self):
+        (self.root / "requirements.txt").write_text("openai==1.50.0\n")
+        self.assertEqual(self.scan(offline=True).exit_code, 0)
+
+    def test_live_withdrawal_overrides_the_bundled_snapshot(self):
+        (self.root / "requirements.txt").write_text("litellm==1.82.7\n")
+        docs = {"MAL-2026-2144": dict(MAL, withdrawn="2026-11-01T00:00:00Z")}
+        p1, p2 = _fake_osv({("litellm", "1.82.7"): ["MAL-2026-2144"]}, docs)
+        with p1, p2:
+            result = self.scan()
+        mal = [f for f in result.findings if f.rule_id == "ait.pkg.malicious"]
+        self.assertEqual([f.status for f in mal], ["withdrawn"])
+
+    def test_oversized_manifest_is_reported(self):
+        (self.root / "requirements.txt").write_text("litellm==1.82.7\n" + "# padding\n" * 20)
+        with mock.patch.object(discover, "MAX_MANIFEST_BYTES", 64):
+            result = self.scan(offline=True)
+        gaps = [f for f in result.findings if f.rule_id == "ait.pkg.not-analysable"]
+        self.assertEqual([(f.location.path, f.severity) for f in gaps], [("requirements.txt", "medium")])
+
+    def test_file_cap_is_reported(self):
+        for i in range(5):
+            (self.root / f"f{i}.txt").write_text("x")
+        with mock.patch("aiterprise_scan.walk.DEFAULT_MAX_FILES", 3):
+            result = self.scan(offline=True, judge=False)
+        self.assertEqual(result.files_walked, 3)
+        self.assertTrue(any("3 files" in n and "not examined" in n for n in result.notes))
+
+
+class TableTests(unittest.TestCase):
+    def test_scanned_text_cannot_drive_the_terminal(self):
+        r = ScanResult("t", "offline")
+        comp = Component("evil\x1b]0;owned\x07server", ctype="mcp-server", locations=[Location(".mcp.json", 1)])
+        r.findings = [Finding("ait.mcp.desc.x", "title\x1b[2J‮reversed", "high", component=comp)]
+        r.notes = ["config \x1b[31mred\x1b[0m"]
+        out = io.StringIO()
+        report.render_table(r, out)
+        text = out.getvalue()
+        for ch in ("\x1b", "\x07", "‮"):
+            self.assertNotIn(ch, text)
+        self.assertIn("owned", text)
+        self.assertIn("reversed", text)
 
 
 CDXGEN_LIKE = {

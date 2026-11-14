@@ -14,7 +14,7 @@ from typing import Any
 
 from . import miniyaml
 from .mcp import _finding_from_command, _finding_from_poison, check_command, check_text
-from .model import SEVERITY_RANK, Component, Finding, Location
+from .model import SEVERITY_RANK, Component, Finding, Location, not_analysable
 from .textio import TooLarge, loads_jsonc, read_text
 from .walk import walk, rel_posix
 
@@ -109,6 +109,8 @@ def _risk(findings: list[Finding]) -> tuple[int, str]:
         rec = "DO NOT INSTALL"
     elif score >= 50:
         rec = "REVIEW BEFORE INSTALL"
+    elif any(f.rule_id.endswith(".not-analysable") for f in findings):
+        rec = "NOT FULLY CHECKED"  # a skipped file is unknown, never "safe" (design doc 13 §4.8)
     elif score >= 20:
         rec = "REVIEW RECOMMENDED"
     else:
@@ -125,13 +127,14 @@ def _scan_scripts(skill_dir: Path, root: Path, comp: Component) -> list[Finding]
     for script in members:
         if script.suffix.lower() not in SCRIPT_EXTS:
             continue
-        try:
-            if script.stat().st_size > _MAX_SCRIPT_BYTES:
-                continue
-            text = read_text(script, max_bytes=_MAX_SCRIPT_BYTES)
-        except (OSError, TooLarge):
-            continue
         rel = rel_posix(script, root)
+        try:
+            text = read_text(script, max_bytes=_MAX_SCRIPT_BYTES)
+        except (OSError, TooLarge) as err:
+            reason = (f"larger than {_MAX_SCRIPT_BYTES // 1024} KiB" if isinstance(err, TooLarge)
+                      else f"unreadable: {type(err).__name__}")
+            findings.append(not_analysable("skill", rel, f"Bundled script {script.name}", reason, comp))
+            continue
         for lineno, line in enumerate(text.splitlines(), 1):
             if not line.strip():
                 continue
@@ -158,10 +161,11 @@ def _scan_body(text: str, location: Location, comp: Component) -> list[Finding]:
 def _analyze_skill_dir(skill_dir: Path, root: Path) -> tuple[Component, list[Finding]]:
     skill_md = skill_dir / "SKILL.md"
     rel = rel_posix(skill_md, root)
+    unread = None
     try:
         text = read_text(skill_md)
-    except (OSError, TooLarge):
-        text = ""
+    except (OSError, TooLarge) as err:
+        text, unread = "", f"{type(err).__name__}"
     fm, body = _front_matter(text)
     name = str(fm.get("name") or skill_dir.name)
     comp = Component(
@@ -175,6 +179,8 @@ def _analyze_skill_dir(skill_dir: Path, root: Path) -> tuple[Component, list[Fin
         },
     )
     findings = _scan_body(body, Location(rel, 1), comp)
+    if unread:
+        findings.append(not_analysable("skill", rel, "SKILL.md", f"unreadable: {unread}", comp))
     if isinstance(fm.get("description"), str):
         findings += [_finding_from_poison(h, Location(rel, 1), comp, "description", "ait.skill")
                      for h in check_text(fm["description"])]

@@ -25,6 +25,7 @@ from .model import (
     Evidence,
     Finding,
     Location,
+    not_analysable,
 )
 from .textio import TooLarge, line_of, loads_jsonc, read_text
 from .walk import rel_posix
@@ -419,7 +420,7 @@ def _finding_from_command(hit: dict, location: Location, comp: Component, prefix
         component=comp,
         location=location,
         evidence=[Evidence(source="ait-rules", record=hit["id"],
-                           detail={"category": hit["category"], "match": hit["match"]})],
+                           detail={"category": hit["category"], "match": secrets.redact_secrets_in(hit["match"])})],
         remediation=hit["remediation"],
         maps_to=maps,
         discriminator=hit["id"],
@@ -440,7 +441,7 @@ def _finding_from_poison(hit: dict, location: Location, comp: Component, field: 
         location=location,
         evidence=[Evidence(source="ait-rules", record=hit["id"],
                            detail={"category": hit["category"], "field": field,
-                                   "match": hit["match"]})],
+                                   "match": secrets.redact_secrets_in(hit["match"])})],
         remediation=hit["remediation"],
         maps_to=[OWASP_PROMPT_INJECTION, OWASP_SUPPLY_CHAIN],
         discriminator=f"{hit['id']}:{field}",
@@ -527,11 +528,11 @@ def analyze_mcp_config(path: Path, root: Path) -> tuple[list[Component], list[Fi
 
     try:
         parsed, text = _parse_config(path, kind)
-    except (OSError, TooLarge) as e:
-        cfg_comp.properties["error"] = f"unreadable: {e.__class__.__name__}"
-        return components, findings
-    except Exception as e:  # malformed JSON/TOML: record, do not crash
-        cfg_comp.properties["error"] = f"parse-error: {e.__class__.__name__}"
+    except Exception as e:  # unreadable, too large or malformed JSON/TOML: record, do not crash
+        problem = "unreadable" if isinstance(e, (OSError, TooLarge)) else "parse-error"
+        cfg_comp.properties["error"] = f"{problem}: {e.__class__.__name__}"
+        findings.append(not_analysable("mcp", rel, f"Agent config {path.name}",
+                                       f"{problem}: {e.__class__.__name__}", cfg_comp))
         return components, findings
 
     # Hooks (settings.json and any config that carries them) run shell commands.
@@ -575,11 +576,11 @@ def analyze_mcp_config(path: Path, root: Path) -> tuple[list[Component], list[Fi
             "scopes": scopes,
         }
         if command:
-            props["command"] = command
+            props["command"] = secrets.redact_secrets_in(str(command))
         if args:
             props["args"] = [secrets.redact_secrets_in(a) for a in args]
         if url:
-            props["url"] = url
+            props["url"] = secrets.redact_url(str(url))
         if resolved:
             props["resolved_package"] = resolved.get("spec")
 
@@ -676,7 +677,7 @@ def analyze_mcp_config(path: Path, root: Path) -> tuple[list[Component], list[Fi
                 component=server_comp,
                 location=loc,
                 evidence=[Evidence(source="ait-rules", record="net.plain-http",
-                                   detail={"url": url})],
+                                   detail={"url": secrets.redact_url(str(url))})],
                 remediation="Use an https:// endpoint; plaintext HTTP exposes traffic and headers.",
                 maps_to=[OWASP_SUPPLY_CHAIN],
                 discriminator="plain-http",

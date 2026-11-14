@@ -1,8 +1,9 @@
 """Scan orchestration: walk → discover → merge → judge → de-duplicate.
 
 A crashing analyzer never kills the scan: it is recorded as an error note and the run exits 2
-unless a policy failure (exit 1) already decides the outcome. Partial coverage is reported, not
-hidden ("no match" is not "never checked").
+unless a policy failure (exit 1) already decides the outcome. A source that could not be consulted
+(OSV unreachable, an advisory that would not download) makes the scan incomplete: exit 2 as well.
+Partial coverage is reported, not hidden ("no match" is not "never checked").
 """
 
 from __future__ import annotations
@@ -16,9 +17,10 @@ from typing import Any, Callable
 
 from . import ingest, intel_malicious, vulns
 from . import policy as policy_mod
+from . import walk as walker
 from .cache import Cache
 from .model import Component, Finding, ScanResult, merge_components, normalize_name, sort_findings
-from .walk import rel_posix, walk
+from .walk import rel_posix
 
 
 @dataclass
@@ -70,6 +72,12 @@ def _dedupe(findings: list[Finding]) -> list[Finding]:
     for f in findings:
         existing = by_fp.get(f.fingerprint)
         if existing is None:
+            by_fp[f.fingerprint] = f
+            continue
+        if f.status == "withdrawn" and existing.status != "withdrawn":
+            # a withdrawal (e.g. seen live on OSV) is always later than the claim it retracts
+            have = {(e.source, e.record) for e in f.evidence}
+            f.evidence += [e for e in existing.evidence if (e.source, e.record) not in have]
             by_fp[f.fingerprint] = f
             continue
         seen = {(e.source, e.record) for e in existing.evidence}
@@ -173,7 +181,14 @@ def run_scan(opts: ScanOptions) -> ScanResult:
         if not target.exists():
             raise FileNotFoundError(f"scan target does not exist: {opts.target}")
         root = target if target.is_dir() else target.parent
-        files = [target] if target.is_file() else walk(target, all_files=opts.all_files)
+        if target.is_file():
+            files = [target]
+        else:
+            cap = walker.DEFAULT_MAX_FILES
+            files = walker.walk(target, all_files=opts.all_files, max_files=cap)
+            if len(files) >= cap:
+                result.notes.append(f"walk: stopped at the cap of {cap:,} files; files beyond it were not "
+                                    "examined")
         if opts.exclude:
             files = [f for f in files if not _excluded(rel_posix(f, root), opts.exclude)]
         result.files_walked = len(files)
@@ -181,7 +196,9 @@ def run_scan(opts: ScanOptions) -> ScanResult:
     if root is not None and not opts.mcp_only:
         from . import discover, licences, modelfiles, secrets, skills
 
-        components += run.step("discover", lambda: discover.discover_packages(root, files), [])
+        manifest_gaps: list[Finding] = []
+        components += run.step("discover", lambda: discover.discover_packages(root, files, manifest_gaps), [])
+        findings += manifest_gaps
         if opts.imports:
             components += run.step("imports", lambda: discover.discover_imports(root, files), [])
 
@@ -207,7 +224,7 @@ def run_scan(opts: ScanOptions) -> ScanResult:
         components += sc
         findings += sf
         if opts.secrets:
-            findings += run.step("secrets", lambda: secrets.scan_secrets(root, files), [])
+            findings += run.step("secrets", lambda: secrets.scan_secrets(root, files, result), [])
         bom_files = ingest.find_bom_files(files)
         if opts.target is not None and opts.target.is_file() and opts.target.suffix.lower() == ".json":
             bom_files = list(dict.fromkeys(bom_files + [opts.target.resolve()]))
@@ -267,6 +284,6 @@ def run_scan(opts: ScanOptions) -> ScanResult:
             f.component = by_key.get(f.component.key(), f.component)
     result.findings = sort_findings(_dedupe(_drop_shadowed_secrets(findings)))
     result.duration_s = time.monotonic() - t0
-    if run.errors:
+    if run.errors or any(ex.errors for ex in result.examined.values()):
         result.exit_code = 2
     return result
