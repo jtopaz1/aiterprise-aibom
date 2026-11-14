@@ -343,7 +343,28 @@ class ScanHonestyTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def scan(self, **kw):
+        kw.setdefault("registry", False)  # no live registry lookups from unit tests
         return run_scan(ScanOptions(target=self.root, cache=Cache(enabled=False), **kw))
+
+    def test_scan_runs_registry_checks_and_typosquat_names(self):
+        (self.root / "requirements.txt").write_text("reqeusts==2.0.0\nnot-a-real-pkg-xyz==1.0\n")
+
+        def fetch(url, headers):
+            raise net.NetError(f"GET {url} -> HTTP 404", status=404)
+
+        with mock.patch("aiterprise_scan.registry._default_fetch", fetch), \
+                mock.patch.object(vulns.OSVClient, "query_ids", lambda self, q, result=None: {x: [] for x in q}):
+            result = self.scan(registry=True)
+        rules = sorted({(f.rule_id, f.component.name) for f in result.findings if f.rule_id.startswith("ait.pkg.")})
+        self.assertIn(("ait.pkg.typosquat", "reqeusts"), rules)
+        self.assertIn(("ait.pkg.nonexistent", "not-a-real-pkg-xyz"), rules)
+
+    def test_no_registry_still_checks_names(self):
+        (self.root / "requirements.txt").write_text("reqeusts==2.0.0\n")
+        result = self.scan(offline=True)
+        self.assertEqual([f.rule_id for f in result.findings if f.rule_id.startswith("ait.pkg.")],
+                         ["ait.pkg.typosquat"])
+        self.assertEqual(result.examined["registry"].skipped, "offline")
 
     def test_unreachable_osv_is_an_incomplete_scan(self):
         (self.root / "requirements.txt").write_text("openai==1.50.0\n")

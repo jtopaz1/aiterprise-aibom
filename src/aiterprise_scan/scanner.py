@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from . import ingest, intel_malicious, vulns
+from . import ingest, intel_malicious, registry, vulns
 from . import policy as policy_mod
 from . import walk as walker
 from .cache import Cache
@@ -35,6 +35,10 @@ class ScanOptions:
     judge: bool = True
     mcp_only: bool = False
     max_vulns: int | None = None
+    registry: bool = True  # look direct dependencies up on PyPI / npm (existence, age)
+    registry_all: bool = False  # ... and transitive ones too
+    secdb: Any = None  # a secdb.Client when this machine holds a SecDB credential
+    secdb_skipped: str | None = None  # why SecDB was not consulted (shown in `examined`)
     exclude: list[str] = field(default_factory=list)  # globs on root-relative posix paths
     policy: policy_mod.Policy = field(default_factory=policy_mod.Policy)
     cache: Cache | None = None
@@ -223,6 +227,11 @@ def run_scan(opts: ScanOptions) -> ScanResult:
         sc, sf = run.step("skills", lambda: skills.analyze_skills(root, files), ([], []))
         components += sc
         findings += sf
+        from . import archives
+
+        ac, af = run.step("archives", lambda: archives.analyze(root, files, result), ([], []))
+        components += ac
+        findings += af
         if opts.secrets:
             findings += run.step("secrets", lambda: secrets.scan_secrets(root, files, result), [])
         bom_files = ingest.find_bom_files(files)
@@ -264,6 +273,16 @@ def run_scan(opts: ScanOptions) -> ScanResult:
         findings += run.step("ait-malicious", lambda: intel_malicious.judge(merged, result), [])
         client = vulns.OSVClient(cache=opts.cache or Cache(), offline=opts.offline)
         findings += run.step("osv", lambda: vulns.judge(merged, result, client, opts.max_vulns), [])
+        reg = registry.RegistryClient(cache=opts.cache or Cache(), offline=opts.offline or not opts.registry)
+        findings += run.step("registry", lambda: registry.judge(merged, result, reg, opts.registry_all), [])
+        if not opts.registry and not opts.offline:
+            result.examine("registry").skipped = "disabled (--no-registry)"
+        if opts.secdb is not None and not opts.offline:
+            from . import secdb
+
+            findings += run.step("secdb", lambda: secdb.enrich(merged, result, opts.secdb), [])
+        elif opts.secdb_skipped and not opts.offline:
+            result.examine("secdb").skipped = opts.secdb_skipped
         if not opts.mcp_only:
             from . import licences
 

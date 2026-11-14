@@ -199,6 +199,116 @@ class OSVClient:
 
 
 # --------------------------------------------------------------------------------------------
+# Offline advisory subset (AI packages only)
+# --------------------------------------------------------------------------------------------
+
+SUBSET_FILE = "vuln-subset.json.gz"
+
+
+@lru_cache(maxsize=1)
+def vuln_subset() -> dict:
+    """The bundled OSV advisories for AI-taxonomy packages ({} when the file is not built)."""
+    return data.load(SUBSET_FILE) if data.exists(SUBSET_FILE) else {}
+
+
+def subset_docs(comp: Component) -> list[dict] | None:
+    """Advisories the subset holds for this package; None when the package is outside the subset."""
+    names = (vuln_subset().get("packages") or {}).get(comp.ecosystem or "")
+    if names is None:
+        return None
+    return names.get(normalize_name(comp.name, comp.ecosystem))
+
+
+def osv_affects(doc: dict, comp: Component) -> bool | None:
+    """OSV range semantics for one exact version: True / False, or None when undecidable."""
+    if not comp.version or not comp.ecosystem:
+        return None
+    cur = _version_key(comp.ecosystem, comp.version)
+    if cur is None:
+        return None
+    want = normalize_name(comp.name, comp.ecosystem)
+    undecided = False
+    for aff in doc.get("affected") or []:
+        pkg = aff.get("package") or {}
+        if normalize_name(str(pkg.get("name", "")), comp.ecosystem) != want:
+            continue
+        for v in aff.get("versions") or []:
+            key = _version_key(comp.ecosystem, str(v))
+            if key is not None and key == cur:
+                return True
+        for rng in aff.get("ranges") or []:
+            if rng.get("type") not in ("ECOSYSTEM", "SEMVER"):
+                continue
+            state = _range_state(comp.ecosystem, rng.get("events") or [], cur)
+            if state is None:
+                undecided = True
+            elif state:
+                return True
+    return None if undecided else False
+
+
+_EVENT_ORDER = {"introduced": 0, "fixed": 1, "last_affected": 2}
+
+
+def _range_state(ecosystem: str, events: list[dict], cur: tuple) -> bool | None:
+    parsed = []
+    for ev in events:
+        for kind in ("introduced", "fixed", "last_affected"):
+            if kind not in ev:
+                continue
+            raw = str(ev[kind])
+            if kind == "introduced" and raw == "0":
+                parsed.append(((0,), _EVENT_ORDER[kind], kind, None))
+                continue
+            key = _version_key(ecosystem, raw)
+            if key is None:
+                return None
+            parsed.append(((1, key), _EVENT_ORDER[kind], kind, key))
+    affected = False
+    for _, _, kind, key in sorted(parsed, key=lambda p: (p[0], p[1])):
+        if kind == "introduced" and (key is None or cur >= key):
+            affected = True
+        elif kind == "fixed" and cur >= key:
+            affected = False
+        elif kind == "last_affected" and cur > key:
+            affected = False
+    return affected
+
+
+def _judge_from_subset(targets: dict[tuple, list[Component]], result: ScanResult, why: str
+                       ) -> tuple[dict[tuple, list[str]], dict[str, dict], int]:
+    """Advisory ids per query from the bundled subset; returns (ids, docs, packages outside it)."""
+    examined = result.examine("osv-subset")
+    meta = vuln_subset()
+    if not meta:
+        examined.skipped = "advisory subset not built (tools/build_vuln_subset.py)"
+        return {}, {}, len(targets)
+    ids: dict[tuple, list[str]] = {}
+    docs: dict[str, dict] = {}
+    outside = 0
+    for q, comps in targets.items():
+        held = subset_docs(comps[0])
+        if held is None:
+            outside += 1
+            continue
+        examined.checked += 1
+        hit = []
+        for d in held:
+            if osv_affects(d, comps[0]):
+                hit.append(d["id"])
+                docs[d["id"]] = d
+        if hit:
+            examined.with_data += 1
+        ids[q] = hit
+    built = str(meta.get("generated_at") or "")[:10]
+    result.notes.append(
+        f"osv: {why}; {examined.checked} AI package(s) judged from the bundled advisory subset "
+        f"({meta.get('advisory_count', 0):,} advisories, built {built or 'unknown'})"
+        + (f"; {outside} package(s) outside it were not checked" if outside else ""))
+    return ids, docs, outside
+
+
+# --------------------------------------------------------------------------------------------
 # Judgement
 # --------------------------------------------------------------------------------------------
 
@@ -282,7 +392,8 @@ def _primary(group: list[dict]) -> dict:
     return sorted(group, key=rank)[0]
 
 
-def advisory_findings(comp: Component, docs: list[dict], result: ScanResult | None = None) -> list[Finding]:
+def advisory_findings(comp: Component, docs: list[dict], result: ScanResult | None = None,
+                      source: str = "osv") -> list[Finding]:
     findings: list[Finding] = []
     kev_examined = result.examine("kev") if result is not None else None
     withdrawn_mal = [d for d in docs if d.get("withdrawn") and str(d.get("id", "")).startswith("MAL-")]
@@ -309,7 +420,7 @@ def advisory_findings(comp: Component, docs: list[dict], result: ScanResult | No
         cves = [i for i in all_ids if i.startswith("CVE-")]
         evidence = [
             Evidence(
-                "osv",
+                source,
                 d["id"],
                 f"https://osv.dev/vulnerability/{d['id']}",
                 {"summary": d.get("summary"), "published": d.get("published"), "aliases": d.get("aliases") or []},
@@ -410,12 +521,20 @@ def judge(
         )
     if not targets:
         return []
+    subset_ids: dict[tuple, list[str]] = {}
+    subset_docs_: dict[str, dict] = {}
     try:
         ids_by_query = client.query_ids(list(targets))
     except net.NetError as err:
         examined.errors += 1
         result.notes.append(f"osv: query failed ({err}); vulnerability status UNVERIFIED, not safe")
-        return []
+        ids_by_query = {}
+        subset_ids, subset_docs_, _ = _judge_from_subset(targets, result, "OSV unreachable")
+    else:
+        if client.offline:
+            uncached = {q: c for q, c in targets.items() if q not in ids_by_query}
+            if uncached:
+                subset_ids, subset_docs_, _ = _judge_from_subset(uncached, result, "offline")
     examined.checked += len(ids_by_query)
     all_ids = sorted({i for ids in ids_by_query.values() for i in ids})
     docs = client.details(all_ids) if all_ids else {}
@@ -426,13 +545,15 @@ def judge(
     findings: list[Finding] = []
     hidden = 0
     for q, comps in targets.items():
-        ids = ids_by_query.get(q)
+        source, ids, pool = "osv", ids_by_query.get(q), docs
+        if ids is None:
+            source, ids, pool = "osv-subset", subset_ids.get(q), subset_docs_
         if ids is None:
             continue
-        if ids:
+        if ids and source == "osv":
             examined.with_data += 1
         for comp in comps:
-            per = advisory_findings(comp, [docs[i] for i in ids if i in docs], result)
+            per = advisory_findings(comp, [pool[i] for i in ids if i in pool], result, source)
             per.sort(key=lambda f: (-SEVERITY_RANK[f.severity], not f.kev, f.advisory_id or ""))
             if max_vulns is not None:
                 keep = [f for f in per if f.rule_id == "ait.pkg.malicious"]

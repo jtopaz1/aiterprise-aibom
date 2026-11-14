@@ -72,6 +72,59 @@ def _licences(comp: Component) -> list[dict[str, Any]]:
     return [{"license": {"name": lic}}]
 
 
+def _licence_entries(comp: Component, findings: list[Finding]) -> list[dict[str, Any]]:
+    """The declared licence, then our verdicts as `LicenseRef-AIterprise-Verdict-*` entries (§4.4)."""
+    out = _licences(comp)
+    for entry in out:
+        (entry["license"] if "license" in entry else entry)["acknowledgement"] = "declared"
+    for f in findings:
+        if not f.rule_id.startswith("ait.licence."):
+            continue
+        ev = f.evidence[0] if f.evidence else None
+        lic: dict[str, Any] = {"name": f"LicenseRef-AIterprise-Verdict-{f.rule_id.split('.', 2)[-1]}",
+                               "acknowledgement": "concluded"}
+        if ev is not None and ev.url:
+            lic["url"] = ev.url
+        props = [{"name": "aiterprise:verdict", "value": f.verdict},
+                 {"name": "aiterprise:severity", "value": f.severity},
+                 {"name": "aiterprise:summary", "value": f.title},
+                 {"name": "aiterprise:finding", "value": f.fingerprint},
+                 {"name": "aiterprise:advisory", "value": "not legal advice"}]
+        if ev is not None and ev.detail.get("use_context"):
+            props.append({"name": "aiterprise:use_context", "value": str(ev.detail["use_context"])})
+        lic["properties"] = props
+        out.append({"license": lic})
+    return out
+
+
+_DATA_ONLY_FORMATS = {"safetensors", "gguf", "ggml", "ggmf", "ggjt", "ggla", "numpy"}
+
+
+def _model_card(comp: Component, findings: list[Finding]) -> dict[str, Any] | None:
+    from .model import SEVERITY_RANK
+    from .modelfiles import _PICKLE_FORMATS
+
+    props: list[dict[str, str]] = []
+    fmt = comp.properties.get("format")
+    if fmt:
+        props.append({"name": "aiterprise:format", "value": str(fmt)})
+        if fmt in _PICKLE_FORMATS:
+            props.append({"name": "aiterprise:serialisation", "value": "code-capable (pickle)"})
+        elif fmt in _DATA_ONLY_FORMATS:
+            props.append({"name": "aiterprise:serialisation", "value": "data-only"})
+    for key in ("base_model", "architecture", "size"):
+        if comp.properties.get(key) is not None:
+            props.append({"name": f"aiterprise:{key}", "value": str(comp.properties[key])})
+    limits = [f.title for f in findings
+              if f.status not in ("suppressed", "withdrawn", "resolved") and SEVERITY_RANK[f.severity] >= 1]
+    card: dict[str, Any] = {}
+    if limits:
+        card["considerations"] = {"technicalLimitations": limits}
+    if props:
+        card["properties"] = props
+    return card or None
+
+
 def _properties(comp: Component) -> list[dict[str, str]]:
     props = [{"name": "aiterprise:ctype", "value": comp.ctype}]
     if comp.ai:
@@ -91,7 +144,8 @@ def _properties(comp: Component) -> list[dict[str, str]]:
     return props
 
 
-def _component(comp: Component, ref: str) -> dict[str, Any]:
+def _component(comp: Component, ref: str, findings: list[Finding] | None = None) -> dict[str, Any]:
+    findings = findings or []
     out: dict[str, Any] = {"type": _CTYPE_TO_CDX.get(comp.ctype, "library"), "bom-ref": ref, "name": comp.name}
     if comp.version:
         out["version"] = comp.version
@@ -103,9 +157,13 @@ def _component(comp: Component, ref: str) -> dict[str, Any]:
             for alg, value in sorted(comp.hashes.items())
             if alg in _HASH_TO_CDX
         ]
-    lic = _licences(comp)
+    lic = _licence_entries(comp, findings)
     if lic:
         out["licenses"] = lic
+    if out["type"] == "machine-learning-model":
+        card = _model_card(comp, findings)
+        if card:
+            out["modelCard"] = card
     out["properties"] = _properties(comp)
     return out
 
@@ -150,6 +208,10 @@ def build(result: ScanResult, spec_version: str = "1.7", include_findings: bool 
     refs_by_key: dict[tuple, str] = {}
     components: list[dict[str, Any]] = []
     seen_refs: set[str] = set()
+    per_comp: dict[tuple, list[Finding]] = {}
+    for f in result.findings if include_findings else []:
+        if f.component is not None:
+            per_comp.setdefault(f.component.key(), []).append(f)
     for i, comp in enumerate(result.components):
         ref = _bom_ref(comp, i)
         if ref in seen_refs:
@@ -157,7 +219,7 @@ def build(result: ScanResult, spec_version: str = "1.7", include_findings: bool 
         seen_refs.add(ref)
         refs[id(comp)] = ref
         refs_by_key.setdefault(comp.key(), ref)
-        components.append(_component(comp, ref))
+        components.append(_component(comp, ref, per_comp.get(comp.key())))
     bom: dict[str, Any] = {
         "bomFormat": "CycloneDX",
         "specVersion": spec_version,

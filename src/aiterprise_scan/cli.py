@@ -6,13 +6,14 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import TOOL_NAME, __version__, bom, html_report, intel_malicious, report, vulns
+from . import TOOL_NAME, __version__, account, bom, credentials, html_report, intel_malicious, report, secdb, vulns
 from . import policy as policy_mod
 from .cache import Cache
 from .model import ScanResult
 from .scanner import ScanOptions, run_scan
 
-COMMANDS = {"scan", "mcp", "bom", "policy", "defs", "version"}
+COMMANDS = {"scan", "mcp", "bom", "policy", "defs", "version", "login", "logout", "status", "report-fp", "upload",
+            "ui"}
 FORMATS = ("table", "json", "sarif", "cyclonedx", "html")
 _OUT_NAMES = {"table": "report.txt", "json": "report.json", "sarif": "report.sarif", "cyclonedx": "aibom.cdx.json",
               "html": "report.html"}
@@ -64,6 +65,17 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--no-imports", action="store_true", help="skip manifest-free import discovery")
     scan.add_argument("--no-secrets", action="store_true", help="skip the secret scan")
     scan.add_argument("--max-vulns", type=int, help="at most N advisory findings per component")
+    scan.add_argument("--no-registry", action="store_true",
+                      help="do not look packages up on PyPI/npm (existence and age); name checks still run")
+    scan.add_argument("--registry-all", action="store_true",
+                      help="look up transitive dependencies on their registry too (default: direct only)")
+    scan.add_argument("--no-secdb", action="store_true",
+                      help="do not consult SecDB even when logged in (`aiterprise-scan login`)")
+    scan.add_argument("--upload", action="store_true",
+                      help="upload the JSON report after the scan (SecDB Pro+, or --cloud)")
+    scan.add_argument("--project", help="project name for --upload (default: the target directory name)")
+    scan.add_argument("--cloud", help=f"AIterprise cloud URL for --upload (or set {account.CLOUD_ENV})")
+    scan.add_argument("--save", action="store_true", help="keep this scan in the local history shown by `ui`")
     _add_output_args(scan)
     _add_gate_args(scan)
 
@@ -87,10 +99,24 @@ def build_parser() -> argparse.ArgumentParser:
     lint = pol_sub.add_parser("lint", help="validate a policy file")
     lint.add_argument("file", nargs="?", type=Path, default=None)
 
-    defs = sub.add_parser("defs", help="definition data status")
+    defs = sub.add_parser("defs", help="definition data: status, signed bundles (verify / install / update)")
     defs_sub = defs.add_subparsers(dest="defs_command")
-    defs_sub.add_parser("status", help="show bundled definition data")
+    defs_sub.add_parser("status", help="show the definition data in use and where it comes from")
+    for name, text in (("verify", "verify a downloaded bundle directory"),
+                       ("install", "verify a bundle directory and make it the active definitions")):
+        p = defs_sub.add_parser(name, help=text)
+        p.add_argument("dir", type=Path)
+        p.add_argument("--root-key", type=Path, help="minisign root public key (until SecDB pins one, O-23)")
+    upd = defs_sub.add_parser("update", help="fetch, verify and install the latest AIT bundle from SecDB")
+    upd.add_argument("--root-key", type=Path)
+    upd.add_argument("--channel", help="release channel (default: your account's)")
+    upd.add_argument("--signing-keys", help="URL of signing-keys.json (default: next to the manifest)")
+    defs_sub.add_parser("rollback", help="return to the previously installed release (or the wheel's data)")
 
+    account.add_parsers(sub)
+    u = sub.add_parser("ui", help="open the local web UI (127.0.0.1 only): history, findings, diff, account")
+    u.add_argument("--port", type=int, default=0, help="port (default: a free one)")
+    u.add_argument("--no-browser", action="store_true", help="print the link instead of opening a browser")
     sub.add_parser("version", help="print the version")
     return ap
 
@@ -104,6 +130,9 @@ def _load_policy(args: argparse.Namespace, root: Path | None) -> policy_mod.Poli
         print(f"warning: policy {path}: {w}", file=sys.stderr)
     if getattr(args, "snyk", None):
         pol.suppressions.extend(policy_mod.load_snyk(args.snyk))
+    policy_mod.merge_local_suppressions(pol, root)
+    if pol.errors:
+        raise SystemExit(_die("; ".join(pol.errors)))
     if args.fail_on:
         pol.fail_on = policy_mod.threshold_set(args.fail_on)
     return pol
@@ -182,14 +211,39 @@ def cmd_scan(args: argparse.Namespace) -> int:
         imports=not args.no_imports,
         secrets=not args.no_secrets,
         max_vulns=args.max_vulns,
+        registry=not args.no_registry,
+        registry_all=args.registry_all,
         exclude=list(args.exclude),
         policy=pol,
         cache=Cache(),
     )
+    secdb_options(opts, args.no_secdb)
+    if args.upload and credentials.load() is None:
+        return _die("--upload needs a SecDB API key (run `aiterprise-scan login`)")
     result = run_scan(opts)
     code = _gate(result, pol, args)
     _emit(result, args)
+    if args.save:
+        from . import history
+
+        print(f"saved to history: {history.save(report.to_json(result))} (aiterprise-scan ui)", file=sys.stderr)
+    if args.upload:
+        doc = report.to_json(result)
+        project = args.project or account.project_name(doc)
+        if account.report_upload(account.upload_document, doc, project, result.started_at, args.cloud) != 0:
+            return 2 if code == 0 else code
     return code
+
+
+def secdb_options(opts: ScanOptions, disabled: bool) -> None:
+    if disabled:
+        opts.secdb_skipped = "disabled (--no-secdb)"
+        return
+    cred = credentials.load()
+    if cred is None:
+        opts.secdb_skipped = "not logged in (aiterprise-scan login)"
+    else:
+        opts.secdb = secdb.Client(cred)
 
 
 def cmd_mcp(args: argparse.Namespace) -> int:
@@ -210,6 +264,7 @@ def cmd_mcp(args: argparse.Namespace) -> int:
         policy=pol,
         cache=Cache(),
     )
+    secdb_options(opts, False)
     result = run_scan(opts)
     code = _gate(result, pol, args)
     _emit(result, args)
@@ -250,6 +305,17 @@ def cmd_policy(args: argparse.Namespace) -> int:
 
 
 def cmd_defs(args: argparse.Namespace) -> int:
+    from . import bundles, defscli
+
+    handler = defscli.HANDLERS.get(args.defs_command or "status")
+    if handler is not None:
+        return handler(args)
+    act = bundles.active()
+    if act:
+        m = act[1]
+        print(f"installed bundle: {act[0]} · {m.get('channel')} · created {m.get('created_at')}")
+    else:
+        print("installed bundle: none (definitions shipped with this version are in use)")
     snap = intel_malicious.load_snapshot()
     kev = vulns.kev_catalog()
     by_eco = snap.records_by_ecosystem()
@@ -274,7 +340,7 @@ def cmd_defs(args: argparse.Namespace) -> int:
     from . import data
 
     for name in ("taxonomy.json", "command-rules.json", "poison-patterns.json", "model-rules.json",
-                 "licence-verdicts.json"):
+                 "licence-verdicts.json", "popular-packages.json"):
         if not data.exists(name):
             print(f"{name}: missing")
             continue
@@ -282,8 +348,9 @@ def cmd_defs(args: argparse.Namespace) -> int:
         version = doc.get("version") if isinstance(doc, dict) else None
         rules = doc.get("rules") if isinstance(doc, dict) else None
         count = f", {len(rules)} rules" if isinstance(rules, list) else ""
-        print(f"{name}: present" + (f", version {version}" if version else "") + count)
-    print("signed bundles: not yet served by SecDB (AIT/ait-bundle); definitions bundled in the wheel are in use")
+        print(f"{name}: present" + (f", version {version}" if version else "") + count + f" ({data.source(name)})")
+    for w in bundles.WARNINGS:
+        print(f"warning: {w}")
     return 0
 
 
@@ -315,6 +382,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "version":
             print(f"{TOOL_NAME} {__version__}")
             return 0
+        handler = {"login": account.cmd_login, "logout": account.cmd_logout, "status": account.cmd_status,
+                   "report-fp": account.cmd_report_fp, "upload": account.cmd_upload}.get(args.command)
+        if handler is not None:
+            return handler(args)
+        if args.command == "ui":
+            from . import ui
+
+            return ui.serve(args.port, open_browser=not args.no_browser)
     except SystemExit as exc:
         return int(exc.code) if isinstance(exc.code, int) else 2
     except (FileNotFoundError, PermissionError) as err:

@@ -98,6 +98,10 @@ def render(result: ScanResult) -> str:
 
     if result.notes:
         a("<h2>Notes</h2><ul>" + "".join(f"<li>{_e(n)}</li>" for n in result.notes) + "</ul>")
+    if result.notices:
+        a("<h2>Data notices</h2><ul>" + "".join(
+            f"<li>{_e(n.get('text', ''))}" + (f" &lt;{_e(n['url'])}&gt;" if n.get("url") else "") + "</li>"
+            for n in result.notices) + "</ul>")
     a("<p class=\"small\">Licence verdicts are advisory and are not legal advice.</p>")
     a("</main></body></html>\n")
     return "".join(out)
