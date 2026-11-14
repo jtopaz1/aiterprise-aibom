@@ -102,6 +102,13 @@ jobs:
           python -m pip install --quiet -r docs/requirements.txt
           mkdocs build --strict --site-dir /tmp/site
 
+  binaries:
+    # the release's own binary build, minus publishing: Linux, macOS and Windows, each held to the killer demo
+    uses: ./.github/workflows/binaries.yml
+    with:
+      artifact-prefix: ci-bin
+      retention-days: 3
+
   container:
     runs-on: ubuntu-latest
     steps:

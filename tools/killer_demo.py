@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The design doc 13 §3 "killer demo", run through the real CLI. Exit 0 only if all five hit.
 
-    python tools/killer_demo.py [--work DIR] [--online]
+    python tools/killer_demo.py [--work DIR] [--online] [--exe BINARY]
 
 It builds a small repository with five planted problems and expects one scan to find all of them:
 1. litellm 1.82.7 — the malicious release (MAL-2026-2144);
@@ -20,6 +20,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import zipfile
@@ -70,8 +71,10 @@ def build_repo(repo: Path) -> None:
         zf.writestr("archive/version", "3\n")
 
 
-def run(work: Path, online: bool = False) -> tuple[int, dict, dict[str, list[dict]]]:
-    """Scan the demo repo; return (exit code, report, hits per expectation)."""
+def run(work: Path, online: bool = False, exe: list[str] | None = None) -> tuple[int, dict, dict[str, list[dict]]]:
+    """Scan the demo repo; return (exit code, report, hits per expectation).
+
+    `exe` runs that command (e.g. a release binary) instead of this checkout's CLI in-process."""
     repo = work / "demo-repo"
     build_repo(repo)
     out = work / ("out-online" if online else "out-offline")
@@ -80,17 +83,21 @@ def run(work: Path, online: bool = False) -> tuple[int, dict, dict[str, list[dic
     if not online:
         args.append("--offline")
         env["AITERPRISE_DEFS"] = "bundled"  # the wheel's definitions, not an installed bundle
-    saved = {k: os.environ.get(k) for k in env}
-    os.environ.update(env)
-    try:
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            code = cli.main(args)
-    finally:
-        for k, v in saved.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
+    if exe:
+        code = subprocess.run([*exe, *args], env={**os.environ, **env}, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, timeout=600).returncode
+    else:
+        saved = {k: os.environ.get(k) for k in env}
+        os.environ.update(env)
+        try:
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                code = cli.main(args)
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
     rep = json.loads((out / "report.json").read_text(encoding="utf-8"))
     hits = {label: [f for f in rep["findings"] if test(f)] for label, test in EXPECT.items()}
     return code, rep, hits
@@ -100,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--work", type=Path, help="working directory (default: a temporary one)")
     ap.add_argument("--online", action="store_true", help="also consult OSV, registries and SecDB")
+    ap.add_argument("--exe", help="run this executable (e.g. a release binary) instead of the checkout's CLI")
     args = ap.parse_args(argv)
     tmp = None
     work = args.work
@@ -109,8 +117,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         shutil.rmtree(work / "demo-repo", ignore_errors=True)
     try:
-        code, rep, hits = run(work, args.online)
-        print(f"[{'online' if args.online else 'offline'}] exit {code}; {len(rep['findings'])} findings")
+        code, rep, hits = run(work, args.online, [args.exe] if args.exe else None)
+        print(f"[{'online' if args.online else 'offline'}{' - ' + args.exe if args.exe else ''}] exit {code}; "
+              f"{len(rep['findings'])} findings")
         for label, found in hits.items():
             sev = ", ".join(sorted({f["severity"] for f in found}))
             print(f"  {'PASS' if found else 'MISS'}  {label}" + (f"  ({sev})" if found else ""))

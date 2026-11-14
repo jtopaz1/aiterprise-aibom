@@ -20,6 +20,26 @@ class KillerDemoTests(unittest.TestCase):
         self.assertEqual(code, 1)  # critical findings fail the default gate
         self.assertEqual({f["severity"] for f in hits["malicious litellm 1.82.7 (MAL-2026-2144)"]}, {"critical"})
 
+    def test_an_external_executable_is_held_to_the_same_five(self):
+        # what CI does with each PyInstaller binary; here the "binary" is this interpreter running the package
+        import os
+        import sys
+
+        src = str(Path(__file__).resolve().parents[1] / "src")
+        old = os.environ.get("PYTHONPATH")
+        os.environ["PYTHONPATH"] = src + (os.pathsep + old if old else "")
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                code, report, hits = killer_demo.run(Path(tmp), exe=[sys.executable, "-m", "aiterprise_scan"])
+        finally:
+            if old is None:
+                os.environ.pop("PYTHONPATH")
+            else:
+                os.environ["PYTHONPATH"] = old
+        self.assertEqual([label for label, found in hits.items() if not found], [])
+        self.assertEqual(code, 1)
+        self.assertEqual(report["tool"], "aiterprise-scan")
+
 
 if __name__ == "__main__":
     unittest.main()

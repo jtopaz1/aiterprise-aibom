@@ -24,7 +24,7 @@ so this table restates Appendix H.1 against what exists in this repository today
 | Agent skills / plugins (C30/C31) | `skills.py` | working |
 | AI secrets (C32), redacted, digest-keyed | `secrets.py` | working |
 | SecDB API v1 client (§4.8, Appendix I/K): `/v1/me` limits, lookups (single, batch on paid plans), MCP URL prefixes and assessments, file verdicts, data notices, FP reports with consent, report upload; budget from the plan; 429 → UNVERIFIED, never clean | `secdb.py`, `account.py`, `login` / `logout` / `status` / `report-fp` / `upload` | working — verified live with a free key (`/v1/me`, `/v1/usage`, lookups within the 4/min budget); batch and upload are plan-gated and not live-tested |
-| Signed definition bundles (C50): minisign (pure-Python Ed25519, RFC 8032) over the manifest, root-signed `signing-keys.json` with rollback and expiry checks, `release_id` from JCS, archive hash before unpack, atomic install, rollback, per-load re-check | `ed25519.py`, `minisign.py`, `bundles.py`, `defscli.py`, `defs verify/install/update/rollback`, `tools/build_bundle.py` | working — a locally built bundle verified, installed and used; interop with the reference `minisign` is a CI job (not yet run) |
+| Signed definition bundles (C50): minisign (pure-Python Ed25519, RFC 8032) over the manifest, root-signed `signing-keys.json` with rollback and expiry checks, `release_id` from JCS, archive hash before unpack, atomic install, rollback, per-load re-check | `ed25519.py`, `minisign.py`, `bundles.py`, `defscli.py`, `defs verify/install/update/rollback`, `tools/build_bundle.py` | working — a locally built bundle verified, installed and used; interop with the reference `minisign` passes both ways in CI |
 | Rule quality: per-finding `fp_rate_measured` (measured, or null) and `examined` coverage counts | `quality.py`, `data/ait/rule-quality.json`, `tools/measure_fp.py` | working — `ait.secret.*` measured (3.41 % over 205 clean projects); every other rule is `null` |
 | CycloneDX 1.7 emission (C05), 1.6 compatible, findings as `vulnerabilities[]` | `bom.py`, `--emit-bom`, `bom` command | working |
 | Reports: table, JSON, SARIF 2.1.0, self-contained HTML; data notices | `report.py`, `html_report.py` | working |
@@ -33,9 +33,10 @@ so this table restates Appendix H.1 against what exists in this repository today
 | Coverage honesty: skipped files are `ait.*.not-analysable` findings; an unreachable source exits 2 | `model.not_analysable`, `scanner.py` | working |
 | Local web UI: scan history, findings with filters, inventory, coverage, diff between scans, suppress, SecDB account, defs update; 127.0.0.1 only, token → HttpOnly cookie, Host check, CSRF + Origin, CSP nonce | `ui.py`, `history.py`, `ui`, `scan --save` | working — checked in a real browser, including a 375 px viewport |
 | Local MCP server exposing `scan_ai_supply_chain` (C44), protocol 2025-06-18; registry manifest | `mcpserver.py`, `mcp serve`, `server.json` | working; not published to the MCP registry |
-| Acceptance demo: five planted problems, one offline scan | `tools/killer_demo.py` | working — 5/5 from source and from the PyInstaller binary |
-| Packaging: wheel + sdist, single-file binaries (PyInstaller), container image, Sigstore-signed release, self-SBOM, PyPI trusted publishing | `packaging/`, `Dockerfile`, `.github/workflows/release.yml` | written — the Windows binary built and passed the demo locally; Docker, PyPI and the workflow **not yet run** |
-| CI: test matrix, wheel, self-scan, killer demo, licence check, minisign interop, docs, container | `.github/workflows/ci.yml` | written — **not yet run on GitHub** |
+| Acceptance demo: five planted problems, one offline scan; `--exe` holds a built binary to the same five | `tools/killer_demo.py` | working — 5/5 from source and from the local Windows binary |
+| Packaging: wheel + sdist, single-file binaries (PyInstaller), container image, Sigstore-signed release, self-SBOM, PyPI trusted publishing | `packaging/`, `Dockerfile`, `.github/workflows/release.yml`, `binaries.yml` | wheel and container image built and checked in CI; CI also builds the Linux, macOS and Windows binaries with the release's own `binaries.yml` and runs the killer demo on each; the tag-triggered release (signing, PyPI, ghcr.io) **not yet run** |
+| CI: test matrix, wheel, self-scan, killer demo, licence check, minisign interop, docs, container, binaries | `.github/workflows/ci.yml` | working — green on GitHub (PR #2) |
+| Scheduled definition refresh (MAL + KEV + advisory subset) | `.github/workflows/refresh-defs.yml` | written — weekly; rebuilds the data, runs the full tests and the killer demo on it, then proposes it on `defs/refresh`. Runs only from the default branch, so **not yet run**; opening the pull request needs the repository setting that lets Actions create pull requests (off today), otherwise the run links to the compare page |
 | Documentation site (MkDocs, strict build); generated rules reference | `mkdocs.yml`, `docs/`, `tools/gen_rules_doc.py` | working — builds locally with `--strict` |
 | GitHub Action (with optional `api-key`), pre-commit hook | `action/`, `.pre-commit-hooks.yaml` | written — not yet run on GitHub |
 | Golden fixture suite: 14 fixtures; F02/F04b/F12 are false-positive canaries | `tests/test_golden.py` | working |
@@ -46,7 +47,6 @@ so this table restates Appendix H.1 against what exists in this repository today
 |---|---|---|
 | Pinned AIT root key | C50 / O-23 | Not published by SecDB; `--root-key` or `AITERPRISE_ROOT_KEY` is required until it is |
 | Published AIT bundles | C50 data ops | `GET /v1/releases/latest?domain=AIT&format=ait-bundle` returns 404 today; `defs update` says so and keeps the current data |
-| Scheduled definition refresh (MAL + KEV + advisory subset) | C14/C20 data ops | The bundled data is a point-in-time build; refresh is manual (see below) |
 | False-positive rates for the other rule families | §4.3 | Needs labelled corpora with model files, MCP configs and skills; the site-packages corpus only exercises secrets |
 | BYO-key third-party providers (e.g. VirusTotal) | §6.4 | `providers/` adapter not started |
 | Live MCP tool-list poisoning layer | C24/C28 | Deliberately not done: the scanner never launches servers (G8); descriptions in configs are judged |
@@ -67,7 +67,7 @@ reported as `withdrawn`, exit 0); popular packages carry exact-version records o
 0.30.4/1.14.1, chalk 5.6.1, debug 4.4.2, litellm 1.82.7/1.82.8/1.107.0, …), pinned by a unit test;
 two real npm lockfiles (877 packages) scanned offline with zero malicious findings.
 
-Refresh:
+Refresh by hand (the `refresh-defs` workflow runs the same steps weekly once it is on the default branch):
 
 ```bash
 curl -fLo PyPI-all.zip https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip
