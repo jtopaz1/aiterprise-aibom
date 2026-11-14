@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import TOOL_NAME, __version__, account, bom, credentials, html_report, intel_malicious, report, secdb, vulns
+from . import TOOL_NAME, __version__, account, bom, cloudpolicy, credentials, html_report, intel_malicious, report, secdb, vulns
 from . import policy as policy_mod
 from .cache import Cache
 from .model import ScanResult
@@ -98,6 +98,10 @@ def build_parser() -> argparse.ArgumentParser:
     pol_sub = pol.add_subparsers(dest="policy_command")
     lint = pol_sub.add_parser("lint", help="validate a policy file")
     lint.add_argument("file", nargs="?", type=Path, default=None)
+    pull = pol_sub.add_parser("pull", help="download the organisation's policy from an AIterprise cloud")
+    pull.add_argument("--cloud", help=f"AIterprise cloud URL (or set {cloudpolicy.CLOUD_ENV})")
+    pull.add_argument("--out", type=Path, default=Path("aibom.policy.yaml"),
+                      help="where to write it (default: aibom.policy.yaml here)")
 
     defs = sub.add_parser("defs", help="definition data: status, signed bundles (verify / install / update)")
     defs_sub = defs.add_subparsers(dest="defs_command")
@@ -218,8 +222,16 @@ def cmd_scan(args: argparse.Namespace) -> int:
         cache=Cache(),
     )
     secdb_options(opts, args.no_secdb)
-    if args.upload and credentials.load() is None:
-        return _die("--upload needs a SecDB API key (run `aiterprise-scan login`)")
+    if args.upload:
+        if args.offline:
+            return _die("--offline sends nothing, so it cannot --upload; scan offline, then "
+                        "`aiterprise-scan upload report.json` when you choose to")
+        try:
+            cloudpolicy.cloud_url(args.cloud)
+        except cloudpolicy.CloudURLError as err:
+            return _die(str(err))
+        if credentials.load() is None:
+            return _die("--upload needs a SecDB API key (run `aiterprise-scan login`)")
     result = run_scan(opts)
     code = _gate(result, pol, args)
     _emit(result, args)
@@ -287,8 +299,10 @@ def cmd_bom(args: argparse.Namespace) -> int:
 
 
 def cmd_policy(args: argparse.Namespace) -> int:
+    if args.policy_command == "pull":
+        return cloudpolicy.cmd_pull(args.cloud, args.out)
     if args.policy_command != "lint":
-        return _die("usage: aiterprise-scan policy lint [FILE]")
+        return _die("usage: aiterprise-scan policy lint [FILE] | policy pull [--cloud URL] [--out FILE]")
     path = args.file or policy_mod.find_policy(Path("."))
     if path is None or not path.is_file():
         return _die("no policy file found (aibom.policy.yaml)")

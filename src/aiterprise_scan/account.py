@@ -15,10 +15,11 @@ import os
 import re
 import sys
 from pathlib import Path, PureWindowsPath
+from urllib.parse import urlsplit
 
-from . import TOOL_NAME, credentials, secdb
+from . import TOOL_NAME, cloudpolicy, credentials, secdb
 
-CLOUD_ENV = "AITERPRISE_CLOUD_URL"
+CLOUD_ENV = cloudpolicy.CLOUD_ENV
 
 
 def _err(msg: str) -> int:
@@ -195,8 +196,10 @@ def upload_view(doc: dict) -> dict:
 
 
 def upload_document(doc: dict, project: str, scanned_at: str, cloud: str | None = None) -> dict:
-    """Send one aiterprise-json document (paths cleaned by `upload_view`). Raises secdb.SecDBError."""
-    cloud = cloud or os.environ.get(CLOUD_ENV)
+    """Send one aiterprise-json document (paths cleaned by `upload_view`).
+
+    Raises secdb.SecDBError, or cloudpolicy.CloudURLError before anything is sent."""
+    cloud = cloudpolicy.cloud_url(cloud)
     client = secdb.Client(credentials.load(), base_url=cloud) if cloud else _client()
     return client.upload_scan(project, upload_view(doc), scanned_at)
 
@@ -216,8 +219,17 @@ def cmd_upload(args: argparse.Namespace) -> int:
 
 def report_upload(send, doc: dict, project: str, scanned_at: str, cloud: str | None) -> int:
     try:
+        target = cloudpolicy.cloud_url(cloud)
         res = send(doc, project, scanned_at, cloud)
+    except cloudpolicy.CloudURLError as err:
+        return _err(str(err))
     except secdb.SecDBError as err:
+        if target:
+            host = urlsplit(target).hostname
+            if err.status is None:
+                return _err(f"cannot reach the cloud at {host}: {err.cause}")
+            return _err(f"the cloud at {host} refused the upload ({err.status} {err.type}): "
+                        f"{err.detail or err.title or 'no detail'}")
         if err.type == "plan_required":
             return _err(f"{err} — uploading scans needs a Pro plan or higher on SecDB; "
                         f"use --cloud with your AIterprise cloud instead")

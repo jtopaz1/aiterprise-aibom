@@ -63,6 +63,7 @@ class SecDBError(Exception):
         self.detail = str(err.problem.get("detail") or "")
         self.request_id = str(err.problem.get("request_id") or err.headers.get("x-request-id") or "")
         self.violated = list(err.problem.get("violated_policies") or [])
+        self.cause = str(err)
         what = " ".join(x for x in (str(self.status or ""), self.type) if x) or str(err)
         text = f"SecDB {what}"
         if self.title:

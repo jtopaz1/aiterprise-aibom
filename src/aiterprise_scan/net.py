@@ -80,8 +80,12 @@ def request(
     max_retries: int = MAX_RETRIES,
     ok: tuple[int, ...] = (),
     retry_on: frozenset[int] | set[int] = RETRY_STATUSES,
+    raw: bool = False,
 ) -> Response:
-    """One HTTP exchange with retries. Statuses in `ok` (e.g. 304) are returned, not raised."""
+    """One HTTP exchange with retries. Statuses in `ok` (e.g. 304) are returned, not raised.
+
+    `raw=True` returns the body as bytes instead of decoding it as JSON (errors are still parsed
+    as problem documents)."""
     data = None
     hdrs = {"User-Agent": USER_AGENT, "Accept": "application/json"}
     if body is not None:
@@ -94,10 +98,10 @@ def request(
         req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                raw = resp.read(MAX_RESPONSE_BYTES + 1)
-                if len(raw) > MAX_RESPONSE_BYTES:
+                body_bytes = resp.read(MAX_RESPONSE_BYTES + 1)
+                if len(body_bytes) > MAX_RESPONSE_BYTES:
                     raise NetError(f"response from {url} exceeds {MAX_RESPONSE_BYTES} bytes")
-                return Response(resp.status, _lower(resp.headers), _decode(raw, url))
+                return Response(resp.status, _lower(resp.headers), body_bytes if raw else _decode(body_bytes, url))
         except urllib.error.HTTPError as err:
             rh = _lower(err.headers)
             if err.code in ok:
@@ -112,8 +116,8 @@ def request(
                 attempt += 1
                 continue
             try:
-                raw = err.read(64 * 1024)
-                problem = json.loads(raw.decode("utf-8")) if raw else {}
+                err_body = err.read(64 * 1024)
+                problem = json.loads(err_body.decode("utf-8")) if err_body else {}
             except (OSError, ValueError):
                 problem = {}
             if not isinstance(problem, dict):

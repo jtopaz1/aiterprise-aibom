@@ -303,14 +303,17 @@ def parse_policy(doc: Any, path: str | None = None) -> Policy:
 
 
 def load_policy(path: Path) -> Policy:
-    text = read_text(path)
+    return loads_policy(read_text(path), str(path), as_json=path.suffix == ".json")
+
+
+def loads_policy(text: str, path: str | None = None, as_json: bool = False) -> Policy:
     try:
-        doc = json.loads(text) if path.suffix == ".json" else miniyaml.load(text)
+        doc = json.loads(text) if as_json else miniyaml.load(text)
     except (ValueError, miniyaml.YAMLError) as err:
-        pol = Policy(path=str(path))
+        pol = Policy(path=path)
         pol.errors.append(f"cannot parse: {err}")
         return pol
-    return parse_policy(doc, str(path))
+    return parse_policy(doc, path)
 
 
 LOCAL_SUPPRESSIONS = Path(".aiterprise") / "suppressions.json"

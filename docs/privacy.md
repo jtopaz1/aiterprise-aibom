@@ -13,6 +13,10 @@ no imports, no MCP server launches, no install scripts.
 | logged in to SecDB | `secdb.aiterprise.net` | model-file SHA-256 hashes, package purls, MCP server names, and the first 8 hex digits of the SHA-256 of each private MCP URL; `--no-secdb` turns this off |
 | `--upload` | SecDB or your `--cloud` | the JSON report: component names, versions, hashes, findings — target reduced to its directory name, home paths to `~/…` |
 | `report-fp` | SecDB | the rule id and your notes, after you consent |
+| `policy pull` | your `--cloud` | nothing but the API key (to authenticate) and the version you already hold |
+
+`--offline --upload` is refused: an offline scan sends nothing. API keys go to a cloud only over
+https (plain http is allowed to this machine, for local development).
 
 There is no telemetry. The table report says so on its second line (`telemetry: off`).
 

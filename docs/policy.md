@@ -32,6 +32,19 @@ baseline: .aiterprise/baseline.json
 | `suppressions` | accept a specific finding until a date, with a reason |
 | `baseline` | findings recorded here do not fail the gate |
 
+## Org policy from the cloud
+
+An AIterprise cloud can hold one policy for the whole organisation. Each project pulls it:
+
+```bash
+aiterprise-scan policy pull --cloud https://aibom.example.com      # or set AITERPRISE_CLOUD_URL
+```
+
+It writes `aibom.policy.yaml` (or `--out FILE`) with a first-line comment naming the policy version.
+The next pull sends that version back and leaves the file alone when nothing changed. A policy that
+does not load with this scanner is refused and the local file is kept. The pull needs the SecDB
+key you logged in with; the key is only ever sent over https (plain http only to this machine).
+
 ## Suppressions
 
 A suppression always has an expiry. When it lapses, the finding fails the gate again. Suppressions

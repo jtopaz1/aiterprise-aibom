@@ -49,6 +49,7 @@ aiterprise-scan bom . --out aibom.cdx.json          # inventory only (fast compl
 aiterprise-scan . --write-baseline .aiterprise/baseline.json   # adopt gating without fixing everything
 aiterprise-scan ui                                  # local web UI on 127.0.0.1
 aiterprise-scan policy lint aibom.policy.yaml
+aiterprise-scan policy pull --cloud https://aibom.example.com   # the org policy from an AIterprise cloud
 aiterprise-scan defs status | verify | install | update | rollback   # signed definition bundles
 ```
 

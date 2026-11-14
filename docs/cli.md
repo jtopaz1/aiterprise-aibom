@@ -8,6 +8,7 @@
 | `mcp [serve]` | judge MCP servers and agent skills only; `mcp serve` runs the MCP tool over stdio |
 | `bom [target]` | emit an AI-BOM without risk judgement (fast compliance mode) |
 | `policy lint FILE` | validate a policy file |
+| `policy pull [--cloud URL] [--out FILE]` | download the organisation's policy from an AIterprise cloud — see [Policy](policy.md#org-policy-from-the-cloud) |
 | `defs status \| verify \| install \| update \| rollback` | definition data and signed bundles — see [Definition bundles](bundles.md) |
 | `login` / `logout` / `status` | SecDB account — see [SecDB](secdb.md) |
 | `upload report.json` | upload a JSON report to SecDB or an AIterprise cloud |
@@ -30,7 +31,7 @@
 | `--no-registry` | do not look packages up on PyPI/npm (existence and age); name checks still run |
 | `--registry-all` | look up transitive dependencies on their registry too (default: direct only) |
 | `--no-secdb` | do not consult SecDB even when logged in |
-| `--upload` | upload the JSON report after the scan (SecDB Pro+, or `--cloud`) |
+| `--upload` | upload the JSON report after the scan (SecDB Pro+, or `--cloud`); refused with `--offline` |
 | `--project NAME` | project name for `--upload` (default: the target directory name) |
 | `--cloud URL` | AIterprise cloud URL for `--upload` (or `AITERPRISE_CLOUD_URL`) |
 | `--save` | keep this scan in the local history shown by `ui` |
@@ -57,7 +58,7 @@ configs) and `--agent-configs`.
 | `AITERPRISE_HOME` | where credentials, history and installed bundles live (default `~/.aiterprise`) |
 | `AITERPRISE_CACHE_DIR` | OSV and registry response cache |
 | `AITERPRISE_SECDB_URL` | SecDB base URL (default `https://secdb.aiterprise.net`) |
-| `AITERPRISE_CLOUD_URL` | AIterprise cloud URL for uploads |
+| `AITERPRISE_CLOUD_URL` | AIterprise cloud URL for uploads and `policy pull` (https, or http to this machine only) |
 | `AITERPRISE_ROOT_KEY` | minisign root public key file for bundle verification |
 | `AITERPRISE_DEFS=bundled` | ignore installed bundles and use the wheel's data |
 

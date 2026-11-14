@@ -29,6 +29,7 @@ so this table restates Appendix H.1 against what exists in this repository today
 | CycloneDX 1.7 emission (C05), 1.6 compatible, findings as `vulnerabilities[]` | `bom.py`, `--emit-bom`, `bom` command | working |
 | Reports: table, JSON, SARIF 2.1.0, self-contained HTML; data notices | `report.py`, `html_report.py` | working |
 | Policy (C33), suppressions with mandatory expiry (C34), `.snyk` import, baseline (C35); malicious findings accepted only by an expiring fingerprint suppression; UI suppressions in `.aiterprise/suppressions.json` | `policy.py` | working |
+| Org policy sync and cloud upload: `policy pull` (ETag, refuses a policy this scanner cannot load), `scan --upload --cloud`, `upload --cloud`; keys only over https (http to loopback only) | `cloudpolicy.py`, `account.py` | working — verified end to end against a local `aibom-cloud` with a real SecDB key (upload 201, pull 200 then 304) |
 | Coverage honesty: skipped files are `ait.*.not-analysable` findings; an unreachable source exits 2 | `model.not_analysable`, `scanner.py` | working |
 | Local web UI: scan history, findings with filters, inventory, coverage, diff between scans, suppress, SecDB account, defs update; 127.0.0.1 only, token → HttpOnly cookie, Host check, CSRF + Origin, CSP nonce | `ui.py`, `history.py`, `ui`, `scan --save` | working — checked in a real browser, including a 375 px viewport |
 | Local MCP server exposing `scan_ai_supply_chain` (C44), protocol 2025-06-18; registry manifest | `mcpserver.py`, `mcp serve`, `server.json` | working; not published to the MCP registry |
@@ -50,7 +51,7 @@ so this table restates Appendix H.1 against what exists in this repository today
 | BYO-key third-party providers (e.g. VirusTotal) | §6.4 | `providers/` adapter not started |
 | Live MCP tool-list poisoning layer | C24/C28 | Deliberately not done: the scanner never launches servers (G8); descriptions in configs are judged |
 | `tools/build_command_rules.py` (rule generator) | Appendix H | Rules are self-tested by `tests/test_mcp.py`; the generator is not in the repo |
-| Cloud service `aibom-cloud` (FastAPI + PostgreSQL) | Appendix J | Separate repository (`C:\Project\aibom-cloud`), built and tested locally; not deployed, no remote |
+| Cloud service `aibom-cloud` (FastAPI + PostgreSQL) | Appendix J | Separate repository (`C:\Project\aibom-cloud`), 92 tests; dashboard checked in a browser on SQLite; not run on PostgreSQL or Docker, not deployed, no remote |
 
 ## Definition data
 
