@@ -285,6 +285,24 @@ def _primary(group: list[dict]) -> dict:
 def advisory_findings(comp: Component, docs: list[dict], result: ScanResult | None = None) -> list[Finding]:
     findings: list[Finding] = []
     kev_examined = result.examine("kev") if result is not None else None
+    withdrawn_mal = [d for d in docs if d.get("withdrawn") and str(d.get("id", "")).startswith("MAL-")]
+    for d in withdrawn_mal:
+        # a live withdrawal is newer than any bundled snapshot: report it, never drop it (§4.3)
+        f = Finding(
+            rule_id="ait.pkg.malicious",
+            title=f"Known-malicious package version ({comp.name} {comp.version})",
+            severity="critical",
+            verdict="malicious",
+            confidence=98,
+            component=comp,
+            evidence=[Evidence("osv", d["id"], f"https://osv.dev/vulnerability/{d['id']}",
+                               {"summary": d.get("summary"), "aliases": d.get("aliases") or []})],
+            remediation=MAL_REMEDIATION,
+            advisory_id=d["id"],
+            maps_to=[OWASP_SUPPLY_CHAIN],
+        )
+        f.withdraw(str(d["withdrawn"]))
+        findings.append(f)
     for group in _group([d for d in docs if not d.get("withdrawn")]):
         primary = _primary(group)
         all_ids = sorted({d["id"] for d in group} | {a for d in group for a in d.get("aliases") or []})

@@ -253,15 +253,17 @@ def cmd_defs(args: argparse.Namespace) -> int:
     snap = intel_malicious.load_snapshot()
     kev = vulns.kev_catalog()
     by_eco = snap.records_by_ecosystem()
-    print(f"malicious-versions: {snap.record_count:,} records over {len(snap.records):,} packages "
+    print(f"malicious-versions: {snap.record_count:,} records over {snap.package_count:,} packages "
           f"({', '.join(f'{e} {n:,}' for e, n in sorted(by_eco.items()))}); "
           f"{snap.version_count:,} listed versions, {snap.all_versions_count:,} every-version records; "
           f"generated {snap.generated_at}")
+    print(f"  withdrawn: {snap.withdrawn_count:,} records kept apart; a match is reported as withdrawn, never active")
     print(f"  source: {snap.source}")
     for inp in snap.inputs:
         if "sha256" in inp:
+            withdrawn = f", {inp['withdrawn']:,} withdrawn" if inp.get("withdrawn") else ""
             print(f"  input: {inp.get('source', '')} {'/'.join(inp.get('ecosystems', []))} {inp.get('file', '')} "
-                  f"sha256 {inp['sha256'][:16]}… ({inp.get('records', 0):,} records)")
+                  f"sha256 {inp['sha256'][:16]}… ({inp.get('records', 0):,} records{withdrawn})")
         elif "ids" in inp:
             print(f"  input: {inp.get('api', '')} {len(inp['ids'])} ids")
     if kev.get("count"):

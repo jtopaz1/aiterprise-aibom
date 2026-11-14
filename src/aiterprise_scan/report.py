@@ -9,6 +9,7 @@ from typing import Any, TextIO
 
 from . import INFORMATION_URI, TOOL_NAME, __version__
 from .model import SEVERITIES, SEVERITY_RANK, Finding, ScanResult, sort_findings
+from .textio import printable as _safe  # every scanned string shown in the table goes through this
 
 _LEVEL = {"critical": "error", "high": "error", "medium": "warning", "low": "note", "info": "note"}
 _SECURITY_SEVERITY = {"critical": "9.5", "high": "8.0", "medium": "5.5", "low": "3.0", "info": "0.0"}
@@ -124,7 +125,7 @@ def to_sarif(result: ScanResult, include_suppressed: bool = True) -> dict[str, A
                 **({"kev": True} if f.kev else {}),
             },
         }
-        if f.status in ("suppressed", "acknowledged"):
+        if f.status in ("suppressed", "acknowledged", "withdrawn"):
             reason = (f.suppression or {}).get("reason", f.status)
             entry["suppressions"] = [{"kind": "external", "justification": str(reason)}]
         results.append(entry)
@@ -203,8 +204,8 @@ def render_table(result: ScanResult, stream: TextIO, show_inventory: bool = Fals
     w = stream.write
     s = summary(result)
     w(f"{TOOL_NAME} {__version__}" + (f" · {defs_line}" if defs_line else "") + "\n")
-    w(f"target: {result.target} · mode: {result.mode} · telemetry: off"
-      + (f" · policy: {result.policy_path}" if result.policy_path else "") + "\n\n")
+    w(f"target: {_safe(result.target)} · mode: {result.mode} · telemetry: off"
+      + (f" · policy: {_safe(result.policy_path)}" if result.policy_path else "") + "\n\n")
 
     types = " · ".join(f"{n} {_plural(t, n)}" for t, n in s["components_by_type"].items())
     w(f"DISCOVERY  {s['files_walked']} files walked · {s['components']} components ({s['ai_components']} AI)\n")
@@ -238,19 +239,19 @@ def render_table(result: ScanResult, stream: TextIO, show_inventory: bool = Fals
             label = f"{_COLOR[f.severity]}{label:<9}{_RESET}"
         else:
             label = f"{label:<9}"
-        subject = f.component.display if f.component else ""
-        head = f" {label} {subject + ' — ' if subject else ''}{f.title}"
+        subject = _safe(f.component.display) if f.component else ""
+        head = f" {label} {subject + ' — ' if subject else ''}{_safe(f.title)}"
         if hidden:
             head += f"  [{f.status}]"
         w(head + "\n")
         ev = _evidence_line(f)
         if ev:
-            w(f"           evidence: {ev}\n")
+            w(f"           evidence: {_safe(ev)}\n")
         tail = []
         if f.location:
-            tail.append(f"at {f.location}")
+            tail.append(f"at {_safe(f.location)}")
         if f.remediation:
-            tail.append(f"fix: {f.remediation}")
+            tail.append(f"fix: {_safe(f.remediation)}")
         if tail:
             w("           " + " · ".join(tail) + "\n")
         w(f"           id: {f.fingerprint} · rule: {f.rule_id} · confidence {f.confidence}\n")
@@ -265,11 +266,11 @@ def render_table(result: ScanResult, stream: TextIO, show_inventory: bool = Fals
             loc = f"  ({comp.locations[0]})" if comp.locations else ""
             spec = f" [{comp.version_spec}]" if comp.version_spec and not comp.version else ""
             ai = " AI" if comp.ai else ""
-            w(f"  {comp.ctype:<12} {comp.display}{spec}{ai}{loc}\n")
+            w(f"  {comp.ctype:<12} {_safe(comp.display + spec)}{ai}{_safe(loc)}\n")
 
     if result.notes:
         w("\nNOTES\n")
         for note in result.notes:
-            w(f"  - {note}\n")
-    outcome = {0: "pass", 1: "policy failure", 2: "error"}.get(result.exit_code, "")
+            w(f"  - {_safe(note)}\n")
+    outcome = {0: "pass", 1: "policy failure", 2: "error or incomplete scan"}.get(result.exit_code, "")
     w(f"\nRESULT     exit {result.exit_code} — {outcome} · {result.duration_s:.1f}s\n")

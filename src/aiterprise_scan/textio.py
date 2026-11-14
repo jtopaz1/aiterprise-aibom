@@ -8,14 +8,25 @@ from __future__ import annotations
 
 import codecs
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 DEFAULT_MAX_BYTES = 16 * 1024 * 1024  # manifests/configs larger than this are not text we parse
 
+# C0/C1 controls (ESC sequences, BEL, CR, newlines), zero-width and bidi-override characters
+_UNPRINTABLE = re.compile("[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁤﻿"
+                          "\U000e0000-\U000e007f]")
+
 
 class TooLarge(Exception):
     pass
+
+
+def printable(text: Any) -> str:
+    """Scanned text made safe to show: every control, bidi or invisible character becomes a
+    space, so a hostile name or description cannot drive the terminal or forge report lines."""
+    return _UNPRINTABLE.sub(" ", str(text))
 
 
 def decode_bytes(raw: bytes) -> str:

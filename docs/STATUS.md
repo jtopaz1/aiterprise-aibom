@@ -12,7 +12,7 @@ so this table restates Appendix H.1 against what exists in this repository today
 | Repository discovery (W2): requirements, pyproject (PEP 621 + Poetry), Pipfile(.lock), poetry.lock, uv.lock, environment.yml, package.json, package-lock v1–v3, pnpm-lock v5/v6/v9, yarn.lock v1/berry; Python/JS imports and notebooks. Lockfile wins over manifest; a range is never an exact version | `discover.py` | working |
 | Component taxonomy (§4.2) | `data/ait/taxonomy.json`, `taxonomy.py` | working (first-party, curated) |
 | BOM ingest (C09): CycloneDX 1.4–1.7 (nested), SPDX 2.x JSON, UTF-8/UTF-16 with or without BOM; versionless components marked unjudgeable | `ingest.py` | working |
-| Known-malicious versions (C14): OSV `MAL-` snapshot, withdrawn records refused; exact, all-versions, range-admits-malicious, unpinned | `intel_malicious.py`, `data/ait/malicious-versions.json.gz` | working — 235,476 records (npm 223,456 · PyPI 12,020), built 2026-11-14 |
+| Known-malicious versions (C14): OSV `MAL-` snapshot; exact, all-versions, range-admits-malicious, unpinned. A match on a withdrawn record (bundled, or seen live on OSV) is reported with status `withdrawn` — same fingerprint, never active, never dropped (§4.3) | `intel_malicious.py`, `data/ait/malicious-versions.json.gz` | working — 235,476 records (npm 223,456 · PyPI 12,020) + 363 withdrawn kept apart, built 2026-11-14 |
 | Vulnerabilities (C19): OSV querybatch → per-advisory details, cached, alias de-duplication, CVSS v3 base score, fix-version advice preferring final releases | `vulns.py`, `net.py`, `cache.py` | working (verified live against api.osv.dev) |
 | Exploitation priority (C20): CISA KEV upgrades to critical | `vulns.py`, `data/ait/kev.json` | working — 1,781 CVEs, catalog 2026.11.13 (verified live: three litellm 1.82.7 CVEs upgrade to critical) |
 | Model files (C21): pickle opcode walk (protocol 0–5, raw, legacy torch, PyTorch zip/TorchScript, `.mar`, `.npz`, `.npy` object arrays, joblib plain/zlib/gzip/bz2/xz) against a deny/allow list; safetensors, GGUF (chat-template SSTI), ONNX (custom op domains, external-data paths), Keras v3 / HDF5 (`Lambda`, dangerous callables), TFLite/`.pte` inventory; zip-slip and malformed containers; caps on opcodes, decompression and memory — never unpickled | `modelfiles.py`, `data/ait/model-rules.json` | working — verified on hand-built samples only (see limits) |
@@ -23,8 +23,9 @@ so this table restates Appendix H.1 against what exists in this repository today
 | CycloneDX 1.7 emission (C05), 1.6 compatible, findings as `vulnerabilities[]` | `bom.py`, `--emit-bom`, `bom` command | working |
 | Reports: table, JSON, SARIF 2.1.0, self-contained HTML | `report.py`, `html_report.py` | working |
 | Policy (C33): `fail_on`, `use_context`, path ignores, package allow/deny with ranges, licence allow/deny, lint | `policy.py`, `policy lint` | working |
-| Suppressions (C34) with mandatory expiry; `.snyk` import | `policy.py`, `--snyk` | working |
+| Suppressions (C34) with mandatory expiry; `.snyk` import. A known-malicious finding (verdict `malicious`) is accepted only by an expiring suppression naming its fingerprint — never by `ignore`, `allow_packages`, a rule/path/advisory-wide suppression or a baseline | `policy.py`, `--snyk` | working |
 | Baseline (C35) | `--write-baseline`, `--baseline` | working |
+| Coverage honesty: a skipped manifest, agent config, skill script or model-file part is a medium `ait.*.not-analysable` finding where the file is; oversized text files skipped by the secrets pass and the 200,000-file walk cap are notes; an unreachable source (OSV) exits 2 | `model.not_analysable`, `scanner.py` | working |
 | Local MCP server exposing `scan_ai_supply_chain` (C44), protocol 2025-06-18 | `mcpserver.py`, `mcp serve` | working |
 | GitHub Action, pre-commit hook, CI matrix + wheel job | `action/`, `.pre-commit-hooks.yaml`, `.github/workflows/ci.yml` | written — **not yet run on GitHub** |
 | Golden fixture suite: 14 fixtures; F02/F04b/F12 are false-positive canaries | `tests/test_golden.py` | working |
@@ -45,13 +46,13 @@ so this table restates Appendix H.1 against what exists in this repository today
 
 | Asset | Content | Input (provenance) | Size |
 |---|---|---|---|
-| `data/ait/malicious-versions.json.gz` (schema `ait-malicious-versions/2`) | 235,476 `MAL-` records; 214,803 mark every version (mostly typosquat / dependency-confusion packages), the rest list 65,651 exact versions; 363 withdrawn records excluded | OSV bulk exports `PyPI/all.zip` (37.9 MB) and `npm/all.zip` (221 MB), 2026-11-14 — SHA-256 of each input is recorded in the file and shown by `defs status` | 3.05 MB (gzip of compact JSON) |
+| `data/ait/malicious-versions.json.gz` (schema `ait-malicious-versions/2`) | 235,476 active `MAL-` records over 235,475 packages; 214,803 mark every version (mostly typosquat / dependency-confusion packages), the rest list 65,651 exact versions; 363 withdrawn records (PyPI 25, npm 338) kept in a separate `withdrawn` section | OSV bulk exports `PyPI/all.zip` (37.9 MB) and `npm/all.zip` (221 MB), 2026-11-14 — SHA-256 of each input is recorded in the file and shown by `defs status` | 3.06 MB (gzip of compact JSON) |
 | `data/ait/kev.json` | 1,781 CVEs | CISA KEV catalog 2026.11.13 (CC0) | 0.3 MB |
 
 Quality checks on this build:
 
-- no withdrawn record is present; `fastapi 0.136.3` (the withdrawn record that the earlier v0.2.0
-  snapshot shipped as CRITICAL) is absent;
+- no withdrawn record is active; `fastapi 0.136.3` (the withdrawn record that the earlier v0.2.0
+  snapshot shipped as CRITICAL) is reported as `withdrawn` (info, exit 0, a SARIF suppression);
 - popular packages carry exact-version records only — compromised releases such as axios
   0.30.4/1.14.1, chalk 5.6.1, debug 4.4.2, nx, litellm 1.82.7/1.82.8/1.107.0, lightning
   2.6.2/2.6.3, mistralai 2.4.6, @mastra/core 1.42.1 — never "every version"; a unit test pins this;
@@ -72,7 +73,7 @@ ship a smaller seed and the full set should arrive as a verified bundle.
 
 ## Test coverage
 
-239 unit and golden tests (`python -m unittest discover -s tests`), about 1.5 s. The wheel is built
+255 unit and golden tests (`python -m unittest discover -s tests`), about 1.7 s. The wheel is built
 offline and installed into a clean virtual environment to check that the bundled data ships.
 
 ## Known limits (measure before GA)

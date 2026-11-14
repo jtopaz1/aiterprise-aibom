@@ -15,8 +15,9 @@ import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
-from .model import OWASP_SENSITIVE_INFO, Evidence, Finding, Location
+from .model import OWASP_SENSITIVE_INFO, Evidence, Finding, Location, ScanResult
 from .textio import TooLarge, read_text
 from .walk import rel_posix
 
@@ -149,6 +150,37 @@ def redact_secrets_in(text: str) -> str:
     return "".join(out)
 
 
+# query parameters whose value is a credential however it looks (no provider prefix to match)
+_SECRET_PARAM = re.compile(
+    r"(?i)(?:token|secret|passw(?:or)?d|pwd|api[_-]?key|apikey|^key$|auth|^sig$|signature|^code$|"
+    r"session|credential|access[_-]?key|private)")
+
+
+def redact_url(url: str) -> str:
+    """`url` with a userinfo password and credential-like query values masked, and any detected
+    provider key redacted, so a config's server URL can be reported without leaking it."""
+    text = redact_secrets_in(str(url))
+    try:
+        parts = urlsplit(text)
+    except ValueError:
+        return text
+    netloc = parts.netloc
+    if "@" in netloc:
+        userinfo, host = netloc.rsplit("@", 1)
+        user, sep, _password = userinfo.partition(":")
+        netloc = f"{user}:******@{host}" if sep else f"{userinfo}@{host}"
+    query = parts.query
+    if query:
+        pairs = []
+        for pair in query.split("&"):
+            name, sep, value = pair.partition("=")
+            if sep and value and _SECRET_PARAM.search(name):
+                value = redact(value)
+            pairs.append(f"{name}{sep}{value}")
+        query = "&".join(pairs)
+    return urlunsplit((parts.scheme, netloc, parts.path, query, parts.fragment))
+
+
 # ---- file scanning --------------------------------------------------------
 
 _SKIP_NAMES = {
@@ -220,21 +252,32 @@ def _finding(match: SecretMatch, location: Location) -> Finding:
     )
 
 
-def scan_secrets(root: Path, files: list[Path]) -> list[Finding]:
-    """Scan every scannable text file for secrets and return high findings."""
+def scan_secrets(root: Path, files: list[Path], result: ScanResult | None = None) -> list[Finding]:
+    """Scan every scannable text file for secrets and return high findings.
+
+    Files skipped for size or read errors are counted in `result` (note + examined), so a large
+    `.env` is never mistaken for one that was checked and found clean.
+    """
     findings: list[Finding] = []
+    checked = 0
+    skipped: list[str] = []
     for path in files:
         if not _is_scannable(path):
             continue
         try:
-            if path.stat().st_size > MAX_SECRET_BYTES:
-                continue
-        except OSError:
-            continue
-        try:
             text = read_text(path, max_bytes=MAX_SECRET_BYTES)
         except (OSError, TooLarge):
+            skipped.append(rel_posix(path, root))
             continue
+        checked += 1
         for match in find_secrets(text):
             findings.append(_finding(match, Location(rel_posix(path, root), match.line)))
+    if result is not None:
+        ex = result.examine("secrets")
+        ex.checked += checked
+        ex.with_data += len({f.location.path for f in findings if f.location})
+        if skipped:
+            shown = ", ".join(skipped[:5]) + (f" and {len(skipped) - 5} more" if len(skipped) > 5 else "")
+            result.notes.append(f"secrets: {len(skipped)} text file(s) over {MAX_SECRET_BYTES // (1024 * 1024)} MiB "
+                                f"or unreadable were not scanned ({shown})")
     return findings

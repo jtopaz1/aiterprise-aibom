@@ -1198,13 +1198,17 @@ def _walk_pickles(ctx: _Ctx, reader: _Reader, where: dict[str, Any], *, single: 
             if st.count >= expected:
                 break
             continue
-        if st.count >= ctx.limits["max_pickles_per_stream"]:
-            break
         try:
             nxt = reader.peek(2)
         except Exception:
             break
-        if len(nxt) == 2 and nxt[0] == 0x80 and nxt[1] <= 5:
+        more = len(nxt) == 2 and nxt[0] == 0x80 and nxt[1] <= 5
+        if more and st.count >= ctx.limits["max_pickles_per_stream"]:
+            # a loader may read every pickle in the stream: the ones past the cap are unknown
+            st.incomplete = f"more than {st.count} pickles in the stream; the rest were not analysed"
+            st.error_offset, st.error_index = reader.tell(), st.count
+            break
+        if more:
             continue
         st.trailing = bool(nxt)
         break

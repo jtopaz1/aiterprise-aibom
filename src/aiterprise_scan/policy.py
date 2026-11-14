@@ -18,8 +18,10 @@
         approved_by: security@company
     baseline: .aiterprise/baseline.json
 
-A known-malicious finding is never silenced by `allow_packages` or `ignore`; only an explicit,
-expiring suppression of that exact finding can accept it.
+A known-malicious finding (verdict `malicious`: a MAL- record, a code-executing pickle, a poisoned
+MCP instruction, ...) is never silenced by `allow_packages`, `ignore`, a rule-, path- or
+advisory-wide suppression, or a baseline (which never expires); only an expiring suppression that
+names its fingerprint accepts it.
 """
 
 from __future__ import annotations
@@ -138,6 +140,10 @@ class Suppression:
 
     def expired(self, today: dt.date) -> bool:
         return today > self.until
+
+    def names(self, f: Finding) -> bool:
+        """True when this suppression selects `f` by its fingerprint, not by rule/path/advisory."""
+        return f.fingerprint in {(self.fingerprint or "").lower(), (self.finding or "").lower()}
 
     def matches(self, f: Finding) -> bool:
         ids = {f.fingerprint.lower(), f.rule_id.lower()}
@@ -381,16 +387,21 @@ def denied_package_findings(components: list[Component], policy: Policy) -> list
     return out
 
 
+def is_protected(f: Finding) -> bool:
+    """Known-malicious: accepted only by a suppression that names its fingerprint."""
+    return f.verdict == "malicious" or f.rule_id in NEVER_AUTO_SILENCED
+
+
 def apply(result: ScanResult, policy: Policy, baseline: set[str] | None = None,
           today: dt.date | None = None) -> list[Finding]:
     """Set finding statuses and return the findings that fail the gate."""
     today = today or dt.date.today()
-    expired_notes: set[str] = set()
+    notes: set[str] = set()
     for f in result.findings:
         if f.status != "new":
             continue
-        auto_ok = f.rule_id not in NEVER_AUTO_SILENCED
-        if auto_ok:
+        protected = is_protected(f)
+        if not protected:
             rule = next((r for r in policy.ignore if r.matches(f)), None)
             if rule is not None:
                 f.status = "suppressed"
@@ -400,18 +411,29 @@ def apply(result: ScanResult, policy: Policy, baseline: set[str] | None = None,
                 f.status = "suppressed"
                 f.suppression = {"reason": "allow_packages", "origin": "policy"}
                 continue
+        refused = False
         for sup in policy.suppressions:
             if not sup.matches(f):
                 continue
+            if protected and not sup.names(f):
+                refused = True
+                continue
             if sup.expired(today):
-                expired_notes.add(f"suppression for {sup.finding or sup.advisory or sup.rule or sup.path} "
-                                  f"expired {sup.until.isoformat()}")
+                notes.add(f"suppression for {sup.finding or sup.advisory or sup.rule or sup.path} "
+                          f"expired {sup.until.isoformat()}")
                 continue
             f.status = "suppressed"
             f.suppression = sup.to_dict()
             break
         if f.status == "new" and baseline and f.fingerprint in baseline:
-            f.status = "acknowledged"
-            f.suppression = {"reason": "baseline", "origin": "baseline"}
-    result.notes.extend(sorted(expired_notes))
+            if protected:
+                refused = True
+            else:
+                f.status = "acknowledged"
+                f.suppression = {"reason": "baseline", "origin": "baseline"}
+        if refused and f.status == "new":
+            notes.add(f"known-malicious finding {f.fingerprint} ({f.rule_id}) was not silenced by a rule-, "
+                      "path- or advisory-wide suppression or a baseline; only an expiring suppression "
+                      "naming this fingerprint accepts it")
+    result.notes.extend(sorted(notes))
     return [f for f in result.findings if f.status == "new" and f.severity in policy.fail_on]

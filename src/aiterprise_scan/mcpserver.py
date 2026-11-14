@@ -20,6 +20,7 @@ from . import TOOL_NAME, __version__
 from . import policy as policy_mod
 from .model import SEVERITY_RANK, ScanResult, sort_findings
 from .scanner import ScanOptions, run_scan
+from .textio import printable
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 TOOL = {
@@ -45,13 +46,11 @@ TOOL = {
     },
     "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": True},
 }
-_INVISIBLE = re.compile("[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁤﻿\U000e0000-\U000e007f]")
 MAX_TITLE = 160
 
 
 def clean(text: str, limit: int = MAX_TITLE) -> str:
-    text = _INVISIBLE.sub(" ", str(text))
-    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+", " ", printable(text)).strip()
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 

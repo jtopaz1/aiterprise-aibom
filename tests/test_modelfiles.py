@@ -413,6 +413,14 @@ class ModelFilesTest(unittest.TestCase):
         self.assertEqual(f[0].evidence[0].detail["pickle"], 3)
         self.assertEqual(by_rule(findings, "ait.model.malformed"), [])
 
+    def test_pickles_past_the_stream_cap_are_reported(self):
+        # loaders may read every pickle in a stream; one past the cap is unknown, not clean
+        cap = data.load("model-rules.json")["limits"]["max_pickles_per_stream"]
+        payload = pickle.dumps(1, protocol=2) * cap + evil_p2()
+        _c, findings = self.scan("many.pkl", payload)
+        gaps = by_rule(findings, "ait.model.not-analysable")
+        self.assertEqual([f.evidence[0].detail["issue"] for f in gaps], ["pickle-incomplete"])
+
     def test_zip_slip(self):
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:

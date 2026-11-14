@@ -11,7 +11,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .textio import decode_bytes
+from .textio import TooLarge, read_text
 
 ALWAYS_SKIP_DIRS = {
     ".git",
@@ -31,6 +31,7 @@ ALWAYS_SKIP_DIRS = {
 }
 
 DEFAULT_MAX_FILES = 200_000
+MAX_GITIGNORE_BYTES = 1024 * 1024  # a larger .gitignore is not read (its rules are not applied)
 
 
 @dataclass
@@ -51,9 +52,9 @@ class GitIgnore:
         rules: list[IgnoreRule] = []
         if path.is_file():
             try:
-                text = decode_bytes(path.read_bytes())
-            except OSError:
-                text = ""
+                text = read_text(path, MAX_GITIGNORE_BYTES)
+            except (OSError, TooLarge):
+                text = ""  # walking more files is the safe direction for a scanner
             for raw in text.splitlines():
                 line = raw.strip()
                 if not line or line.startswith("#"):
