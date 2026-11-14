@@ -94,8 +94,13 @@ def rel_posix(path: Path, root: Path) -> str:
 
 
 def walk(root: Path, all_files: bool = False, max_files: int = DEFAULT_MAX_FILES) -> list[Path]:
-    """Return regular files under `root`, sorted, without following symlinks."""
-    root = root.resolve()
+    """Return regular files under `root`, sorted, without following symlinks.
+
+    Paths keep the caller's spelling of `root` (no `resolve()`), so `p.relative_to(root)` always
+    works — on Windows a resolved path can differ from the given one (8.3 short names such as
+    `RUNNER~1`, drive-letter case), which made every path fall outside the root.
+    """
+    root = Path(root)
     if root.is_file():
         return [root]
     ignore = GitIgnore() if all_files else GitIgnore.load(root)

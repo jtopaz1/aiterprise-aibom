@@ -1,6 +1,7 @@
 """Core: model, versions, YAML subset, tolerant text I/O, purl, walker."""
 
 import codecs
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -156,6 +157,24 @@ class WalkTests(unittest.TestCase):
             all_rels = sorted(p.relative_to(root).as_posix() for p in walk(root, all_files=True))
             self.assertIn("x.log", all_rels)
             self.assertNotIn("node_modules/p/index.js", all_rels)
+
+    @unittest.skipUnless(os.name == "nt", "8.3 short names are Windows-only")
+    def test_paths_keep_the_callers_root_spelling(self):
+        # GitHub's Windows runners hand out TEMP as C:\Users\RUNNER~1\...; resolving the root
+        # expanded it and every walked path fell outside the root the caller passed in
+        import ctypes
+
+        with tempfile.TemporaryDirectory() as tmp:
+            long_dir = Path(tmp) / "a-directory-with-a-long-name"
+            (long_dir / "sub").mkdir(parents=True)
+            (long_dir / "sub" / "f.txt").write_text("x")
+            buf = ctypes.create_unicode_buffer(1024)
+            if not ctypes.windll.kernel32.GetShortPathNameW(str(long_dir), buf, len(buf)):
+                self.skipTest("GetShortPathNameW failed")
+            short = Path(buf.value)
+            if short.name == long_dir.name:
+                self.skipTest("8.3 names are disabled on this volume")
+            self.assertEqual([p.relative_to(short).as_posix() for p in walk(short)], ["sub/f.txt"])
 
 
 if __name__ == "__main__":
