@@ -1,0 +1,142 @@
+name: release
+
+# Tag vX.Y.Z (matching aiterprise_scan.__version__) to publish:
+#   wheel + sdist → PyPI (trusted publishing, no token) · single-file binaries for Linux, macOS and
+#   Windows · CycloneDX SBOM of the scanner itself · Sigstore (cosign keyless) bundles for every file
+#   · container image on ghcr.io with provenance · a GitHub release carrying all of it.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  dist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tag matches the package version
+        run: |
+          version=$(PYTHONPATH=src python -c "import aiterprise_scan; print(aiterprise_scan.__version__)")
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != v$version"; exit 1; }
+      - name: Licence check
+        run: python tools/check_licences.py
+      - name: Build wheel and sdist
+        run: |
+          python -m pip install --quiet build==1.6.1
+          python -m build
+      - name: Smoke-test the wheel and run the killer demo
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install --quiet dist/*.whl
+          /tmp/clean/bin/aiterprise-scan defs status
+          PYTHONPATH=src python tools/killer_demo.py
+      - name: SBOM of the scanner (CycloneDX, produced by itself)
+        run: |
+          /tmp/clean/bin/aiterprise-scan bom . --out dist/aiterprise-scan-${GITHUB_REF_NAME}.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  binaries:
+    uses: ./.github/workflows/binaries.yml
+    with:
+      artifact-prefix: bin
+      retention-days: 30
+
+  sign:
+    needs: [dist, binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # Sigstore keyless signing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign every artefact (Sigstore bundle per file)
+        run: |
+          cd artifacts
+          for f in *; do
+            cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"
+          done
+          sha256sum $(ls | grep -v '\.sigstore\.json$') > SHA256SUMS
+          cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed
+          path: artifacts/
+
+  pypi:
+    needs: sign
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # PyPI trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Keep only the wheel and sdist
+        run: find dist -type f ! -name '*.whl' ! -name '*.tar.gz' -delete
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  image:
+    needs: sign
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/aiterprise-scan
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/aiterprise-scan
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  github-release:
+    needs: [sign, pypi, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed
+          path: signed
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: signed/*
+          generate_release_notes: true

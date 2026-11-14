@@ -29,6 +29,8 @@ from __future__ import annotations
 import datetime as dt
 import fnmatch
 import json
+import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -301,14 +303,82 @@ def parse_policy(doc: Any, path: str | None = None) -> Policy:
 
 
 def load_policy(path: Path) -> Policy:
-    text = read_text(path)
+    return loads_policy(read_text(path), str(path), as_json=path.suffix == ".json")
+
+
+def loads_policy(text: str, path: str | None = None, as_json: bool = False) -> Policy:
     try:
-        doc = json.loads(text) if path.suffix == ".json" else miniyaml.load(text)
+        doc = json.loads(text) if as_json else miniyaml.load(text)
     except (ValueError, miniyaml.YAMLError) as err:
-        pol = Policy(path=str(path))
+        pol = Policy(path=path)
         pol.errors.append(f"cannot parse: {err}")
         return pol
-    return parse_policy(doc, str(path))
+    return parse_policy(doc, path)
+
+
+LOCAL_SUPPRESSIONS = Path(".aiterprise") / "suppressions.json"
+MAX_SUPPRESSION_DAYS = 365
+
+
+def _local_file(root: Path) -> Path:
+    return (root if root.is_dir() else root.parent) / LOCAL_SUPPRESSIONS
+
+
+def merge_local_suppressions(pol: Policy, root: Path | None) -> None:
+    """Add `.aiterprise/suppressions.json` (written by `aiterprise-scan ui`) to the policy.
+
+    Same rules as the policy file: an expiry and a reason are mandatory. Commit the file so CI
+    applies the same acceptances."""
+    if root is None:
+        return
+    path = _local_file(root)
+    if not path.is_file():
+        return
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as err:
+        pol.errors.append(f"{path}: cannot parse: {err}")
+        return
+    extra = parse_policy({"suppressions": doc.get("suppressions") if isinstance(doc, dict) else None}, str(path))
+    pol.errors.extend(f"{path}: {e}" for e in extra.errors)
+    for sup in extra.suppressions:
+        sup.origin = "local"
+        pol.suppressions.append(sup)
+
+
+def add_local_suppression(root: Path, fingerprint: str, until: str, reason: str, approved_by: str | None = None,
+                          today: dt.date | None = None) -> Path:
+    """Append one fingerprint suppression to the project's local file. Raises ValueError."""
+    today = today or dt.date.today()
+    fingerprint = fingerprint.strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{16}", fingerprint):
+        raise ValueError("a suppression names a finding by its 16-hex fingerprint")
+    day = _parse_date(until)
+    if day is None:
+        raise ValueError("until must be a date (YYYY-MM-DD)")
+    if day <= today:
+        raise ValueError("until must be in the future")
+    if (day - today).days > MAX_SUPPRESSION_DAYS:
+        raise ValueError(f"until may be at most {MAX_SUPPRESSION_DAYS} days ahead")
+    reason = reason.strip()
+    if not reason:
+        raise ValueError("a reason is mandatory")
+    path = _local_file(root)
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    except ValueError:
+        raise ValueError(f"{path} is not valid JSON; fix or remove it first") from None
+    items = [s for s in (doc.get("suppressions") or []) if isinstance(s, dict) and s.get("finding") != fingerprint]
+    entry = {"finding": fingerprint, "until": day.isoformat(), "reason": reason[:500],
+             "created": today.isoformat(), "origin": "aiterprise-scan ui"}
+    if approved_by and approved_by.strip():
+        entry["approved_by"] = approved_by.strip()[:200]
+    items.append(entry)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"version": 1, "suppressions": items}, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+    return path
 
 
 def load_snyk(path: Path, today: dt.date | None = None) -> list[Suppression]:

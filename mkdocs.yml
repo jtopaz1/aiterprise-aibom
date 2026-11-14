@@ -1,0 +1,28 @@
+site_name: aiterprise-scan
+site_description: Local-first AI supply-chain scanner that emits an AI-BOM and judges it
+repo_url: https://github.com/jtopaz1/aiterprise-aibom
+edit_uri: edit/main/docs/
+docs_dir: docs
+theme:
+  name: readthedocs
+markdown_extensions:
+  - tables
+  - toc:
+      permalink: true
+  - admonition
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Command line: cli.md
+  - Policy and suppressions: policy.md
+  - Rules reference: rules.md
+  - SecDB: secdb.md
+  - Definition bundles: bundles.md
+  - Local web UI: ui.md
+  - Privacy: privacy.md
+  - Implementation status: STATUS.md

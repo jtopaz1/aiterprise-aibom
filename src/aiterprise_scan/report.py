@@ -56,10 +56,20 @@ def to_json(result: ScanResult) -> dict[str, Any]:
         "summary": summary(result),
         "examined": {k: v.to_dict() for k, v in sorted(result.examined.items())},
         "notes": list(result.notes),
+        "notices": [dict(n) for n in result.notices],
         "components": [c.to_dict() for c in result.components],
-        "findings": [f.to_dict() for f in sort_findings(result.findings)],
+        "findings": [_finding_json(f, result) for f in sort_findings(result.findings)],
         "exit_code": result.exit_code,
     }
+
+
+def _finding_json(f: Finding, result: ScanResult) -> dict[str, Any]:
+    from . import quality
+
+    d = f.to_dict()
+    d["examined"] = quality.examined_for(f, result)
+    d["quality"] = quality.rule_quality(f.rule_id)
+    return d
 
 
 def dumps_json(result: ScanResult) -> str:
@@ -272,5 +282,10 @@ def render_table(result: ScanResult, stream: TextIO, show_inventory: bool = Fals
         w("\nNOTES\n")
         for note in result.notes:
             w(f"  - {_safe(note)}\n")
+    if result.notices:
+        w("\nDATA NOTICES (reproduced as the sources require)\n")
+        for n in result.notices:
+            url = f" <{n['url']}>" if n.get("url") else ""
+            w(f"  - {_safe(n.get('text', ''))}{_safe(url)}\n")
     outcome = {0: "pass", 1: "policy failure", 2: "error or incomplete scan"}.get(result.exit_code, "")
     w(f"\nRESULT     exit {result.exit_code} — {outcome} · {result.duration_s:.1f}s\n")

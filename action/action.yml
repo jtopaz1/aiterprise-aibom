@@ -20,6 +20,9 @@ inputs:
   args:
     description: Extra arguments passed to `aiterprise-scan scan`.
     default: ""
+  api-key:
+    description: "Optional SecDB API key (pass a secret). Adds SecDB judgements; never printed."
+    default: ""
 
 outputs:
   exit-code:
@@ -48,6 +51,7 @@ runs:
         FAIL_ON: ${{ inputs.fail-on }}
         OFFLINE: ${{ inputs.offline }}
         EXTRA_ARGS: ${{ inputs.args }}
+        AITERPRISE_API_KEY: ${{ inputs.api-key }}
       run: |
         set +e
         offline_flag=""

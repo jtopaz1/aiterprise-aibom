@@ -325,6 +325,16 @@ class ScanResult:
     files_walked: int = 0
     policy_path: str | None = None
     exit_code: int = 0
+    # attribution notices from data sources (SecDB `notices[]`), reproduced in full wherever the
+    # data is shown (`14a` §2)
+    notices: list[dict[str, Any]] = field(default_factory=list)
+
+    def add_notices(self, notices: list[dict[str, Any]] | None) -> None:
+        have = {n.get("id") for n in self.notices}
+        for n in notices or []:
+            if isinstance(n, dict) and n.get("text") and n.get("id") not in have:
+                self.notices.append({k: n[k] for k in ("id", "text", "url") if n.get(k)})
+                have.add(n.get("id"))
 
     def examine(self, source: str) -> Examined:
         if source not in self.examined:

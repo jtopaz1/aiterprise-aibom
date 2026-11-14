@@ -1,0 +1,51 @@
+name: binaries
+
+# Single-file PyInstaller binaries for Linux, macOS and Windows, each held to the killer demo.
+# Called by ci.yml on every push/PR (nothing is published) and by release.yml on a tag.
+on:
+  workflow_call:
+    inputs:
+      artifact-prefix:
+        description: prefix for the uploaded artifact names
+        type: string
+        default: bin
+      retention-days:
+        type: number
+        default: 7
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, name: linux-x86_64, exe: "" }
+          - { os: macos-latest, name: macos-arm64, exe: "" }
+          - { os: windows-latest, name: windows-x86_64, exe: ".exe" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the single-file binary
+        shell: bash
+        run: |
+          python -m pip install --quiet pyinstaller==6.22.3 pyinstaller-hooks-contrib==2026.10
+          pyinstaller --clean --noconfirm packaging/aiterprise-scan.spec
+          mkdir -p out
+          cp "dist/aiterprise-scan${{ matrix.exe }}" "out/aiterprise-scan-${{ matrix.name }}${{ matrix.exe }}"
+      - name: The binary passes the killer demo (five planted problems, exit 1)
+        shell: bash
+        run: |
+          bin="out/aiterprise-scan-${{ matrix.name }}${{ matrix.exe }}"
+          "$bin" version
+          python tools/killer_demo.py --exe "$bin"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-prefix }}-${{ matrix.name }}
+          path: out/
+          retention-days: ${{ inputs.retention-days }}

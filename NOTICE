@@ -6,8 +6,17 @@ This product includes data derived from third-party sources, each under its own 
 - OSV / OpenSSF malicious-packages records (data/ait/malicious-versions.json.gz) —
   https://osv.dev and https://github.com/ossf/malicious-packages. Record terms are
   checked per record before redistribution.
+- OSV vulnerability records for AI packages (data/ait/vuln-subset.json.gz) — https://osv.dev.
+  Each record keeps the licence of the database it came from (for example the GitHub Advisory
+  Database and the PyPA Advisory Database, both CC-BY 4.0); the record ids identify the source.
 - CISA Known Exploited Vulnerabilities catalog (data/ait/kev.json) — public domain (CC0).
 - Model and dataset licence verdicts (data/ait/licence-verdicts.json) are AIterprise
   summaries of the cited licence texts. They are advisory and are not legal advice.
 
-No third-party source code is vendored in this repository.
+First-party AIterprise data, Apache-2.0 like the code: data/ait/taxonomy.json,
+data/ait/command-rules.json, data/ait/poison-patterns.json, data/ait/model-rules.json,
+data/ait/popular-packages.json (package names only) and data/ait/rule-quality.json
+(false-positive measurements, see tools/measure_fp.py).
+
+No third-party source code is vendored in this repository. Ed25519 (RFC 8032) and the minisign
+format are implemented from their specifications.

@@ -1,0 +1,19 @@
+# Documentation build only (CI `docs` job) — not a runtime dependency of aiterprise-scan.
+# Fully pinned; checked against OSV before pinning (markdown 3.7 has GHSA-5wmx-573v-2qwq).
+mkdocs==1.6.1
+click==8.1.8
+colorama==0.4.6
+ghp-import==2.1.0
+jinja2==3.1.6
+markdown==3.9
+markupsafe==3.0.2
+mergedeep==1.3.4
+mkdocs-get-deps==0.2.0
+packaging==24.2
+pathspec==0.12.1
+platformdirs==4.3.6
+python-dateutil==2.9.0.post0
+pyyaml==6.0.2
+pyyaml-env-tag==0.1
+six==1.17.0
+watchdog==6.0.0

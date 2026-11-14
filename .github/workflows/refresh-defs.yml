@@ -1,0 +1,105 @@
+name: refresh-defs
+
+# Weekly rebuild of the definition data bundled in the wheel, proposed as a pull request:
+#   MAL- records and the AI-package advisory subset from the OSV bulk exports (PyPI, npm),
+#   KEV from the CISA Known Exploited Vulnerabilities catalog.
+# The new data is proposed only after the full test suite and the killer demo pass on it here,
+# because a pull request opened with GITHUB_TOKEN does not start the ci workflow by itself.
+# Scheduled and manual runs start from the default branch only. The branch is reused, so at most
+# one refresh pull request is open at a time. Opening it needs "Allow GitHub Actions to create and
+# approve pull requests" (Settings > Actions > General); without it the branch is still pushed and
+# the run summary links to the compare page.
+on:
+  schedule:
+    - cron: "17 3 * * 1"   # Mondays, 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-defs
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # push the defs/refresh branch
+      pull-requests: write   # open or update its pull request
+    env:
+      BRANCH: defs/refresh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download the OSV bulk exports
+        run: |
+          echo "OSV=$RUNNER_TEMP/osv" >> "$GITHUB_ENV"
+          OSV="$RUNNER_TEMP/osv"
+          mkdir -p "$OSV"
+          curl -fsSLo "$OSV/PyPI-all.zip" https://osv-vulnerabilities.storage.googleapis.com/PyPI/all.zip
+          curl -fsSLo "$OSV/npm-all.zip" https://osv-vulnerabilities.storage.googleapis.com/npm/all.zip
+          ls -l "$OSV"
+
+      - name: Rebuild the malicious-version snapshot and the advisory subset
+        run: |
+          python tools/build_malicious.py --zip "$OSV/PyPI-all.zip" --zip "$OSV/npm-all.zip" --replace
+          python tools/build_vuln_subset.py --zip "$OSV/PyPI-all.zip" --zip "$OSV/npm-all.zip"
+
+      - name: Rebuild the KEV catalog (the last build is kept if CISA cannot be reached)
+        run: python tools/build_kev.py --url || echo "::warning::CISA KEV not reachable; kev.json kept from the last build"
+
+      - name: Regenerate the rules reference
+        run: python tools/gen_rules_doc.py
+
+      - name: The full test suite and the killer demo pass on the new data
+        env:
+          PYTHONPATH: src
+          AITERPRISE_CACHE_DIR: ${{ runner.temp }}/aiterprise-cache
+        run: |
+          python -m unittest discover -s tests -p "test_*.py"
+          python tools/killer_demo.py
+
+      - name: Open or update the refresh pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: src
+          BASE: ${{ github.event.repository.default_branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          git add src/aiterprise_scan/data/ait/malicious-versions.json.gz \
+                  src/aiterprise_scan/data/ait/vuln-subset.json.gz \
+                  src/aiterprise_scan/data/ait/kev.json docs/rules.md
+          if git diff --cached --quiet; then
+            echo "nothing changed"
+            exit 0
+          fi
+          body="$RUNNER_TEMP/pr-body.md"
+          {
+            echo "Weekly rebuild of the bundled definition data from OSV (PyPI, npm) and CISA KEV."
+            echo
+            echo '```'
+            python -m aiterprise_scan defs status
+            echo '```'
+            echo
+            echo "The full test suite and the killer demo passed on this data in $RUN_URL."
+            echo "CI does not start by itself on a pull request opened by GITHUB_TOKEN: close and reopen it to run CI."
+          } > "$body"
+          git switch -C "$BRANCH"
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "defs: refresh the bundled definition data ($(date -u +%F))"
+          git push --force origin "$BRANCH"
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr edit "$BRANCH" --body-file "$body"
+          elif ! gh pr create --base "$BASE" --head "$BRANCH" \
+                 --title "defs: refresh the bundled definition data" --body-file "$body"; then
+            # refused unless Settings > Actions > General allows Actions to create pull requests
+            compare="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/$BASE...$BRANCH?expand=1"
+            echo "::warning::could not open the pull request; the data is on $BRANCH: $compare"
+            { echo "The refreshed data is on \`$BRANCH\`. Open the pull request: $compare"; echo; cat "$body"; } \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
