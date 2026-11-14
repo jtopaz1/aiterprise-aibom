@@ -87,8 +87,9 @@ python tools/gen_rules_doc.py
   private-key rule; placeholder filtering drops values containing words such as `example`.
 - **MCP / skills:** `supply.npx-unpinned` covers `npx` only (not `bunx` / `pnpm dlx`).
 - **Licences:** verdicts are advisory, not legal advice.
-- **Open decision:** a KEV-listed CVE is upgraded to **critical**; whether it should stay at the
-  advisory's own severity with a KEV flag instead (high vs critical) is not settled.
+- **KEV severity (decided 2026-11-14):** a CVE listed in CISA KEV is upgraded to **critical**
+  (`ait.vuln.kev`), whatever the advisory's own CVSS severity — known exploitation outranks the
+  base score.
 
 ## Deviations kept from Appendix H.4
 
