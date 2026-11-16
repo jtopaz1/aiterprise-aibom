@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 from urllib.parse import quote, urlencode
 
-from . import __version__, net, providers
+from . import __version__, net, providers, reportdoc
 from .credentials import Credential
 from .model import (
     OWASP_SUPPLY_CHAIN,
@@ -175,8 +175,9 @@ class Client:
         return self._call("POST", "/v1/reports", body, metered=True).data or {}
 
     def upload_scan(self, project: str, document: dict, scanned_at: str, fmt: str = "aiterprise-json") -> dict:
-        # the last hop before SecDB or a cloud: BYO provider results never pass it (FD22)
-        document, _kept_local = providers.without_external(document)
+        # the last hop before SecDB or a cloud: only the upload view of a report document passes
+        # it, so BYO provider results (FD22) and local paths never do
+        document, _kept_local = reportdoc.upload_view(document)
         body = {"project": project[:200], "scanner_version": __version__[:40], "scanned_at": scanned_at,
                 "format": fmt, "document": document}
         return self._call("POST", "/v1/aibom/scans", body, metered=True).data or {}

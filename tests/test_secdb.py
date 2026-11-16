@@ -139,6 +139,18 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(set(seen), {"project", "scanner_version", "scanned_at", "format", "document"})
         self.assertEqual(seen["format"], "aiterprise-json")
 
+    def test_the_client_sends_the_upload_view_of_a_report(self):
+        c, fake = client({("POST", "/v1/aibom/scans"): (201, {"scan_id": "scan_01"})})
+        home = "C:" + chr(92) + "Users" + chr(92) + "someone"
+        doc = {"target": home + chr(92) + "work" + chr(92) + "demo-repo", "findings": [],
+               "components": [{"name": "x", "locations": [home + chr(92) + ".cursor" + chr(92) + "mcp.json"]}]}
+        c.upload_scan("demo-repo", doc, "2026-11-14T00:00:00Z")
+        sent = fake.calls[-1][2]["document"]
+        self.assertEqual(sent["target"], "demo-repo")
+        self.assertEqual(sent["components"][0]["locations"], ["~/.cursor/mcp.json"])
+        self.assertNotIn("someone", json.dumps(sent))
+        self.assertIn("someone", doc["target"])  # the caller's document is untouched
+
     def test_report_has_a_consent_record(self):
         seen = {}
         c, _ = client({("POST", "/v1/reports"): lambda b: (seen.update(b) or (202, {"report_id": "rpt_1",
@@ -326,14 +338,18 @@ class CliTests(unittest.TestCase):
         self.assertEqual(body["project"], "demo")
         self.assertEqual(body["scanned_at"], "2026-11-14T00:00:00Z")
 
-    def test_upload_sends_no_local_paths(self):
-        doc = {"target": "C:\\Users\\someone\\work\\demo-repo", "findings": [],
-               "components": [{"name": "x", "locations": ["C:\\Users\\someone\\.cursor\\mcp.json", "requirements.txt"]}]}
-        sent = account.upload_view(doc)
-        self.assertEqual(sent["target"], "demo-repo")
-        self.assertEqual(sent["components"][0]["locations"], ["~/.cursor/mcp.json", "requirements.txt"])
-        self.assertNotIn("someone", json.dumps(sent))
-        self.assertEqual(doc["target"], "C:\\Users\\someone\\work\\demo-repo")  # the caller's copy is untouched
+    def test_upload_refuses_a_report_of_another_schema(self):
+        report = Path(self.tmp.name) / "report.json"
+        report.write_text(json.dumps({"schema": "aiterprise-report/2", "target": "/w/demo", "findings": []}),
+                          encoding="utf-8")
+        fake = FakeSecDB({})
+        with (mock.patch.dict(os.environ, {"AITERPRISE_API_KEY": KEY}),
+              mock.patch.object(secdb, "DEFAULT_TRANSPORT", fake),
+              mock.patch.object(secdb, "base_url", return_value="https://secdb.test")):
+            code, _, err = self.run_cli(["upload", str(report)])
+        self.assertEqual(code, 2)
+        self.assertIn("aiterprise-report/2", err)
+        self.assertEqual(fake.calls, [])
 
     def test_login_with_a_bad_key_stores_nothing(self):
         fake = FakeSecDB({("GET", "/v1/me"): problem(401, "unauthorized", "Unauthorized")})

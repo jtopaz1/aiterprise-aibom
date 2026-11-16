@@ -11,9 +11,9 @@ import json
 import os
 import re
 import secrets
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 
-from . import credentials
+from . import credentials, reportdoc
 
 _ID = re.compile(r"^\d{8}T\d{6}Z-[0-9a-f]{8}$")
 
@@ -22,14 +22,9 @@ def history_dir() -> Path:
     return credentials.home() / "history"
 
 
-def project_of(doc: dict) -> str:
-    target = str(doc.get("target") or "").rstrip("\\/")
-    return PureWindowsPath(target).name or target or "scan"
-
-
 def _meta(sid: str, doc: dict) -> dict:
     s = doc.get("summary") or {}
-    return {"id": sid, "target": doc.get("target"), "project": project_of(doc), "started_at": doc.get("started_at"),
+    return {"id": sid, "target": doc.get("target"), "project": reportdoc.project_name(doc), "started_at": doc.get("started_at"),
             "mode": doc.get("mode"), "exit_code": doc.get("exit_code"), "components": s.get("components", 0),
             "ai_components": s.get("ai_components", 0), "findings": s.get("findings", len(doc.get("findings") or [])),
             "severity": s.get("severity") or {}}

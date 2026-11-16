@@ -36,7 +36,7 @@
 | `--cloud URL` | AIterprise cloud URL for `--upload` (or `AITERPRISE_CLOUD_URL`) |
 | `--save` | keep this scan in the local history shown by `ui` |
 | `--byo PROVIDER=ENV_VAR` | third-party enrichment with your own key, e.g. `virustotal=VT_API_KEY` (repeatable). `ENV_VAR` is the name of an environment variable holding the key, never the key itself — see [Third-party providers](providers.md) |
-| `--format F` | `table`, `json`, `sarif`, `cyclonedx`, `html` (repeatable; default `table`) |
+| `--format F` | `table`, `json`, `sarif`, `cyclonedx`, `html` (repeatable; default `table`). The JSON report names its layout in `schema` (`aiterprise-report/1`) |
 | `--out DIR` | write reports into this directory instead of stdout |
 | `--emit-bom FILE` | also write the CycloneDX AI-BOM to FILE |
 | `--cdx-version 1.6\|1.7` | CycloneDX version (default 1.7) |
@@ -61,7 +61,7 @@ configs), `--agent-configs` and `--offline`.
 | `defs update` | `--root-key FILE`, `--channel NAME` (default: your account's), `--signing-keys URL` (default: next to the manifest) |
 | `login` | `--key-stdin` (read the key from stdin, for CI) or `--install` (register an anonymous install token instead of using an API key) |
 | `report-fp RULE` | `--notes TEXT`, `--yes` (consent given) |
-| `upload report.json` | `--project NAME`, `--cloud URL` |
+| `upload report.json` | `--project NAME`, `--cloud URL`. A report without `schema` (written by an older version) is accepted; one that names another schema is refused |
 | `ui` | `--port N` (default: a free port), `--no-browser` (print the link instead of opening a browser) |
 
 `aiterprise-scan --version` prints the version, like the `version` command.

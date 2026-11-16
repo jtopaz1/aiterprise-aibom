@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import TOOL_NAME, __version__, account, bom, cloudpolicy, credentials, gate, html_report, intel_malicious, report, vulns
+from . import TOOL_NAME, __version__, account, bom, cloudpolicy, credentials, gate, html_report, intel_malicious, report, reportdoc, vulns
 from . import policy as policy_mod
 from . import providers
 from .model import ScanResult
@@ -220,10 +220,10 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if args.save:
         from . import history
 
-        print(f"saved to history: {history.save(report.to_json(result))} (aiterprise-scan ui)", file=sys.stderr)
+        print(f"saved to history: {history.save(reportdoc.build(result))} (aiterprise-scan ui)", file=sys.stderr)
     if args.upload:
-        doc = report.to_json(result)
-        project = args.project or account.project_name(doc)
+        doc = reportdoc.build(result)
+        project = args.project or reportdoc.project_name(doc)
         if account.report_upload(account.upload_document, doc, project, result.started_at, args.cloud) != 0:
             return 2 if code == 0 else code
     return code
