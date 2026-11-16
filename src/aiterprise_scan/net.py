@@ -26,12 +26,24 @@ MAX_RETRY_AFTER = 60.0
 
 
 class NetError(Exception):
+    """A request that gave no usable answer. `kind` says why, so that no caller reads the message:
+
+    http         the server answered with an error status (`status`, `problem`)
+    redirect     a 3xx that the caller chose not to follow (`status`)
+    timeout      no answer in time
+    unreachable  no connection (DNS, refused, TLS, any other transport error)
+    invalid      an answer that is not the JSON it should be
+    too-large    an answer over the size limit
+    refused      not sent at all (a download that is not over https)
+    """
+
     def __init__(self, message: str, status: int | None = None, problem: dict | None = None,
-                 headers: dict[str, str] | None = None) -> None:
+                 headers: dict[str, str] | None = None, kind: str | None = None) -> None:
         super().__init__(message)
         self.status = status
         self.problem = problem or {}
         self.headers = headers or {}
+        self.kind = kind or ("http" if status is not None else "unreachable")
 
     @property
     def problem_type(self) -> str:
@@ -75,7 +87,13 @@ def _decode(raw: bytes, url: str) -> Any:
     try:
         return json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as err:
-        raise NetError(f"{url} returned invalid JSON: {err}") from None
+        raise NetError(f"{url} returned invalid JSON: {err}", kind="invalid") from None
+
+
+def _transport_kind(err: BaseException) -> str:
+    reason = getattr(err, "reason", err)
+    timed_out = isinstance(err, TimeoutError) or isinstance(reason, TimeoutError) or "timed out" in str(reason)
+    return "timeout" if timed_out else "unreachable"
 
 
 def request(
@@ -112,7 +130,7 @@ def request(
             with opener(req, timeout=timeout) as resp:
                 body_bytes = resp.read(MAX_RESPONSE_BYTES + 1)
                 if len(body_bytes) > MAX_RESPONSE_BYTES:
-                    raise NetError(f"response from {url} exceeds {MAX_RESPONSE_BYTES} bytes")
+                    raise NetError(f"response from {url} exceeds {MAX_RESPONSE_BYTES} bytes", kind="too-large")
                 return Response(resp.status, _lower(resp.headers), body_bytes if raw else _decode(body_bytes, url))
         except urllib.error.HTTPError as err:
             rh = _lower(err.headers)
@@ -134,16 +152,20 @@ def request(
                 problem = {}
             if not isinstance(problem, dict):
                 problem = {}
+            if not follow_redirects and 300 <= err.code < 400:
+                raise NetError(f"{method} {url} -> HTTP {err.code} (a redirect, not followed)", status=err.code,
+                               problem=problem, headers=rh, kind="redirect") from None
             raise NetError(f"{method} {url} -> HTTP {err.code}", status=err.code, problem=problem,
                            headers=rh) from None
         except (urllib.error.URLError, TimeoutError, OSError) as err:
-            raise NetError(f"{method} {url} failed: {getattr(err, 'reason', err)}") from None
+            raise NetError(f"{method} {url} failed: {getattr(err, 'reason', err)}",
+                           kind=_transport_kind(err)) from None
 
 
 def download(url: str, max_bytes: int, timeout: float = 60.0) -> bytes:
     """GET raw bytes with no credential (bundle CDN). Raises NetError."""
     if not url.startswith("https://"):
-        raise NetError(f"refusing a non-HTTPS download: {url}")
+        raise NetError(f"refusing a non-HTTPS download: {url}", kind="refused")
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -151,9 +173,10 @@ def download(url: str, max_bytes: int, timeout: float = 60.0) -> bytes:
     except urllib.error.HTTPError as err:
         raise NetError(f"GET {url.split('?', 1)[0]} -> HTTP {err.code}", status=err.code) from None
     except (urllib.error.URLError, TimeoutError, OSError) as err:
-        raise NetError(f"GET {url.split('?', 1)[0]} failed: {getattr(err, 'reason', err)}") from None
+        raise NetError(f"GET {url.split('?', 1)[0]} failed: {getattr(err, 'reason', err)}",
+                       kind=_transport_kind(err)) from None
     if len(raw) > max_bytes:
-        raise NetError(f"{url.split('?', 1)[0]} exceeds {max_bytes} bytes")
+        raise NetError(f"{url.split('?', 1)[0]} exceeds {max_bytes} bytes", kind="too-large")
     return raw
 
 

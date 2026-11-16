@@ -159,8 +159,12 @@ class GatedScanTests(unittest.TestCase):
 
     # ---- SecDB ---------------------------------------------------------------------------
     def online(self, overrides=None):
-        with mock.patch.object(net, "request", side_effect=AssertionError("no network in tests")):
-            return self.scan(overrides, offline=False)
+        # A scan catches what a source raises, so a raising stand-in would only turn a stray call
+        # into exit 2. The stand-in records instead, and the test fails if anything was sent.
+        with mock.patch.object(net, "request") as request:
+            result = self.scan(overrides, offline=False)
+        request.assert_not_called()
+        return result
 
     def test_without_a_credential_secdb_is_reported_as_skipped(self):
         self.assertEqual(self.online().examined["secdb"].skipped, "not logged in (aiterprise-scan login)")

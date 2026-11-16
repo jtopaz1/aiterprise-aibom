@@ -19,7 +19,7 @@ import hashlib
 import os
 import sys
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 from urllib.parse import quote, urlencode
 
@@ -48,8 +48,10 @@ def base_url() -> str:
 
 
 def _http(method: str, url: str, body: Any, headers: dict) -> net.Response:
-    # 429 is not retried inside a scan: the scan degrades instead of stalling (`14a` §3.2)
-    return net.request(method, url, body, headers, timeout=20.0, ok=(304,), retry_on={502, 503})
+    # 429 is not retried inside a scan: the scan degrades instead of stalling (`14a` §3.2).
+    # No redirect is followed: urllib would send the Authorization header on to the new address.
+    return net.request(method, url, body, headers, timeout=20.0, ok=(304,), retry_on={502, 503},
+                       follow_redirects=False)
 
 
 DEFAULT_TRANSPORT: Transport = _http
@@ -58,6 +60,7 @@ DEFAULT_TRANSPORT: Transport = _http
 class SecDBError(Exception):
     def __init__(self, err: net.NetError) -> None:
         self.status = err.status
+        self.kind = err.kind
         self.type = err.problem_type
         self.title = str(err.problem.get("title") or "")
         self.detail = str(err.problem.get("detail") or "")
@@ -74,6 +77,9 @@ class SecDBError(Exception):
             text += f" (request {self.request_id})"
         if self.status is None:
             text = f"SecDB unreachable: {err}"
+        elif self.kind == "redirect":
+            text = (f"SecDB answered with a redirect (HTTP {self.status}), which is not followed: a request that "
+                    "carries your key goes to one address only")
         super().__init__(text)
 
     @property
@@ -98,7 +104,6 @@ class Client:
     credential: Credential | None
     base_url: str | None = None
     transport: Transport | None = None
-    sleep: Callable[[float], None] = field(default=lambda s: None)
 
     def __post_init__(self) -> None:
         self.base_url = (self.base_url or base_url()).rstrip("/")

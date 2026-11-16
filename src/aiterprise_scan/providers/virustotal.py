@@ -38,10 +38,9 @@ def _why(err: net.NetError) -> str:
     """Why a call failed, from fixed words only: nothing the server sent is repeated."""
     if err.status is not None:
         return f"HTTP {err.status}"
-    text = str(err)
-    if "invalid JSON" in text:
+    if err.kind == "invalid":
         return "unreadable answer"
-    return "timed out" if "timed out" in text else "unreachable"
+    return "timed out" if err.kind == "timeout" else "unreachable"
 
 
 def _counts(doc: Any) -> dict[str, int] | None:

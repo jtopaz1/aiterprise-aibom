@@ -12,7 +12,8 @@ One place for the gate, for every caller that reports a pass or a failure (the C
    defaults. The project's `.aiterprise/suppressions.json` and a `.snyk` file are added to it.
 3. A policy that does not load raises `PolicyError` before anything is scanned.
 4. SecDB is consulted when this machine holds a credential and the caller did not decline; when it
-   is not, the coverage says why.
+   is not, the coverage of an online scan says why. An offline scan consults nothing and has no
+   SecDB entry.
 5. The baseline is the file the caller names, else the policy's `baseline:` under the policy root.
 6. Exit code: 1 when a new finding is at or above the threshold; else 2 when the scan is
    incomplete; else 0.

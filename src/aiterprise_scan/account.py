@@ -206,6 +206,9 @@ def report_upload(send, doc: dict, project: str, scanned_at: str, cloud: str | N
             host = urlsplit(target).hostname
             if err.status is None:
                 return _err(f"cannot reach the cloud at {host}: {err.cause}")
+            if err.kind == "redirect":
+                return _err(f"the cloud at {host} answered with a redirect, which is not followed: a request that "
+                            "carries your key goes to one address only; use the cloud's final address")
             return _err(f"the cloud at {host} refused the upload ({err.status} {err.type}): "
                         f"{err.detail or err.title or 'no detail'}")
         if err.type == "plan_required":

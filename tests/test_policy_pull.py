@@ -174,7 +174,7 @@ class UploadCloudGuardTests(unittest.TestCase):
             calls = []
             with mock.patch.dict(os.environ, {"AITERPRISE_HOME": tmp, "AITERPRISE_API_KEY": KEY}), \
                     mock.patch.object(secdb, "DEFAULT_TRANSPORT", lambda *a: calls.append(a)), \
-                    mock.patch("aiterprise_scan.cli.run_scan") as run_scan, \
+                    mock.patch("aiterprise_scan.gate.run_scan") as run_scan, \
                     contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
                 code = cli.main(["scan", tmp, "--upload", "--no-secdb", *extra])
         return code, err.getvalue(), calls, run_scan
