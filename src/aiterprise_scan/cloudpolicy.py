@@ -32,14 +32,18 @@ class CloudURLError(ValueError):
     pass
 
 
-def check_cloud_url(url: str) -> str:
-    """The cloud base URL without a trailing slash, or CloudURLError if a key must not go there."""
+def check_cloud_url(url: str, what: str = "cloud") -> str:
+    """The base URL without a trailing slash, or CloudURLError if a key must not go there.
+
+    `what` names the destination in the messages: the BYO-key providers reuse this guard for their
+    base-URL override, so there is one rule for every place a key is sent."""
     parts = urlsplit(url.strip())
     host = (parts.hostname or "").lower()
+    if parts.username or parts.password:  # checked first: a URL holding credentials is never echoed
+        hint = "; log in with `aiterprise-scan login`" if what == "cloud" else ""
+        raise CloudURLError(f"put no credentials in the {what} URL{hint}")
     if not host or parts.scheme not in ("https", "http"):
-        raise CloudURLError(f"not a cloud URL: {url!r} (expected https://host)")
-    if parts.username or parts.password:
-        raise CloudURLError("put no credentials in the cloud URL; log in with `aiterprise-scan login`")
+        raise CloudURLError(f"not a {what} URL: {url!r} (expected https://host)")
     if parts.scheme == "http" and host not in LOOPBACK:
         raise CloudURLError(f"refusing to send an API key over plain http to {host}; use https://")
     return url.strip().rstrip("/")

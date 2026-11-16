@@ -35,6 +35,7 @@
 | `--project NAME` | project name for `--upload` (default: the target directory name) |
 | `--cloud URL` | AIterprise cloud URL for `--upload` (or `AITERPRISE_CLOUD_URL`) |
 | `--save` | keep this scan in the local history shown by `ui` |
+| `--byo PROVIDER=ENV_VAR` | third-party enrichment with your own key, e.g. `virustotal=VT_API_KEY` (repeatable). `ENV_VAR` is the name of an environment variable holding the key, never the key itself — see [Third-party providers](providers.md) |
 | `--format F` | `table`, `json`, `sarif`, `cyclonedx`, `html` (repeatable; default `table`) |
 | `--out DIR` | write reports into this directory instead of stdout |
 | `--emit-bom FILE` | also write the CycloneDX AI-BOM to FILE |
@@ -59,6 +60,8 @@ configs) and `--agent-configs`.
 | `AITERPRISE_CACHE_DIR` | OSV and registry response cache |
 | `AITERPRISE_SECDB_URL` | SecDB base URL (default `https://secdb.aiterprise.net`) |
 | `AITERPRISE_CLOUD_URL` | AIterprise cloud URL for uploads and `policy pull` (https, or http to this machine only) |
+| `AITERPRISE_VIRUSTOTAL_MAX_LOOKUPS` | VirusTotal lookups per scan with `--byo` (default 4, the public key's per-minute limit) |
+| `AITERPRISE_VIRUSTOTAL_URL` | VirusTotal base URL for `--byo` (a proxy or test server; https, or http to this machine only) |
 | `AITERPRISE_ROOT_KEY` | minisign root public key file for bundle verification |
 | `AITERPRISE_DEFS=bundled` | ignore installed bundles and use the wheel's data |
 

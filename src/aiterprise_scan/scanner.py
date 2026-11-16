@@ -42,6 +42,7 @@ class ScanOptions:
     exclude: list[str] = field(default_factory=list)  # globs on root-relative posix paths
     policy: policy_mod.Policy = field(default_factory=policy_mod.Policy)
     cache: Cache | None = None
+    providers: list[Any] = field(default_factory=list)  # BYO-key adapters (`--byo`), see providers/
 
 
 def _excluded(rel: str, patterns: list[str]) -> bool:
@@ -186,6 +187,7 @@ def run_scan(opts: ScanOptions) -> ScanResult:
     run = _Runner(result)
     components: list[Component] = []
     findings: list[Finding] = []
+    examined_archives: list[tuple[str, Path]] = []  # for the BYO providers: looked up by file hash
 
     root: Path | None = None
     files: list[Path] = []
@@ -239,7 +241,7 @@ def run_scan(opts: ScanOptions) -> ScanResult:
         findings += sf
         from . import archives
 
-        ac, af = run.step("archives", lambda: archives.analyze(root, files, result), ([], []))
+        ac, af = run.step("archives", lambda: archives.analyze(root, files, result, examined_archives), ([], []))
         components += ac
         findings += af
         if opts.secrets:
@@ -309,6 +311,13 @@ def run_scan(opts: ScanOptions) -> ScanResult:
                 [],
             )
         findings += policy_mod.denied_package_findings(merged, opts.policy)
+        if opts.providers:
+            # last, so our own findings decide which files the lookup budget goes to; `--offline`
+            # is handled inside (no call, and the report says so)
+            from . import providers
+
+            findings += run.step("providers", lambda: providers.enrich(
+                opts.providers, merged, list(findings), result, examined_archives, opts.offline), [])
 
     for f in findings:
         if f.component is not None:

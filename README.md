@@ -27,6 +27,7 @@ Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ 
 | Agent skills | `SKILL.md` trees, Claude Code plugins/commands: instruction poisoning, install-script commands, risk score | `ait.skill.*` |
 | Licences | Model and dataset licence verdicts (Llama, Gemma, OpenRAIL, Mistral, Qwen, DBRX, DeepSeek, Falcon, CC-BY-NC, …) against your `use_context` — advisory, not legal advice; written into the AI-BOM's `licenses[]` | `ait.licence.*` |
 | Secrets | AI-provider keys in configs and code, reported redacted | `ait.secret.*` |
+| Third-party (your own key) | `--byo virustotal=ENV_VAR`: VirusTotal's verdict on model files and package archives, by SHA-256 only — labelled VirusTotal, never uploaded, cached, sent to SecDB or merged into AIterprise data ([docs](docs/providers.md)) | `ext.virustotal.*` |
 
 Inputs: `requirements*.txt`, `pyproject.toml` (PEP 621 + Poetry), `Pipfile(.lock)`, `poetry.lock`,
 `uv.lock`, `environment.yml`, `package.json`, `package-lock.json` v1–v3, `pnpm-lock.yaml`,
