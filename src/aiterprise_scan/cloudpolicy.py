@@ -55,7 +55,9 @@ def cloud_url(explicit: str | None) -> str | None:
 
 
 def _fetch(url: str, headers: dict) -> net.Response:
-    return net.request("GET", url, headers=headers, timeout=20.0, ok=(304,), retry_on={502, 503}, raw=True)
+    # no redirect is followed: urllib would send the Authorization header on to the new address
+    return net.request("GET", url, headers=headers, timeout=20.0, ok=(304,), retry_on={502, 503}, raw=True,
+                       follow_redirects=False)
 
 
 TRANSPORT: Callable[[str, dict], net.Response] = _fetch
@@ -80,6 +82,9 @@ def _explain(err: net.NetError) -> str:
     detail = str(err.problem.get("detail") or err.problem.get("title") or "")
     if err.status is None:
         return f"cloud unreachable: {err}"
+    if err.kind == "redirect":
+        return (f"the cloud answered with a redirect (HTTP {err.status}), which is not followed: a request that "
+                "carries your key goes to one address only; use the cloud's final address")
     if err.status == 404:
         return "no org policy has been published on the cloud yet (Policy page in the dashboard)"
     if err.problem_type == "plan_required":

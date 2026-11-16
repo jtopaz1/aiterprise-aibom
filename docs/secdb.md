@@ -25,6 +25,9 @@ The key is never printed. It is saved in `~/.aiterprise/credentials.json` — en
 current user with DPAPI on Windows, file mode 0600 elsewhere. In CI, set `AITERPRISE_API_KEY` from
 a secret instead; it takes precedence over a saved key.
 
+The key is sent to SecDB's own address only. A redirect from SecDB is refused, not followed, because
+following it would send the key on to the new address; the same holds for an AIterprise cloud.
+
 `login --install` needs no account. It registers this installation with SecDB — sending the
 scanner's name and version and the operating-system family, nothing else — and saves the install
 token SecDB returns in the same file. A key, from the environment or saved, is used before an

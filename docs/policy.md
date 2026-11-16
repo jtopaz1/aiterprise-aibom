@@ -64,7 +64,8 @@ aiterprise-scan policy pull --cloud https://aibom.example.com      # or set AITE
 It writes `aibom.policy.yaml` (or `--out FILE`) with a first-line comment naming the policy version.
 The next pull sends that version back and leaves the file alone when nothing changed. A policy that
 does not load with this scanner is refused and the local file is kept. The pull needs the SecDB
-key you logged in with; the key is only ever sent over https (plain http only to this machine).
+key you logged in with; the key is only ever sent over https (plain http only to this machine), and a
+redirect from the cloud is refused: use the cloud's final address.
 
 ## Suppressions
 

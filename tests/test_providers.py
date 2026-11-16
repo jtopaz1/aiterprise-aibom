@@ -793,7 +793,7 @@ class ByoCliUsageTests(unittest.TestCase):
                     "AITERPRISE_CACHE_DIR": str(Path(self.tmp.name) / "cache")}
 
     def scan(self, *byo, env=None):
-        with mock.patch("aiterprise_scan.cli.run_scan") as run_scan:
+        with mock.patch("aiterprise_scan.gate.run_scan") as run_scan:
             code, out, err = run_cli(["scan", self.tmp.name, "--offline", *byo], {**self.env, **(env or {})})
         return code, out + err, run_scan
 
@@ -819,7 +819,7 @@ class ByoCliUsageTests(unittest.TestCase):
 
     def test_a_key_typed_after_a_space_instead_of_an_equals_sign_is_not_printed(self):
         # `--byo virustotal KEY`: the key lands where the scan target goes
-        with mock.patch("aiterprise_scan.cli.run_scan") as run_scan:
+        with mock.patch("aiterprise_scan.gate.run_scan") as run_scan:
             code, out, err = run_cli(["scan", "--offline", "--byo", "virustotal", KEY], self.env)
         self.assertEqual(code, 2)
         self.assertIn("--byo expects PROVIDER=ENV_VAR", err)

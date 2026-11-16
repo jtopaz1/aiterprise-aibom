@@ -21,7 +21,8 @@ no imports, no MCP server launches, no install scripts.
 
 `--offline --upload` is refused: an offline scan sends nothing. API keys go to a cloud only over
 https (plain http is allowed to this machine, for local development); the same rule holds for a
-`--byo` provider's base-URL override. A `--byo` key is read from an environment variable for the
+`--byo` provider's base-URL override. A request that carries a key never follows a redirect: SecDB,
+a cloud and a `--byo` provider each get the key at the one address you gave. A `--byo` key is read from an environment variable for the
 run and is never stored, and a provider's answers are not cached.
 
 There is no telemetry. The table report says so on its second line (`telemetry: off`). Every

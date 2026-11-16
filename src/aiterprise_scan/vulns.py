@@ -182,19 +182,20 @@ class OSVClient:
             elif not self.offline:
                 missing.append(vid)
 
-        def fetch(vid: str) -> tuple[str, dict | None]:
+        def fetch(vid: str) -> tuple[str, dict | None, bool]:
             try:
-                return vid, net.request_json("GET", f"{OSV_API}/vulns/{vid}", timeout=self.timeout)
+                return vid, net.request_json("GET", f"{OSV_API}/vulns/{vid}", timeout=self.timeout), True
             except net.NetError:
-                stale = self.cache.get("osv-vuln", vid, allow_stale=True)
-                return vid, stale
+                # the old copy serves this scan; it is not stored again, or it would count as fresh
+                return vid, self.cache.get("osv-vuln", vid, allow_stale=True), False
 
         if missing:
             with ThreadPoolExecutor(max_workers=DETAIL_WORKERS) as pool:
-                for vid, doc in pool.map(fetch, missing):
+                for vid, doc, fetched in pool.map(fetch, missing):
                     if doc:
                         docs[vid] = doc
-                        self.cache.put("osv-vuln", vid, doc)
+                        if fetched:
+                            self.cache.put("osv-vuln", vid, doc)
         return docs
 
 
@@ -539,7 +540,11 @@ def judge(
     all_ids = sorted({i for ids in ids_by_query.values() for i in ids})
     docs = client.details(all_ids) if all_ids else {}
     missing = [i for i in all_ids if i not in docs]
-    if missing:
+    if missing and client.offline:
+        # nothing is fetched offline, so nothing failed: say what the cache did not hold
+        result.notes.append(f"osv: offline; {len(missing)} advisory detail(s) are not in the cache, so those "
+                            "advisories are not shown")
+    elif missing:
         examined.errors += len(missing)
         result.notes.append(f"osv: {len(missing)} advisory detail(s) could not be fetched")
     findings: list[Finding] = []

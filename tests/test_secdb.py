@@ -61,7 +61,7 @@ def problem(status, ptype, title="x"):
 def client(routes, cred=None):
     fake = FakeSecDB(routes)
     c = secdb.Client(cred or credentials.Credential("api_key", KEY, "env"), base_url="https://secdb.test",
-                     transport=fake, sleep=lambda s: None)
+                     transport=fake)
     return c, fake
 
 
