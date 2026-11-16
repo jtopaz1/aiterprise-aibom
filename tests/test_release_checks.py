@@ -42,6 +42,15 @@ class McpRegistryManifestTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertRegex(readme, r"mcp-name: " + re.escape(doc["name"]) + r"(\s|-->)")
 
+    def test_server_json_fits_the_registry_schema_limits(self):
+        # server.schema.json 2025-12-11: the registry refuses a manifest outside these limits
+        doc = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
+        self.assertRegex(doc["name"], r"^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$")
+        self.assertLessEqual(len(doc["name"]), 200)
+        self.assertTrue(1 <= len(doc["description"]) <= 100, f"description is {len(doc['description'])} characters")
+        self.assertLessEqual(len(doc.get("title", "")), 100)
+        self.assertLessEqual(len(doc["version"]), 255)
+
 
 if __name__ == "__main__":
     unittest.main()

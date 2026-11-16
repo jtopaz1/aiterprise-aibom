@@ -3,8 +3,11 @@
 
     python tools/measure_fp.py --corpus-name "site-packages sample" \
         --packages /path/to/site-packages [--packages ...] [--project DIR ...] [--write]
+    python tools/measure_fp.py --corpus-name "installed agent skills" \
+        --projects-from skills.txt --family ait.skill. --merge --write
 
-Each package directory (or `--project`) is scanned offline as one clean project. A rule's rate is
+Each package directory (or `--project`, or line of a `--projects-from` file; a project may be one
+file, such as an MCP config) is scanned offline as one clean project. A rule's rate is
 
     fp_rate_measured = clean projects where the rule fired / clean projects that gave it a chance
 
@@ -15,6 +18,10 @@ below that the rule stays `fp_rate_measured: null` — unmeasured, never an inve
 
 Only heuristic families are measured. Advisory, licence, registry and policy findings are facts
 about a package, not guesses, so a "clean corpus" says nothing about them.
+
+A corpus is chosen for the families it is clean for: `--family PREFIX` limits what a run measures,
+and `--merge` then replaces only those families in the existing file. A family this run could not
+measure (too few samples) keeps the entry it already had.
 """
 
 from __future__ import annotations
@@ -48,6 +55,30 @@ METHOD = ("fp_rate_measured = clean projects where the rule fired / clean projec
 
 def family_of(rule_id: str) -> str | None:
     return next((p for p in FAMILIES if rule_id.startswith(p)), None)
+
+
+def read_project_list(path: Path) -> list[Path]:
+    """One project path per line; blank lines and `#` comments are skipped."""
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        project = Path(line)
+        if not project.exists():
+            raise SystemExit(f"{path}: no such project: {project}")
+        out.append(project)
+    return out
+
+
+def merge_quality(old: dict, new: dict, measured: list[str]) -> dict:
+    """`new` plus every rule of `old` that belongs to no family in `measured`.
+
+    A measured family replaces all of its old entries, so a rule that fired on the old corpus but
+    not on the new one does not keep a stale number."""
+    kept = {rule: entry for rule, entry in (old.get("rules") or {}).items()
+            if not any(rule.startswith(fam) for fam in measured)}
+    return {**new, "rules": dict(sorted({**kept, **new["rules"]}.items()))}
 
 
 def projects(packages: list[Path], extra: list[Path]) -> list[Path]:
@@ -91,10 +122,10 @@ def measure(dirs: list[Path], progress=None) -> dict:
             "flagged_rule": dict(flagged_rule), "rule_family": rule_family, "examples": dict(examples)}
 
 
-def to_quality(m: dict, corpus: str, min_samples: int, today: str) -> dict:
+def to_quality(m: dict, corpus: str, min_samples: int, today: str, families: list[str] | None = None) -> dict:
     rules: dict[str, dict] = {}
     for fam, n in sorted(m["chances"].items()):
-        if n < min_samples:
+        if n < min_samples or (families is not None and fam not in families):
             continue
         base = {"corpus": corpus, "evaluated_at": today, "samples": n}
         key = fam if fam.endswith("*") else (fam + "*" if fam.endswith(".") else fam)
@@ -110,12 +141,23 @@ def to_quality(m: dict, corpus: str, min_samples: int, today: str) -> dict:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--packages", type=Path, action="append", default=[], help="a site-packages directory")
-    ap.add_argument("--project", type=Path, action="append", default=[], help="one clean project directory")
+    ap.add_argument("--project", type=Path, action="append", default=[], help="one clean project (directory or file)")
+    ap.add_argument("--projects-from", type=Path, action="append", default=[],
+                    help="a text file naming one clean project per line")
     ap.add_argument("--corpus-name", required=True)
+    ap.add_argument("--family", action="append", default=[],
+                    help=f"measure only this rule family (repeatable); one of: {', '.join(FAMILIES)}")
     ap.add_argument("--min-samples", type=int, default=25)
+    ap.add_argument("--merge", action="store_true",
+                    help="keep the existing entries of every family this run did not measure")
     ap.add_argument("--write", action="store_true", help=f"write {OUT.name}")
+    ap.add_argument("--out", type=Path, default=OUT, help="the quality file to write (and to merge into)")
     args = ap.parse_args(argv)
-    dirs = projects(args.packages, args.project)
+    families = args.family or list(FAMILIES)
+    unknown = [f for f in families if f not in FAMILIES]
+    if unknown:
+        ap.error(f"unknown family {unknown[0]!r}; choose from: {', '.join(FAMILIES)}")
+    dirs = projects(args.packages, args.project) + [p for f in args.projects_from for p in read_project_list(f)]
     if not dirs:
         ap.error("no projects to scan")
 
@@ -125,13 +167,20 @@ def main(argv: list[str] | None = None) -> int:
 
     m = measure(dirs, progress)
     today = dt.date.today().isoformat()
-    q = to_quality(m, f"{args.corpus_name} ({m['projects']} projects)", args.min_samples, today)
+    q = to_quality(m, f"{args.corpus_name} ({m['projects']} projects)", args.min_samples, today, families)
     print(json.dumps({"chances": m["chances"], "flagged_family": m["flagged_family"],
                       "flagged_rule": m["flagged_rule"]}, indent=2))
+    measured = [fam for fam in families if m["chances"].get(fam, 0) >= args.min_samples]
+    for fam in families:
+        if fam not in measured:
+            print(f"{fam}: {m['chances'].get(fam, 0)} project(s) gave it a chance, fewer than {args.min_samples}: "
+                  "not measured")
     print(f"{len(q['rules'])} quality entries (families with >= {args.min_samples} chances)")
+    if args.merge and args.out.exists():
+        q = merge_quality(json.loads(args.out.read_text(encoding="utf-8")), q, measured)
     if args.write:
-        OUT.write_text(json.dumps(q, indent=2) + "\n", encoding="utf-8")
-        print(f"written {OUT}")
+        args.out.write_text(json.dumps(q, indent=2) + "\n", encoding="utf-8", newline="\n")
+        print(f"written {args.out}")
     return 0
 
 
