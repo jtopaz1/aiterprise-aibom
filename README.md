@@ -13,6 +13,10 @@ aiterprise-scan .                   # scan the current repository
 aiterprise-scan ui                  # local web UI: history, findings, diff, suppressions
 ```
 
+> **Not released yet.** Nothing is published so far: `pipx install aiterprise-scan`, the binaries and
+> the container image arrive with the first tagged release ([RELEASING.md](RELEASING.md)). Until then,
+> install from a checkout with `pip install .`.
+
 Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ · docs in [`docs/`](docs/index.md)
 
 ## What it finds
@@ -45,7 +49,7 @@ aiterprise-scan scan dist/mypkg-1.0-py3-none-any.whl  # judge a package before y
 aiterprise-scan . --format sarif --out reports/     # report.sarif for GitHub code scanning
 aiterprise-scan . --emit-bom aibom.cdx.json         # CycloneDX 1.7 AI-BOM: findings, licence verdicts, modelCard
 aiterprise-scan . --save                            # keep the scan in the local history (`ui`)
-aiterprise-scan mcp --agent-configs                 # this machine's MCP servers and skills
+aiterprise-scan mcp --agent-configs                 # this machine's MCP servers
 aiterprise-scan bom . --out aibom.cdx.json          # inventory only (fast compliance mode)
 aiterprise-scan . --write-baseline .aiterprise/baseline.json   # adopt gating without fixing everything
 aiterprise-scan ui                                  # local web UI on 127.0.0.1

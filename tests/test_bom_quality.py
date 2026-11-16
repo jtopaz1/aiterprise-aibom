@@ -1,10 +1,13 @@
 """Finding quality / examined metadata (§4.3) and the annotated CycloneDX AI-BOM (§4.4)."""
 
+import contextlib
+import io
 import json
 import unittest
+from pathlib import Path
 from unittest import mock
 
-from aiterprise_scan import bom, ingest, quality, report
+from aiterprise_scan import bom, cli, ingest, quality, report
 from aiterprise_scan.model import Component, Evidence, Examined, Finding, Location, ScanResult
 
 
@@ -103,3 +106,40 @@ class AnnotatedBomTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CoverageOfRealScansTests(unittest.TestCase):
+    """Through a real scan: a finding never reports data from sources that were not consulted."""
+
+    GOLDEN = Path(__file__).parent / "golden"
+
+    def scan(self, target):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            cli.main(["scan", str(target), "--offline", "--format", "json"])
+        return json.loads(out.getvalue())
+
+    def test_licence_findings_name_the_licence_judgement_as_their_source(self):
+        doc = self.scan(self.GOLDEN / "F06-licence-llama")
+        licence = [f for f in doc["findings"] if f["rule_id"].startswith("ait.licence.")]
+        self.assertEqual(len(licence), 4)
+        self.assertEqual({f["examined"]["sources"] for f in licence}, {1})
+        judged = doc["examined"]["licences"]
+        self.assertGreaterEqual(judged["checked"], judged["with_data"])
+        self.assertGreaterEqual(judged["with_data"], 1)
+
+    def test_a_denied_package_names_the_policy_as_its_source(self):
+        doc = self.scan(self.GOLDEN / "F11-policy-gate")
+        denied = [f for f in doc["findings"] if f["rule_id"] == "ait.policy.denied-package"]
+        self.assertEqual(len(denied), 1)
+        self.assertEqual(denied[0]["examined"]["sources"], 1)
+        self.assertEqual(doc["examined"]["policy"]["with_data"], 1)
+
+    def test_no_finding_of_a_golden_scan_has_data_from_zero_sources(self):
+        for fixture in sorted(p for p in self.GOLDEN.iterdir() if p.is_dir()):
+            for f in self.scan(fixture)["findings"]:
+                with self.subTest(fixture=fixture.name, rule=f["rule_id"]):
+                    self.assertGreaterEqual(f["examined"]["sources"], 1)
+
+    def test_a_scan_without_a_deny_list_does_not_claim_a_policy_check(self):
+        self.assertNotIn("policy", self.scan(self.GOLDEN / "F02-clean-python")["examined"])

@@ -4,8 +4,9 @@ Copyright 2026 AIterprise
 This product includes data derived from third-party sources, each under its own terms:
 
 - OSV / OpenSSF malicious-packages records (data/ait/malicious-versions.json.gz) —
-  https://osv.dev and https://github.com/ossf/malicious-packages. Record terms are
-  checked per record before redistribution.
+  https://osv.dev and https://github.com/ossf/malicious-packages. Each record carries
+  its own terms. They are to be checked per record before redistribution; this build does not
+  check them yet (docs/STATUS.md).
 - OSV vulnerability records for AI packages (data/ait/vuln-subset.json.gz) — https://osv.dev.
   Each record keeps the licence of the database it came from (for example the GitHub Advisory
   Database and the PyPA Advisory Database, both CC-BY 4.0); the record ids identify the source.

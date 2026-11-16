@@ -12,6 +12,8 @@ We aim to acknowledge reports within 3 business days.
   scanned files, and never launches or connects to MCP servers, hooks or skill scripts.
 - Parsers are bounded: size caps, zip-slip and zip-bomb guards, no symlink following.
 - `--offline` makes no network calls. Online mode sends package names and versions to OSV
-  (`api.osv.dev`) in POST bodies; it never uploads source code.
+  (`api.osv.dev`) and the PyPI and npm registries; signed in to SecDB, or with `--byo`, it also
+  sends hashes and package identifiers. `docs/privacy.md` lists every case. Source code is never
+  uploaded.
 - Secrets found during a scan are only ever reported in redacted form.
 - Telemetry is off. There is no telemetry code in this release.

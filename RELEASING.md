@@ -52,6 +52,8 @@ that only a real tag exercises are signing, the PyPI upload, the ghcr.io push an
 
 ## After the first PyPI release
 
+Remove the "Not released yet" notes from `README.md`, `docs/index.md` and `docs/quickstart.md`.
+
 Publish `server.json` to the MCP registry (`mcp-publisher login github`, then `mcp-publisher publish`).
 The registry checks that the PyPI description carries `mcp-name: io.github.jtopaz1/aiterprise-scan`,
 which the README already does, so this cannot happen before the PyPI upload.
