@@ -9,7 +9,7 @@ FD22, enforced here and in the callers:
 - nothing a provider returns is cached or written to definition data (this package holds no cache
   handle), and no rule is measured or tuned from it (`quality.rule_quality` is always unmeasured);
 - provider results stay the provider's: rule ids are `ext.<provider>.*`, titles and evidence name
-  the provider, and `without_external` takes them out of anything sent to SecDB or a cloud;
+  the provider, and `reportdoc.upload_view` takes them out of anything sent to SecDB or a cloud;
 - "no answer" is never "clean": a quota stop (429), a refused key (401/403), a failed call, a file
   over the lookup budget and `--offline` are each reported as not verified with the provider.
 
@@ -32,7 +32,7 @@ from .virustotal import VirusTotal
 REGISTRY: dict[str, type[HashProvider]] = {VirusTotal.name: VirusTotal}
 
 __all__ = ["EXT_PREFIX", "REGISTRY", "ConfigError", "FileTarget", "HashProvider", "ProviderError", "enrich",
-           "from_specs", "is_external", "label_of", "provider_of", "without_external"]
+           "from_specs", "is_external", "label_of", "provider_of"]
 
 
 def _available() -> str:
@@ -167,55 +167,6 @@ def _ask(provider: HashProvider, targets: list[FileTarget], result: ScanResult, 
         result.notes.append(f"{provider.name}: {unknown} file hash(es) unknown to {provider.label} (no record, or "
                             "no engine result); unknown is not clean")
     return out
-
-
-def without_external(doc: dict) -> tuple[dict, dict[str, int]]:
-    """An aiterprise-json report without provider results, and how many findings of each provider
-    it held. Applied to everything sent to SecDB or a cloud (FD22). The caller's document is not
-    changed; the report on this machine keeps the provider findings.
-
-    Out go the `ext.*` findings, the providers' `examined` entries and the notes about them; the
-    summary counts are reduced to match."""
-    findings = doc.get("findings")
-    gone = [f for f in findings if isinstance(f, dict) and is_external(f.get("rule_id"))] \
-        if isinstance(findings, list) else []
-    kept: dict[str, int] = {}
-    for f in gone:
-        name = provider_of(f["rule_id"]) or "provider"
-        kept[name] = kept.get(name, 0) + 1
-    names = set(REGISTRY) | set(kept)
-
-    def about_a_provider(note: Any) -> bool:
-        return isinstance(note, str) and any(note.startswith(f"{n}:") or f"{EXT_PREFIX}{n}." in note for n in names)
-
-    out = dict(doc)
-    if gone:
-        out["findings"] = [f for f in findings if not (isinstance(f, dict) and is_external(f.get("rule_id")))]
-    if isinstance(doc.get("examined"), dict):
-        out["examined"] = {k: v for k, v in doc["examined"].items() if k not in names}
-    if isinstance(doc.get("notes"), list):
-        out["notes"] = [n for n in doc["notes"] if not about_a_provider(n)]
-    summary = doc.get("summary")
-    if gone and isinstance(summary, dict):
-        summary = dict(summary)
-        severity = dict(summary["severity"]) if isinstance(summary.get("severity"), dict) else {}
-        status = dict(summary["status"]) if isinstance(summary.get("status"), dict) else {}
-        for f in gone:
-            state, sev = f.get("status"), f.get("severity")
-            if isinstance(status.get(state), int):
-                status[state] -= 1
-                if status[state] <= 0:
-                    del status[state]
-            if state not in ("suppressed", "withdrawn", "resolved") and isinstance(severity.get(sev), int):
-                severity[sev] = max(0, severity[sev] - 1)  # `severity` counts active findings only
-        if isinstance(summary.get("findings"), int):
-            summary["findings"] = max(0, summary["findings"] - len(gone))
-        if "severity" in summary:
-            summary["severity"] = severity
-        if "status" in summary:
-            summary["status"] = status
-        out["summary"] = summary
-    return out, kept
 
 
 def label_of(name: str) -> str:

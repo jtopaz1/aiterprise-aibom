@@ -12,12 +12,11 @@ import datetime as dt
 import getpass
 import json
 import os
-import re
 import sys
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 from urllib.parse import urlsplit
 
-from . import TOOL_NAME, cloudpolicy, credentials, providers, secdb
+from . import TOOL_NAME, cloudpolicy, credentials, providers, reportdoc, secdb
 
 CLOUD_ENV = cloudpolicy.CLOUD_ENV
 
@@ -169,43 +168,14 @@ def _scanned_at(doc: dict, path: Path) -> str:
     return ts.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def project_name(doc: dict) -> str:
-    target = str(doc.get("target") or "").rstrip("\\/")
-    return PureWindowsPath(target).name or target or "default"  # splits on both / and \
-
-
-_HOME_PATH = re.compile(r"(?:[A-Za-z]:\\(?:Users|Documents and Settings)\\[^\\/\s\"']+|/(?:home|Users)/[^/\s\"']+)"
-                        r"((?:[\\/][^\s\"']*)?)")
-
-
-def upload_view(doc: dict) -> dict:
-    """The document as uploaded: the target becomes its directory name, and home directories `~`.
-
-    Local absolute paths carry user names; nothing in an upload needs them."""
-    target = str(doc.get("target") or "")
-    name = project_name(doc)
-
-    def clean(value):
-        if isinstance(value, str):
-            if target and target in value:
-                value = value.replace(target, name)
-            return _HOME_PATH.sub(lambda m: "~" + m.group(1).replace("\\", "/"), value)
-        if isinstance(value, list):
-            return [clean(v) for v in value]
-        if isinstance(value, dict):
-            return {k: clean(v) for k, v in value.items()}
-        return value
-
-    return clean(doc)
-
-
 def upload_document(doc: dict, project: str, scanned_at: str, cloud: str | None = None) -> dict:
-    """Send one aiterprise-json document (paths cleaned by `upload_view`).
+    """Send one report document. The client sends its upload view (`reportdoc.upload_view`): no
+    local paths and no third-party provider results.
 
     Raises secdb.SecDBError, or cloudpolicy.CloudURLError before anything is sent."""
     cloud = cloudpolicy.cloud_url(cloud)
     client = secdb.Client(credentials.load(), base_url=cloud) if cloud else _client()
-    return client.upload_scan(project, upload_view(doc), scanned_at)
+    return client.upload_scan(project, doc, scanned_at)
 
 
 def cmd_upload(args: argparse.Namespace) -> int:
@@ -215,10 +185,14 @@ def cmd_upload(args: argparse.Namespace) -> int:
         return _err(f"cannot read {args.report}: {err}")
     if not isinstance(doc, dict) or "findings" not in doc:
         return _err(f"{args.report} is not an aiterprise-scan JSON report")
+    try:
+        reportdoc.check_schema(doc)
+    except reportdoc.SchemaError as err:
+        return _err(f"{args.report}: {err}")
     if credentials.load() is None:
         return _err("not logged in (run `aiterprise-scan login`)")
-    return report_upload(upload_document, doc, args.project or project_name(doc), _scanned_at(doc, args.report),
-                         args.cloud)
+    return report_upload(upload_document, doc, args.project or reportdoc.project_name(doc),
+                         _scanned_at(doc, args.report), args.cloud)
 
 
 def report_upload(send, doc: dict, project: str, scanned_at: str, cloud: str | None) -> int:
@@ -241,7 +215,7 @@ def report_upload(send, doc: dict, project: str, scanned_at: str, cloud: str | N
     print(f"uploaded: {res.get('scan_id', '?')} · project {res.get('project', project)} · "
           f"{res.get('status', 'stored')} · {res.get('findings_new', 0)} new finding(s)", file=sys.stderr)
     # the client took BYO provider results out before sending (FD22): say how many stayed here
-    for name, count in sorted(providers.without_external(doc)[1].items()):
+    for name, count in sorted(reportdoc.upload_view(doc)[1].items()):
         print(f"note: {count} {providers.label_of(name)} finding(s) kept local, not uploaded "
               "(third-party provider results are never sent to SecDB or a cloud)", file=sys.stderr)
     return 0

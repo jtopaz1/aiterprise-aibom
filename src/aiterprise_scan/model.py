@@ -312,6 +312,10 @@ class Examined:
         return d
 
 
+# a finding in one of these states no longer counts towards the severity totals
+INACTIVE_STATUSES = ("suppressed", "withdrawn", "resolved")
+
+
 @dataclass
 class ScanResult:
     target: str
@@ -342,7 +346,7 @@ class ScanResult:
         return self.examined[source]
 
     def active_findings(self) -> list[Finding]:
-        return [f for f in self.findings if f.status not in ("suppressed", "withdrawn", "resolved")]
+        return [f for f in self.findings if f.status not in INACTIVE_STATUSES]
 
     def severity_counts(self, active_only: bool = True) -> dict[str, int]:
         counts = {s: 0 for s in SEVERITIES}

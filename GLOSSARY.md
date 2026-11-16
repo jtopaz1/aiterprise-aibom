@@ -22,6 +22,19 @@ The decision whether a scan passes: it fails when a finding that nobody has acce
 the policy's threshold.
 _Avoid_: check, quality gate
 
+### Reports
+
+**Report document**:
+The JSON form of one scan's result, with a named schema: what the JSON report prints, what the
+history keeps and what an upload starts from. The table, SARIF and HTML reports are renderings, not
+report documents.
+_Avoid_: scan document, result file, dump
+
+**Upload view**:
+The copy of a report document that may leave the machine: it holds no third-party provider results
+and no local paths.
+_Avoid_: sanitised report, stripped report
+
 ### What the gate reads
 
 **Policy root**:

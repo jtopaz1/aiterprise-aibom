@@ -11,7 +11,7 @@ from html import escape
 
 from . import TOOL_NAME, __version__
 from .model import SEVERITIES, ScanResult, sort_findings
-from .report import summary
+from .reportdoc import summary
 
 _CSS = """
 :root{--bg:#fff;--fg:#1b1f24;--muted:#5b6470;--line:#e3e6ea;--card:#f6f8fa;

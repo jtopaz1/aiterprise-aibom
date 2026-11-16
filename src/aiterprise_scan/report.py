@@ -1,14 +1,16 @@
-"""Reporters: human table, JSON, SARIF 2.1.0 (C40/C43). Reports go to stdout by default (G9)."""
+"""Reporters: human table, JSON, SARIF 2.1.0 (C40/C43). Reports go to stdout by default (G9).
+
+The JSON report is the report document; `reportdoc.py` owns its layout."""
 
 from __future__ import annotations
 
 import json
 import os
-from collections import Counter
 from typing import Any, TextIO
 
-from . import INFORMATION_URI, TOOL_NAME, __version__
+from . import INFORMATION_URI, TOOL_NAME, __version__, reportdoc
 from .model import SEVERITIES, SEVERITY_RANK, Finding, ScanResult, sort_findings
+from .reportdoc import summary
 from .textio import printable as _safe  # every scanned string shown in the table goes through this
 
 _LEVEL = {"critical": "error", "high": "error", "medium": "warning", "low": "note", "info": "note"}
@@ -26,54 +28,12 @@ def _plural(ctype: str, n: int) -> str:
     return _PLURALS.get(ctype, ctype + "s")
 
 
-def summary(result: ScanResult) -> dict[str, Any]:
-    by_type = Counter(c.ctype for c in result.components)
-    by_status = Counter(f.status for f in result.findings)
-    return {
-        "files_walked": result.files_walked,
-        "components": len(result.components),
-        "ai_components": sum(1 for c in result.components if c.ai),
-        "components_by_type": dict(sorted(by_type.items())),
-        "findings": len(result.findings),
-        "severity": result.severity_counts(active_only=True),
-        "status": dict(sorted(by_status.items())),
-    }
-
-
 # --------------------------------------------------------------------------------------------
-# JSON
+# JSON: the report document (its layout lives in reportdoc.py)
 # --------------------------------------------------------------------------------------------
-
-def to_json(result: ScanResult) -> dict[str, Any]:
-    return {
-        "tool": TOOL_NAME,
-        "version": __version__,
-        "target": result.target,
-        "mode": result.mode,
-        "started_at": result.started_at,
-        "duration_s": round(result.duration_s, 3),
-        "policy": result.policy_path,
-        "summary": summary(result),
-        "examined": {k: v.to_dict() for k, v in sorted(result.examined.items())},
-        "notes": list(result.notes),
-        "notices": [dict(n) for n in result.notices],
-        "components": [c.to_dict() for c in result.components],
-        "findings": [_finding_json(f, result) for f in sort_findings(result.findings)],
-        "exit_code": result.exit_code,
-    }
-
-
-def _finding_json(f: Finding, result: ScanResult) -> dict[str, Any]:
-    from . import quality
-
-    d = f.to_dict()
-    d["examined"] = quality.examined_for(f, result)
-    d["quality"] = quality.rule_quality(f.rule_id)
-    return d
-
 
 def dumps_json(result: ScanResult) -> str:
-    return json.dumps(to_json(result), indent=2, ensure_ascii=False) + "\n"
+    return json.dumps(reportdoc.build(result), indent=2, ensure_ascii=False) + "\n"
 
 
 # --------------------------------------------------------------------------------------------

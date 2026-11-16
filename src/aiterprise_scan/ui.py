@@ -32,7 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
-from . import TOOL_NAME, __version__, credentials, history, report, secdb
+from . import TOOL_NAME, __version__, credentials, history, reportdoc, secdb
 from . import policy as policy_mod
 
 COOKIE = "aiterprise_ui"
@@ -149,7 +149,7 @@ def run_scan_to_history(path: Path, offline: bool, registry: bool) -> str:
     from .scanner import ScanOptions
 
     result = gate.gated_scan(ScanOptions(target=path, offline=offline, registry=registry))
-    return history.save(report.to_json(result))
+    return history.save(reportdoc.build(result))
 
 
 def _start_job(server: UIServer, path: Path, offline: bool, registry: bool) -> Job:
@@ -380,7 +380,7 @@ class Handler(BaseHTTPRequestHandler):
                  + "".join(f'<div class="tile"><b class="{x}">{sev.get(x, 0)}</b>{x}</div>' for x in SEVERITIES)
                  + "</div>")
         prev = history.previous_of(sid)
-        head = (f'<h1>{_e(history.project_of(doc))}</h1><div class="meta"><code>{_e(doc.get("target"))}</code> · '
+        head = (f'<h1>{_e(reportdoc.project_name(doc))}</h1><div class="meta"><code>{_e(doc.get("target"))}</code> · '
                 f'{_e(doc.get("started_at"))} · mode {_e(doc.get("mode"))} · exit {_e(doc.get("exit_code"))} · '
                 f'{_e(doc.get("tool"))} {_e(doc.get("version"))} · <a href="/download/{quote(sid)}">json</a>'
                 + (f' · <a href="/diff?a={quote(prev)}&b={quote(sid)}">diff vs previous</a>' if prev else "")
@@ -398,7 +398,7 @@ class Handler(BaseHTTPRequestHandler):
             body += self._notes(doc)
         else:
             body += self._findings(sid, doc, q)
-        self._page(history.project_of(doc), body, "scans")
+        self._page(reportdoc.project_name(doc), body, "scans")
 
     def _findings(self, sid: str, doc: dict, q: dict) -> str:
         findings = doc.get("findings") or []
