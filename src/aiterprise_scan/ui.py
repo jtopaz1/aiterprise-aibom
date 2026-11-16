@@ -145,24 +145,10 @@ def make_server(port: int = 0, token: str | None = None) -> UIServer:
 # --------------------------------------------------------------------------------------------
 
 def run_scan_to_history(path: Path, offline: bool, registry: bool) -> str:
-    from . import cli
-    from .cache import Cache
-    from .scanner import ScanOptions, run_scan
+    from . import gate
+    from .scanner import ScanOptions
 
-    root = path if path.is_dir() else path.parent
-    ppath = policy_mod.find_policy(root)
-    pol = policy_mod.load_policy(ppath) if ppath else policy_mod.Policy()
-    policy_mod.merge_local_suppressions(pol, root)
-    if pol.errors:
-        raise ValueError("policy: " + "; ".join(pol.errors))
-    opts = ScanOptions(target=path, offline=offline, registry=registry, policy=pol, cache=Cache())
-    cli.secdb_options(opts, False)
-    result = run_scan(opts)
-    baseline = None
-    if pol.baseline and (root / pol.baseline).is_file():
-        baseline = policy_mod.load_baseline(root / pol.baseline)
-    if policy_mod.apply(result, pol, baseline):
-        result.exit_code = 1
+    result = gate.gated_scan(ScanOptions(target=path, offline=offline, registry=registry))
     return history.save(report.to_json(result))
 
 

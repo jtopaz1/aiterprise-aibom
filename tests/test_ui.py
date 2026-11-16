@@ -245,6 +245,19 @@ class ServerTests(unittest.TestCase):
         _, html = self.req("GET", f"/scan/{scans[0]['id']}?tab=inventory")
         self.assertIn("openai", html)
 
+    def test_a_scan_from_the_ui_goes_through_the_gate(self):
+        project = Path(self.tmp.name) / "gated"
+        project.mkdir()
+        (project / ".mcp.json").write_text(
+            json.dumps({"mcpServers": {"admin": {"command": "sudo", "args": ["python", "server.py"]}}}),
+            encoding="utf-8")
+        first = history.load(ui.run_scan_to_history(project, offline=True, registry=False))
+        self.assertEqual(first["exit_code"], 1)
+        until = (dt.date.today() + dt.timedelta(days=30)).isoformat()
+        policy.add_local_suppression(project, first["findings"][0]["fingerprint"], until, "accepted for this test")
+        second = history.load(ui.run_scan_to_history(project, offline=True, registry=False))
+        self.assertEqual(second["exit_code"], 0)
+
     def test_account_page_when_logged_out(self):
         self.login()
         resp, html = self.req("GET", "/account")

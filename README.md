@@ -156,4 +156,5 @@ python tools/check_licences.py                                                  
 ```
 
 What is built, what is not, and the data provenance: [docs/STATUS.md](docs/STATUS.md).
+The project's own terms (scan, gated scan, gate, policy root): [GLOSSARY.md](GLOSSARY.md).
 Design of record: `aiterprise-doc/13-APP-AIBOM.md` (AI2).

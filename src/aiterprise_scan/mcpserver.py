@@ -16,10 +16,9 @@ import sys
 from pathlib import Path
 from typing import Any, TextIO
 
-from . import TOOL_NAME, __version__
-from . import policy as policy_mod
-from .model import SEVERITY_RANK, ScanResult, sort_findings
-from .scanner import ScanOptions, run_scan
+from . import TOOL_NAME, __version__, gate
+from .model import SEVERITY_RANK, sort_findings
+from .scanner import ScanOptions
 from .textio import printable
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
@@ -48,6 +47,7 @@ TOOL = {
     "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": True},
 }
 MAX_TITLE = 160
+SECDB_SKIPPED = "not consulted by the MCP tool"
 
 
 def clean(text: str, limit: int = MAX_TITLE) -> str:
@@ -63,24 +63,13 @@ def scan_tool(arguments: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     if fail_on is not None and fail_on not in ("critical", "high", "medium", "low", "info", "none"):
         return {"error": f"invalid fail_on {fail_on!r}"}, True
     max_findings = max(1, min(int(arguments.get("max_findings", 25) or 25), 200))
-    root = path if path.is_dir() else path.parent
-    pol_path = policy_mod.find_policy(root)
-    pol = policy_mod.load_policy(pol_path) if pol_path else policy_mod.Policy()
-    # the same gate as the CLI and the UI: suppressions accepted in the UI, the policy's baseline,
-    # and the policy's own threshold unless the caller names one
-    policy_mod.merge_local_suppressions(pol, root)
-    if pol.errors:
-        return {"error": "policy: " + "; ".join(clean(e, 300) for e in pol.errors)}, True
-    if fail_on is not None:
-        pol.fail_on = policy_mod.threshold_set(fail_on)
-    result: ScanResult = run_scan(ScanOptions(target=path, offline=bool(arguments.get("offline", False)), policy=pol))
-    baseline = None
-    if pol.baseline and (root / pol.baseline).is_file():
-        baseline = policy_mod.load_baseline(root / pol.baseline)
-    failing = policy_mod.apply(result, pol, baseline)
-    if failing:
-        result.exit_code = 1
-    active = [f for f in sort_findings(result.findings) if f.status == "new"]
+    # an agent can call this tool over and over: it never spends the user's SecDB budget
+    try:
+        result = gate.gated_scan(ScanOptions(target=path, offline=bool(arguments.get("offline", False))),
+                                 gate.GateOverrides(fail_on=fail_on, skip_secdb=SECDB_SKIPPED))
+    except gate.PolicyError as err:
+        return {"error": clean(str(err), 300)}, True
+    active =[f for f in sort_findings(result.findings) if f.status == "new"]
     findings = [
         {
             "severity": f.severity,
