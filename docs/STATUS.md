@@ -25,7 +25,7 @@ so this table restates Appendix H.1 against what exists in this repository today
 | AI secrets (C32), redacted, digest-keyed | `secrets.py` | working |
 | SecDB API v1 client (§4.8, Appendix I/K): `/v1/me` limits, lookups (single, batch on paid plans), MCP URL prefixes and assessments, file verdicts, data notices, FP reports with consent, report upload; budget from the plan; 429 → UNVERIFIED, never clean | `secdb.py`, `account.py`, `login` / `logout` / `status` / `report-fp` / `upload` | working — verified live with a free key (`/v1/me`, `/v1/usage`, lookups within the 4/min budget); batch and upload are plan-gated and not live-tested |
 | Signed definition bundles (C50): minisign (pure-Python Ed25519, RFC 8032) over the manifest, root-signed `signing-keys.json` with rollback and expiry checks, `release_id` from JCS, archive hash before unpack, atomic install, rollback, per-load re-check | `ed25519.py`, `minisign.py`, `bundles.py`, `defscli.py`, `defs verify/install/update/rollback`, `tools/build_bundle.py` | working — a locally built bundle verified, installed and used; interop with the reference `minisign` passes both ways in CI |
-| Rule quality: per-finding `fp_rate_measured` (measured, or null) and `examined` coverage counts | `quality.py`, `data/ait/rule-quality.json`, `tools/measure_fp.py` | working — `ait.secret.*` measured (3.41 % over 205 clean projects) and `ait.skill.*` measured (14.18 % of 275 installed agent skills trip a skill rule; per-rule rates are in the file); MCP, model-file and archive rules are `null` |
+| Rule quality: per-finding `fp_rate_measured` (measured, or null) and `examined` coverage counts | `quality.py`, `data/ait/rule-quality.json`, `tools/measure_fp.py` | working — `ait.secret.*` measured (3.41 % over 205 clean projects) and `ait.skill.*` measured (11.64 % of 275 installed agent skills trip a skill rule; per-rule rates are in the file); MCP, model-file and archive rules are `null` |
 | CycloneDX 1.7 emission (C05), 1.6 compatible, findings as `vulnerabilities[]` | `bom.py`, `--emit-bom`, `bom` command | working |
 | Reports: table, JSON, SARIF 2.1.0, self-contained HTML; data notices | `report.py`, `html_report.py` | working |
 | Policy (C33), suppressions with mandatory expiry (C34), `.snyk` import, baseline (C35); malicious findings accepted only by an expiring fingerprint suppression; UI suppressions in `.aiterprise/suppressions.json` | `policy.py` | working |
@@ -89,12 +89,15 @@ python tools/gen_rules_doc.py
 - **Secrets:** all 7 flagged projects behind the measured 3.41 % were flagged by the PEM
   private-key rule; placeholder filtering drops values containing words such as `example`.
 - **MCP / skills:** `supply.npx-unpinned` covers `npx` only (not `bunx` / `pnpm dlx`).
-- **Skill rules are noisy on real skills.** Of 275 installed, in-use skills, 39 trip a skill rule.
-  `desc.secret.read-exfil` and `desc.hidden.conceal` are critical and fire on 4.4 % and 4.0 %: the
-  description-poisoning patterns were written for short tool descriptions and also run over long
-  skill bodies, where "never print secrets" or "don't tell the user the internal name" is ordinary
-  guidance. Three plain regex faults found by the measurement are fixed; the body/description split
-  is not. Treat skill-body findings as leads.
+- **Skill rules are noisy on real skills.** Of 275 installed, in-use skills, 32 trip a skill rule
+  (before the fixes below: 55 of 325 skill copies). `desc.hidden.conceal` and
+  `desc.secret.read-exfil` are critical and still fire on 4.0 % and 1.8 %: the description-poisoning
+  patterns were written for short tool descriptions and also run over long skill bodies, where
+  "never tell a user the report was scheduled when it was not" is ordinary guidance. The measurement
+  found four plain faults, now fixed with tests: `read` matched inside "ready", "don't let … them"
+  counted as concealment, `host` matched PowerShell's `Write-Host`, and a negated verb ("never copy
+  secrets") counted as the instruction it forbids. The body/description split is not done. Treat
+  skill-body findings as leads.
 - **Licences:** verdicts are advisory, not legal advice.
 - **KEV severity (decided 2026-11-14):** a CVE listed in CISA KEV is upgraded to **critical**
   (`ait.vuln.kev`), whatever the advisory's own CVSS severity — known exploitation outranks the

@@ -46,8 +46,8 @@
       "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
       "evaluated_at": "2026-11-16",
       "samples": 275,
-      "fp_rate_measured": 0.1418,
-      "flagged": 39,
+      "fp_rate_measured": 0.1164,
+      "flagged": 32,
       "scope": "family"
     },
     "ait.skill.cmd.hygiene.temp-dir": {
@@ -102,8 +102,8 @@
       "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
       "evaluated_at": "2026-11-16",
       "samples": 275,
-      "fp_rate_measured": 0.0436,
-      "flagged": 12,
+      "fp_rate_measured": 0.0182,
+      "flagged": 5,
       "scope": "rule"
     },
     "ait.skill.desc.shadow.cross-tool": {
