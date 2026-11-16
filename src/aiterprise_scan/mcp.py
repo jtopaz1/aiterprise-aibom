@@ -15,7 +15,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from . import data, secrets
+from . import data, secrets, sources
 from .model import (
     OWASP_EXCESSIVE_AGENCY,
     OWASP_PROMPT_INJECTION,
@@ -686,9 +686,10 @@ def analyze_mcp_config(path: Path, root: Path) -> tuple[list[Component], list[Fi
     return components, findings
 
 
-def analyze_mcp(root: Path, files: list[Path],
-                include_machine: bool = False) -> tuple[list[Component], list[Finding]]:
-    """Analyze every repo-level agent config (and machine-level ones when asked)."""
+def analyze_mcp(root: Path, files: list[Path], include_machine: bool = False,
+                result=None) -> tuple[list[Component], list[Finding]]:
+    """Analyze every repo-level agent config (and machine-level ones when asked). Given a `result`,
+    records the coverage."""
     components: list[Component] = []
     findings: list[Finding] = []
     seen: set[str] = set()
@@ -718,4 +719,22 @@ def analyze_mcp(root: Path, files: list[Path],
             components.extend(c)
             findings.extend(f)
 
+    _count(result, components, findings)
     return components, findings
+
+
+def analyze_machine_configs(result=None) -> tuple[list[Component], list[Finding]]:
+    """Analyze this machine's own agent configs, with no project. Given a `result`, records the
+    coverage."""
+    components: list[Component] = []
+    findings: list[Finding] = []
+    for path in machine_agent_config_paths():
+        c, f = analyze_mcp_config(path, path.parent)
+        components += c
+        findings += f
+    _count(result, components, findings)
+    return components, findings
+
+
+def _count(result, components: list[Component], findings: list[Finding]) -> None:
+    sources.count(result, sources.MCP, (c for c in components if c.ctype == "mcp-server"), findings)

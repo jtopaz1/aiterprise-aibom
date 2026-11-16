@@ -45,7 +45,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from . import data
+from . import data, sources
 from .model import Component, Evidence, Finding, Location
 from .walk import rel_posix
 
@@ -151,6 +151,26 @@ def is_model_candidate(path: Path) -> bool:
 def is_pickle_family(name: str, fmt: str | None) -> bool:
     """True when a model file can carry pickle code: by its sniffed format, else by its extension."""
     return fmt in _PICKLE_FORMATS or _effective_ext(name) in _PICKLE_EXTENSIONS
+
+
+def analyze(root: Path, files: list[Path], result=None) -> tuple[list[Component], list[Finding]]:
+    """Inventory and judge every model file among `files`. Given a `result`, records the coverage:
+    a file is counted when it is a model candidate, and has data when it is a model with findings."""
+    components: list[Component] = []
+    findings: list[Finding] = []
+    entry = result.examine(sources.MODEL_FILES.name) if result is not None else None
+    for path in files:
+        if not is_model_candidate(path):
+            continue
+        if entry is not None:
+            entry.checked += 1  # before the analysis: a file that makes it fail was still looked at
+        comp, found = analyze_model_file(path, root)
+        if comp is not None:
+            components.append(comp)
+            if entry is not None and found:
+                entry.with_data += 1
+        findings.extend(found)
+    return components, findings
 
 
 def analyze_model_file(path: Path, root: Path) -> tuple[Component | None, list[Finding]]:

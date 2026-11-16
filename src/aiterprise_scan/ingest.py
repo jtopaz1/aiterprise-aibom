@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from . import purl as purls
-from . import taxonomy
+from . import sources, taxonomy
 from .model import Component, Location
 from .textio import read_text, loads_json
 from .walk import rel_posix
@@ -178,3 +178,34 @@ def ingest_file(path: Path, root: Path | None = None) -> tuple[str, list[Compone
     if kind == "spdx":
         return str(doc.get("spdxVersion")), ingest_spdx(doc, rel)
     raise BOMError(f"{rel}: not a CycloneDX or SPDX JSON document")
+
+
+def ingest_boms(paths: list[Path], root: Path | None, result, explicit: bool) -> tuple[list[Component], bool]:
+    """Read every BOM in `paths` into components, record the coverage and the notes in `result`, and
+    say whether one failed. A file that is not a BOM fails only when the user named it (`explicit`);
+    one found while walking is passed over. A file that cannot be read always fails."""
+    out: list[Component] = []
+    failed = False
+    for path in paths:
+        try:
+            kind, comps = ingest_file(path, root)
+        except BOMError as err:
+            if explicit:
+                failed = True
+                result.notes.append(f"bom: {err}")
+            continue
+        except OSError as err:
+            failed = True
+            result.notes.append(f"bom: cannot read {path}: {err}")
+            continue
+        entry = result.examine(sources.BOM_INGEST.name)
+        entry.checked += 1
+        entry.with_data += 1 if comps else 0
+        unversioned = sum(1 for c in comps if c.ctype == "library" and not c.version)
+        if unversioned:
+            result.notes.append(
+                f"bom: {unversioned} of {len(comps)} components in {path.name} ({kind}) carry no version "
+                "and cannot be judged — inventory without versions is not a verdict"
+            )
+        out.extend(comps)
+    return out, failed

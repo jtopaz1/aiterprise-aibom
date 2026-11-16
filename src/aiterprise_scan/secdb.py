@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 from urllib.parse import quote, urlencode
 
-from . import __version__, net, providers, reportdoc
+from . import __version__, net, providers, reportdoc, sources
 from .credentials import Credential
 from .model import (
     OWASP_SUPPLY_CHAIN,
@@ -283,7 +283,7 @@ def _assessment_finding(item: _Item, res: dict) -> Finding | None:
 
 
 def enrich(components: list[Component], result: ScanResult, client: Client) -> list[Finding]:
-    examined = result.examine("secdb")
+    examined = result.examine(sources.SECDB.name)
     try:
         me = client.me()
     except SecDBError as err:

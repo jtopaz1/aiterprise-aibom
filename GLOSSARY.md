@@ -22,6 +22,18 @@ The decision whether a scan passes: it fails when a finding that nobody has acce
 the policy's threshold.
 _Avoid_: check, quality gate
 
+### Sources
+
+**Source**:
+Something a scan consults to judge what it found: a data set (the malicious-package snapshot, OSV,
+KEV), a service (a package registry, SecDB) or one of the scanner's own analyzers.
+_Avoid_: analyzer (for all of them), checker, feed, engine
+
+**Coverage**:
+Per source and scan: how many items the source was asked about and for how many it had something
+to say; a source that was not consulted says why. "No match" is never read as "never checked".
+_Avoid_: examined (the key it has in a report), stats
+
 ### Reports
 
 **Report document**:

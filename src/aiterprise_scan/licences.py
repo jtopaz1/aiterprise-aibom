@@ -23,7 +23,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
-from . import data, miniyaml
+from . import data, miniyaml, sources
 from .model import OWASP_SUPPLY_CHAIN, Component, Evidence, Finding, Location
 from .textio import TooLarge, read_text
 from .walk import rel_posix
@@ -1050,8 +1050,23 @@ def judge_licences(
     use_context: str = "commercial",
     allow: list[str] | None = None,
     deny: list[str] | None = None,
+    result=None,
 ) -> list[Finding]:
-    """Licence findings for models, datasets and model files (advisory, not legal advice)."""
+    """Licence findings for models, datasets and model files (advisory, not legal advice). Given a
+    `result`, records the coverage."""
+    judged = [c for c in components if c.ctype in JUDGED_CTYPES]
+    entry = result.examine(sources.LICENCES.name) if result is not None else None
+    if entry is not None:
+        entry.checked += len(judged)  # what was asked, also when the judging below fails
+    findings = _judge_licences(components, use_context, allow, deny)
+    if entry is not None:
+        flagged = {f.component.key() for f in findings if f.component is not None}
+        entry.with_data += sum(1 for c in judged if c.key() in flagged)
+    return findings
+
+
+def _judge_licences(components: list[Component], use_context: str, allow: list[str] | None,
+                    deny: list[str] | None) -> list[Finding]:
     ctx = _context(use_context)
     judge = _Judge(ctx, allow, deny)
     for comp in components:

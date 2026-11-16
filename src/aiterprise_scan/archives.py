@@ -28,7 +28,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from . import mcpb, modelfiles
+from . import mcpb, modelfiles, sources
 from .model import (
     OWASP_SUPPLY_CHAIN,
     Component,
@@ -384,7 +384,7 @@ def analyze(root: Path, files: list[Path], result, examined: list[tuple[str, Pat
     """`examined`, when given, collects the archives counted here as (root-relative path, file)."""
     comps: list[Component] = []
     finds: list[Finding] = []
-    ex = result.examine("archives")
+    ex = result.examine(sources.ARCHIVES.name)
     for path in files:
         if is_archive_candidate(path):
             c, f = analyze_archive(path, root)

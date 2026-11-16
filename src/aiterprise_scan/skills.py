@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from . import miniyaml
+from . import miniyaml, sources
 from .mcp import _finding_from_command, _finding_from_poison, check_command, check_text
 from .model import SEVERITY_RANK, Component, Finding, Location, not_analysable
 from .textio import TooLarge, loads_jsonc, read_text
@@ -287,7 +287,8 @@ def _finalize(comp: Component, findings: list[Finding]) -> tuple[Component, list
 # ---------------------------------------------------------------------------
 
 
-def analyze_skills(root: Path, files: list[Path]) -> tuple[list[Component], list[Finding]]:
+def analyze_skills(root: Path, files: list[Path], result=None) -> tuple[list[Component], list[Finding]]:
+    """Every skill, plugin and command file under `root`. Given a `result`, records the coverage."""
     components: list[Component] = []
     findings: list[Finding] = []
     for unit in find_skill_dirs(root, files):
@@ -304,4 +305,5 @@ def analyze_skills(root: Path, files: list[Path]) -> tuple[list[Component], list
             continue
         components.append(comp)
         findings.extend(fs)
+    sources.count(result, sources.SKILLS, (c for c in components if c.ctype == "agent-skill"), findings)
     return components, findings

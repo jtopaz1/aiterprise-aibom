@@ -15,24 +15,11 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
-from . import data
+from . import data, sources
 from .model import Finding, ScanResult
 from .providers import is_external
 
 UNMEASURED = {"fp_rate_measured": None, "corpus": None, "evaluated_at": None}
-
-SOURCES_BY_FAMILY: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("ait.pkg.", ("ait-malicious", "osv", "osv-subset", "registry", "archives", "secdb")),
-    ("ait.vuln.", ("osv", "osv-subset", "kev")),
-    ("ait.model.", ("model-files", "archives", "secdb")),
-    ("ait.mcp.", ("mcp", "archives", "secdb")),
-    ("ait.skill.", ("skills",)),
-    ("ait.licence.", ("licences",)),
-    ("ait.secret.", ("secrets",)),
-    ("ait.archive.", ("archives",)),
-    ("ait.policy.", ("policy",)),
-)
-
 
 @lru_cache(maxsize=1)
 def _measured() -> dict[str, dict[str, Any]]:
@@ -67,7 +54,7 @@ def examined_for(f: Finding, result: ScanResult) -> dict[str, Any]:
         # the provider is the one source, and it answered for this file (even when a later call
         # in the same scan was refused)
         return {"sources": 1, "with_data": len({e.source for e in f.evidence})}
-    family = next((srcs for prefix, srcs in SOURCES_BY_FAMILY if f.rule_id.startswith(prefix)), ())
+    family = sources.for_rule(f.rule_id)
     consulted = [s for s in family if s in result.examined and not result.examined[s].skipped]
     skipped = [s for s in family if s in result.examined and result.examined[s].skipped]
     out: dict[str, Any] = {"sources": len(consulted), "with_data": len({e.source for e in f.evidence})}
