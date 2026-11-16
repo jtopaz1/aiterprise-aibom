@@ -6,6 +6,11 @@
 pipx install aiterprise-scan          # or: pip install aiterprise-scan
 ```
 
+!!! note "Not released yet"
+    Nothing is published so far, so the command above and the other ways below work from the first
+    tagged release. Until then, install from a checkout of the repository with `pip install .`
+    (see [Implementation status](STATUS.md)).
+
 Other ways, all from the same release:
 
 - a single-file binary for Linux, macOS or Windows from the GitHub release (each file has a
@@ -45,7 +50,7 @@ aiterprise-scan . --save && aiterprise-scan ui    # keep it in the local history
 aiterprise-scan scan --bom cdxgen-aibom.json            # judge someone else's AI-BOM
 aiterprise-scan scan dist/mypkg-1.0-py3-none-any.whl    # a package before you publish or install it
 aiterprise-scan scan models/model.pt                    # one model file
-aiterprise-scan mcp --agent-configs                     # this machine's MCP servers and skills
+aiterprise-scan mcp --agent-configs                     # this machine's MCP servers
 ```
 
 ## CI

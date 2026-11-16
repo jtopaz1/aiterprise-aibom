@@ -5,7 +5,7 @@
 | Command | What it does |
 |---|---|
 | `scan [target]` | scan a repository, directory, model file, archive or BOM |
-| `mcp [serve]` | judge MCP servers and agent skills only; `mcp serve` runs the MCP tool over stdio |
+| `mcp [serve]` | judge MCP servers and agent skills only (skills are read inside the scanned directory, not from the machine's own folders); `mcp serve` runs the MCP tool over stdio |
 | `bom [target]` | emit an AI-BOM without risk judgement (fast compliance mode) |
 | `policy lint FILE` | validate a policy file |
 | `policy pull [--cloud URL] [--out FILE]` | download the organisation's policy from an AIterprise cloud — see [Policy](policy.md#org-policy-from-the-cloud) |
@@ -22,7 +22,7 @@
 |---|---|
 | `--bom FILE` | judge this CycloneDX (1.4–1.7) or SPDX 2.x JSON file |
 | `--offline` | bundled definitions and cache only; no network |
-| `--all-files` | do not honour `.gitignore` |
+| `--all-files` | do not honour `.gitignore` (only the one at the root of the target is read). Dependency and cache directories such as `node_modules`, `.venv` and `site-packages` are skipped either way, and a walk stops at 200,000 files with a note in the report |
 | `--exclude GLOB` | skip paths matching GLOB, relative to the target (repeatable), e.g. `'tests/**'` |
 | `--agent-configs` | also read this machine's agent and MCP configs |
 | `--no-imports` | skip manifest-free import discovery |
@@ -49,7 +49,22 @@
 | `--write-baseline FILE` | write the current findings as a baseline |
 
 `mcp` takes the same report and gate flags, plus `--path DIR` (where to look for project-level
-configs) and `--agent-configs`.
+configs), `--agent-configs` and `--offline`.
+
+## Other commands
+
+| Command | Flags |
+|---|---|
+| `bom [target]` | `--out FILE` (default: stdout), `--cdx-version` (`1.6` or `1.7`; default 1.7), `--all-files` |
+| `policy pull` | `--cloud URL`, `--out FILE` (default: `aibom.policy.yaml` in the current directory) |
+| `defs verify DIR`, `defs install DIR` | `--root-key FILE` |
+| `defs update` | `--root-key FILE`, `--channel NAME` (default: your account's), `--signing-keys URL` (default: next to the manifest) |
+| `login` | `--key-stdin` (read the key from stdin, for CI) or `--install` (register an anonymous install token instead of using an API key) |
+| `report-fp RULE` | `--notes TEXT`, `--yes` (consent given) |
+| `upload report.json` | `--project NAME`, `--cloud URL` |
+| `ui` | `--port N` (default: a free port), `--no-browser` (print the link instead of opening a browser) |
+
+`aiterprise-scan --version` prints the version, like the `version` command.
 
 ## Environment
 

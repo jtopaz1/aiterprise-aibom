@@ -14,6 +14,9 @@ aiterprise-scan defs install ./bundle --root-key root.pub
 aiterprise-scan defs rollback                       # previous release, or back to the wheel's data
 ```
 
+`defs update` asks for the release channel of your SecDB account; `--channel NAME` asks for another
+one. `--signing-keys URL` says where `signing-keys.json` is when it is not next to the manifest.
+
 ## What is checked
 
 A bundle directory holds `manifest.json`, `signature.minisig`, the archive the manifest names, and

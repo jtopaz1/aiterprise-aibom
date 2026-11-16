@@ -7,7 +7,8 @@ fully without it; logged in, it also asks SecDB about:
 - **private MCP server URLs** — sent only as an 8-hex SHA-256 prefix; the URL never leaves the
   machine, and matching happens locally (`ait.mcp.secdb.*`);
 - **named MCP servers** — a provenance assessment (`ait.mcp.reputation.*`); `clean` is never
-  reported as safe;
+  reported as safe. Not requested by a scan yet: nothing gives a server found in a config its
+  registry name, so only the URL-prefix check above runs for MCP servers;
 - **packages** — SecDB's verdict (`ait.pkg.secdb.*`), AI packages first.
 
 ## Log in
@@ -15,6 +16,7 @@ fully without it; logged in, it also asks SecDB about:
 ```bash
 aiterprise-scan login                     # paste an API key (aik_…); checked with GET /v1/me first
 aiterprise-scan login --key-stdin < key   # CI
+aiterprise-scan login --install           # no account: an anonymous install token
 aiterprise-scan status                    # plan, per-minute limit, usage this month
 aiterprise-scan logout
 ```
@@ -22,6 +24,11 @@ aiterprise-scan logout
 The key is never printed. It is saved in `~/.aiterprise/credentials.json` — encrypted for the
 current user with DPAPI on Windows, file mode 0600 elsewhere. In CI, set `AITERPRISE_API_KEY` from
 a secret instead; it takes precedence over a saved key.
+
+`login --install` needs no account. It registers this installation with SecDB — sending the
+scanner's name and version and the operating-system family, nothing else — and saves the install
+token SecDB returns in the same file. A key, from the environment or saved, is used before an
+install token.
 
 ## Limits and what "unverified" means
 

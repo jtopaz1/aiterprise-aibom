@@ -3,6 +3,7 @@
 ```bash
 aiterprise-scan ui                 # opens the browser
 aiterprise-scan ui --no-browser    # prints the link instead
+aiterprise-scan ui --port 8765     # a fixed port instead of a free one
 ```
 
 The UI is served by the scanner itself on `127.0.0.1` only. It shows:
