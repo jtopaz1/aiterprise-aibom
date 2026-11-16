@@ -34,6 +34,21 @@ Per source and scan: how many items the source was asked about and for how many 
 to say; a source that was not consulted says why. "No match" is never read as "never checked".
 _Avoid_: examined (the key it has in a report), stats
 
+### Rules for text
+
+**Command rule**:
+A shipped pattern that judges a command line something will run: an MCP server's launch command, a
+hook, a skill's script or a package's install script. It finds, for example, a download piped into
+a shell. One rule makes the same finding wherever the command was found; only the rule id's family
+(`ait.mcp`, `ait.skill`, `ait.archive`) says where.
+_Avoid_: command pattern, shell rule
+
+**Poison pattern**:
+A shipped pattern that judges free text an agent reads, such as a tool description or a skill's
+instructions, for words that turn the agent against its user: hidden instructions, reading secrets,
+sending data away.
+_Avoid_: poison rule, injection rule, description rule
+
 ### Reports
 
 **Report document**:

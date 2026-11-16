@@ -2,7 +2,7 @@
 
 Static only (design G8): parse agent config text, resolve launchers to packages,
 infer capability scope, and judge command lines and free-text fields with the
-shipped rule sets. Nothing is launched, connected to, or executed.
+shipped rule sets (`textrules`). Nothing is launched, connected to, or executed.
 """
 
 from __future__ import annotations
@@ -11,14 +11,12 @@ import os
 import re
 import sys
 import tomllib
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from . import data, secrets, sources
+from . import secrets, sources, textrules
 from .model import (
     OWASP_EXCESSIVE_AGENCY,
-    OWASP_PROMPT_INJECTION,
     OWASP_SENSITIVE_INFO,
     OWASP_SUPPLY_CHAIN,
     Component,
@@ -29,70 +27,6 @@ from .model import (
 )
 from .textio import TooLarge, line_of, loads_jsonc, read_text
 from .walk import rel_posix
-
-# ---------------------------------------------------------------------------
-# Rule sets (shared with skills.py)
-# ---------------------------------------------------------------------------
-
-
-@lru_cache(maxsize=1)
-def _command_rules() -> list[dict[str, Any]]:
-    rules = data.load("command-rules.json")["rules"]
-    for r in rules:
-        r["_re"] = re.compile(r["pattern"], re.IGNORECASE)
-    return rules
-
-
-@lru_cache(maxsize=1)
-def _poison_rules() -> list[dict[str, Any]]:
-    rules = data.load("poison-patterns.json")["rules"]
-    for r in rules:
-        r["_re"] = re.compile(r["pattern"])  # poison patterns carry their own (?i)
-    return rules
-
-
-def check_command(command_line: str) -> list[dict[str, Any]]:
-    """Command rules that fire on `command_line`, with the matched (redacted) span."""
-    if not command_line:
-        return []
-    out: list[dict[str, Any]] = []
-    for rule in _command_rules():
-        m = rule["_re"].search(command_line)
-        if m:
-            hit = {k: v for k, v in rule.items() if k != "_re"}
-            hit["match"] = secrets.redact_secrets_in(m.group(0))
-            hit["span"] = (m.start(), m.end())
-            out.append(hit)
-    return out
-
-
-def check_text(text: str) -> list[dict[str, Any]]:
-    """Poison patterns that fire on `text`."""
-    if not text:
-        return []
-    out: list[dict[str, Any]] = []
-    for rule in _poison_rules():
-        m = rule["_re"].search(text)
-        if m:
-            hit = {k: v for k, v in rule.items() if k != "_re"}
-            # Never echo the raw matched text for stego rules; give a safe label.
-            if rule["category"] == "steganography":
-                hit["match"] = f"<{rule['id']}>"
-            else:
-                hit["match"] = secrets.redact_secrets_in(m.group(0))[:160]
-            hit["span"] = (m.start(), m.end())
-            out.append(hit)
-    return out
-
-
-_CONF = {
-    "critical": ("malicious", 90),
-    "high": ("suspicious", 75),
-    "medium": ("suspicious", 55),
-    "low": ("suspicious", 40),
-    "info": ("benign", 30),
-}
-
 
 # ---------------------------------------------------------------------------
 # Config discovery
@@ -406,48 +340,6 @@ def _free_texts(obj: Any, prefix: str = "") -> list[tuple[str, str]]:
 # ---------------------------------------------------------------------------
 
 
-def _finding_from_command(hit: dict, location: Location, comp: Component, prefix: str) -> Finding:
-    verdict, conf = _CONF[hit["severity"]]
-    maps = [OWASP_SUPPLY_CHAIN]
-    if hit["category"] in ("cred", "exfil", "exec", "download-exec"):
-        maps = [OWASP_SENSITIVE_INFO, OWASP_SUPPLY_CHAIN]
-    return Finding(
-        rule_id=f"{prefix}.cmd.{hit['id']}",
-        title=f"Dangerous command in {comp.name}: {hit['description']}",
-        severity=hit["severity"],
-        verdict=verdict,
-        confidence=conf,
-        component=comp,
-        location=location,
-        evidence=[Evidence(source="ait-rules", record=hit["id"],
-                           detail={"category": hit["category"], "match": secrets.redact_secrets_in(hit["match"])})],
-        remediation=hit["remediation"],
-        maps_to=maps,
-        discriminator=hit["id"],
-    )
-
-
-def _finding_from_poison(hit: dict, location: Location, comp: Component, field: str,
-                         prefix: str) -> Finding:
-    verdict, conf = _CONF[hit["severity"]]
-    verdict = "malicious" if hit["severity"] == "critical" else "suspicious"
-    return Finding(
-        rule_id=f"{prefix}.desc.{hit['id']}",
-        title=f"Prompt poisoning in {comp.name} ({field}): {hit['description']}",
-        severity=hit["severity"],
-        verdict=verdict,
-        confidence=conf,
-        component=comp,
-        location=location,
-        evidence=[Evidence(source="ait-rules", record=hit["id"],
-                           detail={"category": hit["category"], "field": field,
-                                   "match": secrets.redact_secrets_in(hit["match"])})],
-        remediation=hit["remediation"],
-        maps_to=[OWASP_PROMPT_INJECTION, OWASP_SUPPLY_CHAIN],
-        discriminator=f"{hit['id']}:{field}",
-    )
-
-
 def _parse_config(path: Path, kind: str) -> tuple[Any, str]:
     text = read_text(path)
     if kind == "codex" or path.suffix.lower() == ".toml":
@@ -539,8 +431,7 @@ def analyze_mcp_config(path: Path, root: Path) -> tuple[list[Component], list[Fi
     for hook_cmd in _hook_commands(parsed):
         line = line_of(text, hook_cmd[:40]) or 1
         loc = Location(rel, line)
-        for hit in check_command(hook_cmd):
-            findings.append(_finding_from_command(hit, loc, cfg_comp, "ait.mcp"))
+        findings += textrules.command_findings(hook_cmd, "ait.mcp", cfg_comp, loc)
 
     servers = _servers_from(parsed, kind)
     for name, scfg in servers.items():
@@ -610,13 +501,11 @@ def analyze_mcp_config(path: Path, root: Path) -> tuple[list[Component], list[Fi
             components.append(lib)
 
         # (1) command rules on the full command line
-        for hit in check_command(command_line):
-            findings.append(_finding_from_command(hit, loc, server_comp, "ait.mcp"))
+        findings += textrules.command_findings(command_line, "ait.mcp", server_comp, loc)
 
         # (2) poison patterns on every free-text field
         for field, value in _free_texts(scfg):
-            for hit in check_text(value):
-                findings.append(_finding_from_poison(hit, loc, server_comp, field, "ait.mcp"))
+            findings += textrules.poison_findings(value, "ait.mcp", server_comp, loc, field)
 
         # (3) literal secrets in env / headers / args
         blob_fields: list[tuple[str, str]] = []

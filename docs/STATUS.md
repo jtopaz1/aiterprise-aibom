@@ -20,7 +20,7 @@ so this table restates Appendix H.1 against what exists in this repository today
 | Model files (C21): pickle opcode walk (protocol 0–5, raw, legacy torch, PyTorch zip/TorchScript, `.mar`, `.npz`, `.npy`, joblib), safetensors, GGUF chat-template SSTI, ONNX custom ops / external data, Keras v3 / HDF5 `Lambda`, TFLite/`.pte` inventory; zip-slip; caps — never unpickled | `modelfiles.py`, `data/ait/model-rules.json` | working — verified on hand-built samples only (see limits) |
 | Package archives: wheels, sdists, tarballs, eggs, MCPB/DXT bundles — `.pth` payloads, `setup.py` / npm lifecycle commands, path traversal, model members | `archives.py`, `mcpb.py` | working |
 | Model / dataset licence verdicts (C25) against `use_context`, base-model inheritance, allow/deny | `licences.py`, `data/ait/licence-verdicts.json` | working (advisory, not legal advice) |
-| MCP configs (C26/C29/C31): Claude Desktop/Code, Cursor, VS Code (JSONC), Codex TOML, Windsurf, Gemini; dangerous commands, poisoned descriptions, literal secrets, scope, plain-http — nothing launched (G8) | `mcp.py`, `data/ait/command-rules.json` (57), `data/ait/poison-patterns.json` (8) | working |
+| MCP configs (C26/C29/C31): Claude Desktop/Code, Cursor, VS Code (JSONC), Codex TOML, Windsurf, Gemini; dangerous commands, poisoned descriptions, literal secrets, scope, plain-http — nothing launched (G8) | `mcp.py`; the rule sets, shared with skills, MCP bundles and package archives, in `textrules.py` with `data/ait/command-rules.json` (57), `data/ait/poison-patterns.json` (8) | working — one rule makes the same finding wherever its text was found |
 | Agent skills / plugins (C30/C31) | `skills.py` | working |
 | AI secrets (C32), redacted, digest-keyed | `secrets.py` | working |
 | SecDB API v1 client (§4.8, Appendix I/K): `/v1/me` limits, lookups (single, batch on paid plans), MCP URL prefixes and assessments, file verdicts, data notices, FP reports with consent, report upload; budget from the plan; 429 → UNVERIFIED, never clean | `secdb.py`, `account.py`, `login` / `logout` / `status` / `report-fp` / `upload` | working — verified live with a free key (`/v1/me`, `/v1/usage`, lookups within the 4/min budget); batch and upload are plan-gated and not live-tested; `login --install` (anonymous install token) is tested against a stand-in only, never run against the live service; the named-MCP assessment call is in the client but is never made, because no analyzer sets a server's registry name (H.5 #1) |
@@ -52,7 +52,7 @@ so this table restates Appendix H.1 against what exists in this repository today
 | False-positive rates for MCP, model-file and archive rules | §4.3 | Needs corpora: the machine used for the skill and secret measurements has 15 MCP configs and one package with model files, under the 25-sample minimum |
 | More BYO-key providers (urlscan.io, Web Risk) | §6.4 | VirusTotal is the only adapter; URL reputation for MCP endpoints is v2 in the design |
 | Live MCP tool-list poisoning layer | C24/C28 | Deliberately not done: the scanner never launches servers (G8); descriptions in configs are judged |
-| `tools/build_command_rules.py` (rule generator) | Appendix H | Rules are self-tested by `tests/test_mcp.py`; the generator is not in the repo |
+| `tools/build_command_rules.py` (rule generator) | Appendix H | Rules are self-tested by `tests/test_textrules.py`; the generator is not in the repo |
 
 ## Not built: the design audit of 2026-11-16
 

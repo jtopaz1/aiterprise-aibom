@@ -28,7 +28,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from . import mcpb, modelfiles, sources
+from . import mcpb, modelfiles, sources, textrules
 from .model import (
     OWASP_SUPPLY_CHAIN,
     Component,
@@ -187,8 +187,6 @@ def _pth_findings(text: str, where: str, comp: Component | None) -> list[Finding
 
 
 def _setup_py_findings(text: str, where: str, comp: Component | None) -> list[Finding]:
-    from . import mcp
-
     out: list[Finding] = []
     if _EXEC_PAYLOAD.search(text):
         out.append(_finding(
@@ -196,19 +194,15 @@ def _setup_py_findings(text: str, where: str, comp: Component | None) -> list[Fi
             "critical", "malicious", 85, comp, where,
             "Do not install this sdist; building it runs the hidden payload with your permissions.",
             {"pattern": "exec of decoded data"}))
-    for hit in mcp.check_command(text):
-        out.append(_cmd_finding(hit, where, comp, "setup.py"))
-    return out
+    return out + _cmd_findings(text, where, comp, "setup.py")
 
 
-def _cmd_finding(hit: dict, where: str, comp: Component | None, script: str) -> Finding:
-    from .mcp import _CONF
-
-    verdict, conf = _CONF[hit["severity"]]
-    return _finding(f"ait.archive.cmd.{hit['id']}", f"Install-time {script} runs a dangerous command: "
-                    f"{hit['description']}", hit["severity"], verdict, conf, comp, where, hit["remediation"],
-                    {"category": hit["category"], "match": hit["match"], "script": script},
-                    discriminator=f"{where}:{script}:{hit['id']}")
+def _cmd_findings(text: str, where: str, comp: Component | None, script: str) -> list[Finding]:
+    """Command rules on a script that runs when the package is built or installed."""
+    return textrules.command_findings(text, "ait.archive", comp, Location(where),
+                                      title=f"Install-time {script} runs a dangerous command",
+                                      discriminator=lambda rule: f"{where}:{script}:{rule}",
+                                      detail={"script": script})
 
 
 def _model_members(arc: _Archive, members: list[_Member], arc_rel: str, budget: list[int]
@@ -301,12 +295,9 @@ def _analyze_open(arc: _Archive, path: Path, arc_rel: str) -> tuple[list[Compone
                             locations=[Location(arc_rel)], source="archive",
                             properties={"archive": arc_rel, "direct": True})
             scripts = doc.get("scripts") if isinstance(doc.get("scripts"), dict) else {}
-            from . import mcp
-
             for hook in NPM_LIFECYCLE:
                 if isinstance(scripts.get(hook), str):
-                    for hit in mcp.check_command(scripts[hook]):
-                        findings.append(_cmd_finding(hit, f"{arc_rel}!package/package.json", pkg, hook))
+                    findings += _cmd_findings(scripts[hook], f"{arc_rel}!package/package.json", pkg, hook)
     if pkg is not None:
         from . import taxonomy
 
