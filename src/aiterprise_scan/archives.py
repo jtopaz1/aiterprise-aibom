@@ -379,7 +379,9 @@ def analyze_unpacked_manifest(path: Path, root: Path) -> tuple[list[Component], 
     return [comp], fs
 
 
-def analyze(root: Path, files: list[Path], result) -> tuple[list[Component], list[Finding]]:
+def analyze(root: Path, files: list[Path], result, examined: list[tuple[str, Path]] | None = None
+            ) -> tuple[list[Component], list[Finding]]:
+    """`examined`, when given, collects the archives counted here as (root-relative path, file)."""
     comps: list[Component] = []
     finds: list[Finding] = []
     ex = result.examine("archives")
@@ -389,6 +391,8 @@ def analyze(root: Path, files: list[Path], result) -> tuple[list[Component], lis
             if c or f:
                 ex.checked += 1
                 ex.with_data += 1 if f else 0
+                if examined is not None:
+                    examined.append((rel_posix(path, root), path))
             comps += c
             finds += f
         elif path.name == "manifest.json":

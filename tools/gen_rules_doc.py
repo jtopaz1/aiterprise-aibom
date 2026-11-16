@@ -68,6 +68,12 @@ CODE_RULES: dict[str, list[tuple[str, str, str]]] = {
     "Policy": [
         ("ait.policy.denied-package", "high", "Matches `deny_packages` in the policy."),
     ],
+    # Not AIterprise rules: a provider's own result, shown under `ext.<provider>.*` and never
+    # measured or tuned here, so the FP column always reads "not measured".
+    "Third-party providers (your own key)": [
+        ("ext.virustotal.malicious", "high", "VirusTotal's result, not an AIterprise rule (`--byo virustotal=ENV_VAR`): 5 or more engines flag the file's SHA-256 as malicious. See [Third-party providers](providers.md)."),
+        ("ext.virustotal.suspicious", "medium", "VirusTotal's result: 1 to 4 engines flag the file as malicious, or engines flag it as suspicious only — a few engines can be a false positive."),
+    ],
 }
 
 INTRO = """\

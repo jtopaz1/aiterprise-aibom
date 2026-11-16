@@ -17,7 +17,7 @@ import sys
 from pathlib import Path, PureWindowsPath
 from urllib.parse import urlsplit
 
-from . import TOOL_NAME, cloudpolicy, credentials, secdb
+from . import TOOL_NAME, cloudpolicy, credentials, providers, secdb
 
 CLOUD_ENV = cloudpolicy.CLOUD_ENV
 
@@ -139,6 +139,10 @@ CONSENT = ("This sends the rule id and your notes to AIterprise to improve the r
 
 
 def cmd_report_fp(args: argparse.Namespace) -> int:
+    if providers.is_external(args.rule):
+        who = providers.label_of(providers.provider_of(args.rule) or "the provider")
+        return _err(f"{args.rule} is a {who} result, not an AIterprise rule: third-party provider results are "
+                    f"never sent to AIterprise. Report a false positive to {who} itself.")
     cred = credentials.load()
     if cred is None:
         return _err("not logged in (run `aiterprise-scan login`)")
@@ -236,4 +240,8 @@ def report_upload(send, doc: dict, project: str, scanned_at: str, cloud: str | N
         return _err(str(err))
     print(f"uploaded: {res.get('scan_id', '?')} · project {res.get('project', project)} · "
           f"{res.get('status', 'stored')} · {res.get('findings_new', 0)} new finding(s)", file=sys.stderr)
+    # the client took BYO provider results out before sending (FD22): say how many stayed here
+    for name, count in sorted(providers.without_external(doc)[1].items()):
+        print(f"note: {count} {providers.label_of(name)} finding(s) kept local, not uploaded "
+              "(third-party provider results are never sent to SecDB or a cloud)", file=sys.stderr)
     return 0

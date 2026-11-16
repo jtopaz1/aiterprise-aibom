@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import TOOL_NAME, __version__, account, bom, cloudpolicy, credentials, html_report, intel_malicious, report, secdb, vulns
 from . import policy as policy_mod
+from . import providers
 from .cache import Cache
 from .model import ScanResult
 from .scanner import ScanOptions, run_scan
@@ -76,6 +77,10 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--project", help="project name for --upload (default: the target directory name)")
     scan.add_argument("--cloud", help=f"AIterprise cloud URL for --upload (or set {account.CLOUD_ENV})")
     scan.add_argument("--save", action="store_true", help="keep this scan in the local history shown by `ui`")
+    scan.add_argument("--byo", action="append", default=[], metavar="PROVIDER=ENV_VAR",
+                      help="third-party enrichment with your own key (repeatable; providers: "
+                           f"{', '.join(sorted(providers.REGISTRY))}). ENV_VAR is the NAME of an environment "
+                           "variable holding the key; the key itself is never given on the command line")
     _add_output_args(scan)
     _add_gate_args(scan)
 
@@ -193,6 +198,12 @@ def _gate(result: ScanResult, pol: policy_mod.Policy, args: argparse.Namespace) 
 
 
 def cmd_scan(args: argparse.Namespace) -> int:
+    # --byo first: after `--byo virustotal KEY` (a space for the `=`) the key sits where the target
+    # goes, and the target check below would print it
+    try:
+        byo = providers.from_specs(args.byo)
+    except providers.ConfigError as err:
+        return _die(str(err))
     # `scan --bom FILE` judges that BOM only; a directory is walked only when named or when no
     # BOM is given (then the current directory)
     target: Path | None = args.target if args.target is not None else (None if args.bom else Path("."))
@@ -220,6 +231,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
         exclude=list(args.exclude),
         policy=pol,
         cache=Cache(),
+        providers=byo,
     )
     secdb_options(opts, args.no_secdb)
     if args.upload:
