@@ -14,7 +14,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from functools import lru_cache
 
-from . import data
+from . import data, sources
 from .model import (
     OWASP_SUPPLY_CHAIN,
     Component,
@@ -27,7 +27,7 @@ from .versions import range_contains, versions_equal
 
 SNAPSHOT_FILE = "malicious-versions.json.gz"  # schema ait-malicious-versions/2
 LEGACY_SNAPSHOT_FILE = "malicious-versions.json"  # schema /1, read when the v2 file is absent
-SOURCE = "ait-malicious"
+SOURCE = sources.AIT_MALICIOUS.name
 REMEDIATION = (
     "Remove the package; pin to a release that is not listed as affected; rotate every "
     "credential reachable from any environment where it was installed. Malicious records have "

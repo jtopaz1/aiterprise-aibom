@@ -27,7 +27,7 @@ from functools import lru_cache
 from typing import Any, Callable
 from urllib.parse import quote
 
-from . import data, net, taxonomy
+from . import data, net, sources, taxonomy
 from .cache import Cache
 from .model import OWASP_SUPPLY_CHAIN, Component, Evidence, Finding, ScanResult, normalize_name
 from .versions import versions_equal
@@ -295,7 +295,7 @@ def judge(components: list[Component], result: ScanResult, client: RegistryClien
             and c.source not in ("import",)]
     for comp in libs:
         findings += typosquat_findings(comp)
-    examined = result.examine("registry")
+    examined = result.examine(sources.REGISTRY.name)
     if client.offline:
         examined.skipped = "offline"
         return findings

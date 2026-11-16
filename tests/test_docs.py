@@ -30,6 +30,22 @@ class RulesReferenceTests(unittest.TestCase):
         for rid in json.loads((data / "model-rules.json").read_text(encoding="utf-8"))["rules"]:
             self.assertIn(f"`{rid}`", text)
 
+    def test_every_rule_id_written_in_the_code_is_in_the_rules_reference(self):
+        """The rules raised by code are listed by hand in tools/gen_rules_doc.py: a rule id that
+        appears in the scanner's source and not in the reference is a rule nobody documented."""
+        documented = set(re.findall(r"`(ait\.[a-z0-9.<>-]+)`", (ROOT / "docs" / "rules.md").read_text(encoding="utf-8")))
+        missing = []
+        for path in sorted((ROOT / "src" / "aiterprise_scan").rglob("*.py")):
+            for literal in re.findall(r"""f?["'](ait\.[a-z0-9.{}_<>-]+)["']""", path.read_text(encoding="utf-8")):
+                # an id built at run time (`ait.pkg.secdb.{verdict}`) matches any id of that shape
+                shape = re.sub(r"\\\{[^}]*\\\}", "[a-z0-9<>_-]+", re.escape(literal))
+                parts = re.sub(r"\{[^}]*\}", "x", literal).split(".")
+                if len(parts) < 3 or not all(parts):
+                    continue  # `ait.pkg.` and `ait.mcp` are family prefixes, not rule ids
+                if not any(re.fullmatch(shape, rule_id) for rule_id in documented):
+                    missing.append(f"{literal} ({path.name})")
+        self.assertEqual(missing, [])
+
     def test_measured_rates_are_shown_and_unmeasured_say_so(self):
         text = (ROOT / "docs" / "rules.md").read_text(encoding="utf-8")
         self.assertRegex(text, r"`ait\.secret\.private-key`[^\n]*3\.41 %")

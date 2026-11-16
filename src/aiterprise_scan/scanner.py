@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from . import ingest, intel_malicious, registry, vulns
+from . import ingest, intel_malicious, registry, sources, vulns
 from . import policy as policy_mod
 from . import walk as walker
 from .cache import Cache
@@ -70,17 +70,6 @@ class _Runner:
             self.result.examine(name).errors += 1
             self.result.notes.append(f"{name}: analyzer error ({type(err).__name__}: {err}); coverage incomplete")
             return default
-
-
-def _account(result: ScanResult, source: str, ctype: str | tuple[str, ...], comps: list[Component],
-             finds: list[Finding]) -> None:
-    """Record how many components of `ctype` a source judged and how many it had something to say about."""
-    ctypes = (ctype,) if isinstance(ctype, str) else ctype
-    judged = [c for c in comps if c.ctype in ctypes]
-    flagged = {f.component.key() for f in finds if f.component is not None}
-    ex = result.examine(source)
-    ex.checked += len(judged)
-    ex.with_data += sum(1 for c in judged if c.key() in flagged)
 
 
 def _dedupe(findings: list[Finding]) -> list[Finding]:
@@ -149,30 +138,10 @@ def _fold_imports(components: list[Component]) -> list[Component]:
 
 
 def _ingest_boms(paths: list[Path], root: Path | None, run: _Runner, explicit: bool) -> list[Component]:
-    out: list[Component] = []
-    for path in paths:
-        try:
-            kind, comps = ingest.ingest_file(path, root)
-        except ingest.BOMError as err:
-            if explicit:
-                run.errors.append("bom")
-                run.result.notes.append(f"bom: {err}")
-            continue
-        except OSError as err:
-            run.errors.append("bom")
-            run.result.notes.append(f"bom: cannot read {path}: {err}")
-            continue
-        ex = run.result.examine("bom-ingest")
-        ex.checked += 1
-        ex.with_data += 1 if comps else 0
-        unversioned = sum(1 for c in comps if c.ctype == "library" and not c.version)
-        if unversioned:
-            run.result.notes.append(
-                f"bom: {unversioned} of {len(comps)} components in {path.name} ({kind}) carry no version "
-                "and cannot be judged — inventory without versions is not a verdict"
-            )
-        out.extend(comps)
-    return out
+    comps, failed = ingest.ingest_boms(paths, root, run.result, explicit)
+    if failed:
+        run.errors.append("bom")  # the scan is incomplete: exit 2
+    return comps
 
 
 def run_scan(opts: ScanOptions) -> ScanResult:
@@ -214,40 +183,26 @@ def run_scan(opts: ScanOptions) -> ScanResult:
         from . import discover, licences, modelfiles, secrets, skills
 
         manifest_gaps: list[Finding] = []
-        components += run.step("discover", lambda: discover.discover_packages(root, files, manifest_gaps), [])
+        components += run.step(sources.DISCOVER.name,
+                               lambda: discover.discover_packages(root, files, manifest_gaps), [])
         findings += manifest_gaps
         if opts.imports:
-            components += run.step("imports", lambda: discover.discover_imports(root, files), [])
-
-        def models() -> tuple[list[Component], list[Finding]]:
-            comps, finds = [], []
-            ex = result.examine("model-files")
-            for path in files:
-                if not modelfiles.is_model_candidate(path):
-                    continue
-                ex.checked += 1
-                comp, fs = modelfiles.analyze_model_file(path, root)
-                if comp is not None:
-                    comps.append(comp)
-                    ex.with_data += 1 if fs else 0
-                finds.extend(fs)
-            return comps, finds
-
-        mc, mf = run.step("model-files", models, ([], []))
+            components += run.step(sources.IMPORTS.name, lambda: discover.discover_imports(root, files), [])
+        mc, mf = run.step(sources.MODEL_FILES.name, lambda: modelfiles.analyze(root, files, result), ([], []))
         components += mc
         findings += mf
-        components += run.step("model-refs", lambda: licences.discover_model_refs(root, files), [])
-        sc, sf = run.step("skills", lambda: skills.analyze_skills(root, files), ([], []))
-        _account(result, "skills", "agent-skill", sc, sf)
+        components += run.step(sources.MODEL_REFS.name, lambda: licences.discover_model_refs(root, files), [])
+        sc, sf = run.step(sources.SKILLS.name, lambda: skills.analyze_skills(root, files, result), ([], []))
         components += sc
         findings += sf
         from . import archives
 
-        ac, af = run.step("archives", lambda: archives.analyze(root, files, result, examined_archives), ([], []))
+        ac, af = run.step(sources.ARCHIVES.name,
+                          lambda: archives.analyze(root, files, result, examined_archives), ([], []))
         components += ac
         findings += af
         if opts.secrets:
-            findings += run.step("secrets", lambda: secrets.scan_secrets(root, files, result), [])
+            findings += run.step(sources.SECRETS.name, lambda: secrets.scan_secrets(root, files, result), [])
         bom_files = ingest.find_bom_files(files)
         if opts.target is not None and opts.target.is_file() and opts.target.suffix.lower() == ".json":
             bom_files = list(dict.fromkeys(bom_files + [opts.target.resolve()]))
@@ -260,24 +215,16 @@ def run_scan(opts: ScanOptions) -> ScanResult:
         from . import mcp
 
         if root is not None:
-            mc_, mf_ = run.step("mcp", lambda: mcp.analyze_mcp(root, files, include_machine=opts.agent_configs), ([], []))
+            mc_, mf_ = run.step(sources.MCP.name, lambda: mcp.analyze_mcp(
+                root, files, include_machine=opts.agent_configs, result=result), ([], []))
         else:
-            def machine_only() -> tuple[list[Component], list[Finding]]:
-                comps, finds = [], []
-                for path in mcp.machine_agent_config_paths():
-                    c, f = mcp.analyze_mcp_config(path, path.parent)
-                    comps += c
-                    finds += f
-                return comps, finds
-            mc_, mf_ = run.step("mcp", machine_only, ([], []))
-        _account(result, "mcp", "mcp-server", mc_, mf_)
+            mc_, mf_ = run.step(sources.MCP.name, lambda: mcp.analyze_machine_configs(result), ([], []))
         components += mc_
         findings += mf_
         if opts.mcp_only and root is not None:
             from . import skills
 
-            sc, sf = run.step("skills", lambda: skills.analyze_skills(root, files), ([], []))
-            _account(result, "skills", "agent-skill", sc, sf)
+            sc, sf = run.step(sources.SKILLS.name, lambda: skills.analyze_skills(root, files, result), ([], []))
             components += sc
             findings += sf
 
@@ -286,44 +233,41 @@ def run_scan(opts: ScanOptions) -> ScanResult:
     result.components = merged
 
     if opts.judge:
-        findings += run.step("ait-malicious", lambda: intel_malicious.judge(merged, result), [])
+        findings += run.step(sources.AIT_MALICIOUS.name, lambda: intel_malicious.judge(merged, result), [])
         client = vulns.OSVClient(cache=opts.cache or Cache(), offline=opts.offline)
-        findings += run.step("osv", lambda: vulns.judge(merged, result, client, opts.max_vulns), [])
+        findings += run.step(sources.OSV.name, lambda: vulns.judge(merged, result, client, opts.max_vulns), [])
         reg = registry.RegistryClient(cache=opts.cache or Cache(), offline=opts.offline or not opts.registry)
-        findings += run.step("registry", lambda: registry.judge(merged, result, reg, opts.registry_all), [])
+        findings += run.step(sources.REGISTRY.name,
+                             lambda: registry.judge(merged, result, reg, opts.registry_all), [])
         if not opts.registry and not opts.offline:
-            result.examine("registry").skipped = "disabled (--no-registry)"
+            result.examine(sources.REGISTRY.name).skipped = "disabled (--no-registry)"
         if opts.secdb is not None and not opts.offline:
             from . import secdb
 
-            findings += run.step("secdb", lambda: secdb.enrich(merged, result, opts.secdb), [])
+            findings += run.step(sources.SECDB.name, lambda: secdb.enrich(merged, result, opts.secdb), [])
         elif opts.secdb_skipped and not opts.offline:
-            result.examine("secdb").skipped = opts.secdb_skipped
+            result.examine(sources.SECDB.name).skipped = opts.secdb_skipped
         if not opts.mcp_only:
             from . import licences
 
-            lf = run.step(
-                "licences",
+            findings += run.step(
+                sources.LICENCES.name,
                 lambda: licences.judge_licences(
                     merged,
                     opts.policy.use_context,
                     allow=opts.policy.allow_model_licences or None,
                     deny=opts.policy.deny_model_licences or None,
+                    result=result,
                 ),
                 [],
             )
-            _account(result, "licences", licences.JUDGED_CTYPES, merged, lf)
-            findings += lf
-        if opts.policy.deny_packages:
-            denied = policy_mod.denied_package_findings(merged, opts.policy)
-            _account(result, "policy", "library", merged, denied)
-            findings += denied
+        findings += policy_mod.denied_package_findings(merged, opts.policy, result)
         if opts.providers:
             # last, so our own findings decide which files the lookup budget goes to; `--offline`
             # is handled inside (no call, and the report says so)
             from . import providers
 
-            findings += run.step("providers", lambda: providers.enrich(
+            findings += run.step(sources.PROVIDERS.name, lambda: providers.enrich(
                 opts.providers, merged, list(findings), result, examined_archives, opts.offline), [])
 
     for f in findings:

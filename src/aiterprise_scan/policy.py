@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import __version__, miniyaml
+from . import __version__, miniyaml, sources
 from . import purl as purls
 from .model import (
     OWASP_SUPPLY_CHAIN,
@@ -437,7 +437,17 @@ def load_baseline(path: Path) -> set[str]:
 # Application
 # --------------------------------------------------------------------------------------------
 
-def denied_package_findings(components: list[Component], policy: Policy) -> list[Finding]:
+def denied_package_findings(components: list[Component], policy: Policy, result=None) -> list[Finding]:
+    """A finding for each component the policy's deny list names. Given a `result`, records the
+    coverage; a policy without a deny list is not a consulted source."""
+    if not policy.deny_packages:
+        return []
+    out = _denied(components, policy)
+    sources.count(result, sources.POLICY, (c for c in components if c.ctype == "library"), out)
+    return out
+
+
+def _denied(components: list[Component], policy: Policy) -> list[Finding]:
     out: list[Finding] = []
     for comp in components:
         for pat in policy.deny_packages:

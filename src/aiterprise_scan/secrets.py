@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+from . import sources
 from .model import OWASP_SENSITIVE_INFO, Evidence, Finding, Location, ScanResult
 from .textio import TooLarge, read_text
 from .walk import rel_posix
@@ -273,7 +274,7 @@ def scan_secrets(root: Path, files: list[Path], result: ScanResult | None = None
         for match in find_secrets(text):
             findings.append(_finding(match, Location(rel_posix(path, root), match.line)))
     if result is not None:
-        ex = result.examine("secrets")
+        ex = result.examine(sources.SECRETS.name)
         ex.checked += checked
         ex.with_data += len({f.location.path for f in findings if f.location})
         if skipped:

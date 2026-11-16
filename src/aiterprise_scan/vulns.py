@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import lru_cache
 
-from . import data, net
+from . import data, net, sources
 from .cache import Cache
 from .intel_malicious import REMEDIATION as MAL_REMEDIATION
 from .model import (
@@ -278,7 +278,7 @@ def _range_state(ecosystem: str, events: list[dict], cur: tuple) -> bool | None:
 def _judge_from_subset(targets: dict[tuple, list[Component]], result: ScanResult, why: str
                        ) -> tuple[dict[tuple, list[str]], dict[str, dict], int]:
     """Advisory ids per query from the bundled subset; returns (ids, docs, packages outside it)."""
-    examined = result.examine("osv-subset")
+    examined = result.examine(sources.OSV_SUBSET.name)
     meta = vuln_subset()
     if not meta:
         examined.skipped = "advisory subset not built (tools/build_vuln_subset.py)"
@@ -395,7 +395,7 @@ def _primary(group: list[dict]) -> dict:
 def advisory_findings(comp: Component, docs: list[dict], result: ScanResult | None = None,
                       source: str = "osv") -> list[Finding]:
     findings: list[Finding] = []
-    kev_examined = result.examine("kev") if result is not None else None
+    kev_examined = result.examine(sources.KEV.name) if result is not None else None
     withdrawn_mal = [d for d in docs if d.get("withdrawn") and str(d.get("id", "")).startswith("MAL-")]
     for d in withdrawn_mal:
         # a live withdrawal is newer than any bundled snapshot: report it, never drop it (§4.3)
@@ -499,11 +499,11 @@ def judge(
     client: OSVClient,
     max_vulns: int | None = None,
 ) -> list[Finding]:
-    examined = result.examine("osv")
+    examined = result.examine(sources.OSV.name)
     if client.offline:
         examined.skipped = "offline (cache only)"
     if not kev_catalog().get("count"):
-        result.examine("kev").skipped = "KEV catalog not built (tools/build_kev.py)"
+        result.examine(sources.KEV.name).skipped = "KEV catalog not built (tools/build_kev.py)"
     targets: dict[tuple, list[Component]] = {}
     unversioned = 0
     for comp in components:
