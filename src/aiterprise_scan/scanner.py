@@ -72,9 +72,11 @@ class _Runner:
             return default
 
 
-def _account(result: ScanResult, source: str, ctype: str, comps: list[Component], finds: list[Finding]) -> None:
+def _account(result: ScanResult, source: str, ctype: str | tuple[str, ...], comps: list[Component],
+             finds: list[Finding]) -> None:
     """Record how many components of `ctype` a source judged and how many it had something to say about."""
-    judged = [c for c in comps if c.ctype == ctype]
+    ctypes = (ctype,) if isinstance(ctype, str) else ctype
+    judged = [c for c in comps if c.ctype in ctypes]
     flagged = {f.component.key() for f in finds if f.component is not None}
     ex = result.examine(source)
     ex.checked += len(judged)
@@ -300,7 +302,7 @@ def run_scan(opts: ScanOptions) -> ScanResult:
         if not opts.mcp_only:
             from . import licences
 
-            findings += run.step(
+            lf = run.step(
                 "licences",
                 lambda: licences.judge_licences(
                     merged,
@@ -310,7 +312,12 @@ def run_scan(opts: ScanOptions) -> ScanResult:
                 ),
                 [],
             )
-        findings += policy_mod.denied_package_findings(merged, opts.policy)
+            _account(result, "licences", licences.JUDGED_CTYPES, merged, lf)
+            findings += lf
+        if opts.policy.deny_packages:
+            denied = policy_mod.denied_package_findings(merged, opts.policy)
+            _account(result, "policy", "library", merged, denied)
+            findings += denied
         if opts.providers:
             # last, so our own findings decide which files the lookup budget goes to; `--offline`
             # is handled inside (no call, and the report says so)

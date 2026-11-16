@@ -40,7 +40,7 @@ DATA_FILE = "licence-verdicts.json"
 ADVISORY = "not legal advice"
 USE_CONTEXTS = ("commercial", "internal", "research", "non-profit")
 _COMMERCIAL_LIKE = {"commercial", "internal"}
-_JUDGED_CTYPES = ("model", "dataset", "model-file")
+JUDGED_CTYPES = ("model", "dataset", "model-file")  # the component types judge_licences looks at
 # Declared values that say "no usable licence id here" — fall back to name inference.
 _PLACEHOLDERS = {"", "other", "unknown", "none", "noassertion", "n/a", "na", "null", "unspecified"}
 
@@ -1055,7 +1055,7 @@ def judge_licences(
     ctx = _context(use_context)
     judge = _Judge(ctx, allow, deny)
     for comp in components:
-        if comp.ctype not in _JUDGED_CTYPES:
+        if comp.ctype not in JUDGED_CTYPES:
             continue
         raw = comp.licence.strip() if isinstance(comp.licence, str) and comp.licence.strip() else None
         name = _inference_name(comp)

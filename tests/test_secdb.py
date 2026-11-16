@@ -283,6 +283,34 @@ class CliTests(unittest.TestCase):
         self.assertEqual(self.run_cli(["logout"])[0], 0)
         self.assertIsNone(credentials.load())
 
+    def test_login_install_registers_without_a_credential_and_saves_the_token(self):
+        token = "ait_" + "c" * 40
+        fake = FakeSecDB({("POST", "/v1/installs"): {
+            "token": token, "install_id": "inst_9", "channel": "community-delayed",
+            "entitlements": {"lookups_per_minute": 10, "lookups_per_day": 2000}}})
+        with (mock.patch.object(secdb, "DEFAULT_TRANSPORT", fake),
+              mock.patch.object(secdb, "base_url", return_value="https://secdb.test")):
+            code, out, _ = self.run_cli(["login", "--install"])
+        self.assertEqual(code, 0, out)
+        method, path, body, headers = fake.calls[-1]
+        self.assertEqual((method, path), ("POST", "/v1/installs"))
+        self.assertNotIn("Authorization", headers)
+        self.assertEqual(set(body), {"app", "app_version", "platform"})  # nothing about the user or the machine
+        self.assertIn("inst_9", out)
+        self.assertIn("2000/day", out)
+        self.assertNotIn(token, out)
+        cred = credentials.load()
+        self.assertEqual((cred.kind, cred.secret), ("install_token", token))
+
+    def test_login_install_saves_nothing_when_the_answer_has_no_token(self):
+        fake = FakeSecDB({("POST", "/v1/installs"): {"install_id": "inst_9"}})
+        with (mock.patch.object(secdb, "DEFAULT_TRANSPORT", fake),
+              mock.patch.object(secdb, "base_url", return_value="https://secdb.test")):
+            code, _, err = self.run_cli(["login", "--install"])
+        self.assertEqual(code, 2)
+        self.assertIn("no install token", err)
+        self.assertIsNone(credentials.load())
+
     def test_upload_on_a_free_plan_explains_the_plan(self):
         report = Path(self.tmp.name) / "report.json"
         report.write_text(json.dumps({"target": "/w/demo", "started_at": "2026-11-14T00:00:00Z", "findings": []}),

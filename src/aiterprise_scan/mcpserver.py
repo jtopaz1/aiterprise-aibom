@@ -38,7 +38,8 @@ TOOL = {
             "path": {"type": "string", "description": "Directory or file to scan (absolute or relative)."},
             "offline": {"type": "boolean", "description": "Use bundled definitions only; no network.", "default": False},
             "fail_on": {"type": "string", "enum": ["critical", "high", "medium", "low", "info", "none"],
-                        "default": "high"},
+                        "description": "Lowest severity that fails the gate. Default: the project's policy, "
+                                       "else high."},
             "max_findings": {"type": "integer", "minimum": 1, "maximum": 200, "default": 25},
         },
         "required": ["path"],
@@ -58,16 +59,25 @@ def scan_tool(arguments: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     path = Path(str(arguments.get("path", "")))
     if not str(path) or not path.exists():
         return {"error": f"path does not exist: {path}"}, True
-    fail_on = str(arguments.get("fail_on", "high"))
-    if fail_on not in ("critical", "high", "medium", "low", "info", "none"):
+    fail_on = arguments.get("fail_on")
+    if fail_on is not None and fail_on not in ("critical", "high", "medium", "low", "info", "none"):
         return {"error": f"invalid fail_on {fail_on!r}"}, True
     max_findings = max(1, min(int(arguments.get("max_findings", 25) or 25), 200))
     root = path if path.is_dir() else path.parent
     pol_path = policy_mod.find_policy(root)
     pol = policy_mod.load_policy(pol_path) if pol_path else policy_mod.Policy()
-    pol.fail_on = policy_mod.threshold_set(fail_on)
+    # the same gate as the CLI and the UI: suppressions accepted in the UI, the policy's baseline,
+    # and the policy's own threshold unless the caller names one
+    policy_mod.merge_local_suppressions(pol, root)
+    if pol.errors:
+        return {"error": "policy: " + "; ".join(clean(e, 300) for e in pol.errors)}, True
+    if fail_on is not None:
+        pol.fail_on = policy_mod.threshold_set(fail_on)
     result: ScanResult = run_scan(ScanOptions(target=path, offline=bool(arguments.get("offline", False)), policy=pol))
-    failing = policy_mod.apply(result, pol)
+    baseline = None
+    if pol.baseline and (root / pol.baseline).is_file():
+        baseline = policy_mod.load_baseline(root / pol.baseline)
+    failing = policy_mod.apply(result, pol, baseline)
     if failing:
         result.exit_code = 1
     active = [f for f in sort_findings(result.findings) if f.status == "new"]
