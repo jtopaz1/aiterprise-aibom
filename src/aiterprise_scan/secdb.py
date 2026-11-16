@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 from urllib.parse import quote, urlencode
 
-from . import __version__, net
+from . import __version__, net, providers
 from .credentials import Credential
 from .model import (
     OWASP_SUPPLY_CHAIN,
@@ -158,6 +158,9 @@ class Client:
     # feedback and uploads ---------------------------------------------------------------
     def report(self, rtype: str, rule_id: str | None = None, notes: str | None = None,
                indicator: dict | None = None, release_id: str | None = None) -> dict:
+        if rule_id and providers.is_external(rule_id):
+            # a BYO provider's result is not ours to collect (design doc 13 FD22)
+            raise ValueError(f"{rule_id} is a third-party provider result; it is never sent to AIterprise")
         body: dict[str, Any] = {"type": rtype, "consent": {"basis": "user_consent",
                                                            "text_version": CONSENT_TEXT_VERSION,
                                                            "given_at": _now()}}
@@ -172,6 +175,8 @@ class Client:
         return self._call("POST", "/v1/reports", body, metered=True).data or {}
 
     def upload_scan(self, project: str, document: dict, scanned_at: str, fmt: str = "aiterprise-json") -> dict:
+        # the last hop before SecDB or a cloud: BYO provider results never pass it (FD22)
+        document, _kept_local = providers.without_external(document)
         body = {"project": project[:200], "scanner_version": __version__[:40], "scanned_at": scanned_at,
                 "format": fmt, "document": document}
         return self._call("POST", "/v1/aibom/scans", body, metered=True).data or {}

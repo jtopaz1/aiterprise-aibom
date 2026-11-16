@@ -34,16 +34,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Build wheel
+      - name: Build wheel and sdist (as the release does)
         run: |
           python -m pip install --quiet build==1.6.1
-          python -m build --wheel
-      - name: Install into a clean venv and check bundled data
+          python -m build
+      - name: Install the wheel into a clean venv and check bundled data
         run: |
           python -m venv /tmp/clean
           /tmp/clean/bin/pip install --quiet dist/*.whl
           /tmp/clean/bin/aiterprise-scan defs status
           /tmp/clean/bin/aiterprise-scan scan tests/golden/F01-malicious-requirements --offline --fail-on none
+      - name: The sdist installs too and carries the same bundled data
+        run: |
+          python -m venv /tmp/from-sdist
+          /tmp/from-sdist/bin/pip install --quiet dist/*.tar.gz
+          /tmp/from-sdist/bin/aiterprise-scan defs status
+          /tmp/from-sdist/bin/aiterprise-scan scan tests/golden/F01-malicious-requirements --offline --fail-on none
+      - name: SBOM of the scanner, produced by itself (the release attaches this file)
+        run: |
+          /tmp/clean/bin/aiterprise-scan bom . --out dist/aiterprise-scan-ci.cdx.json
+          python -c "import json; d = json.load(open('dist/aiterprise-scan-ci.cdx.json', encoding='utf-8')); assert d['bomFormat'] == 'CycloneDX', d; assert d['components'], 'no components'; print(d['specVersion'], len(d['components']), 'components')"
 
   self-scan:
     runs-on: ubuntu-latest
@@ -101,6 +111,76 @@ jobs:
         run: |
           python -m pip install --quiet -r docs/requirements.txt
           mkdocs build --strict --site-dir /tmp/site
+
+  action:
+    # the composite action in action/, used the way another repository would use it
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the killer-demo repository
+        run: python3 -c "import sys; sys.path.insert(0, 'tools'); import killer_demo, pathlib; killer_demo.build_repo(pathlib.Path('kd'))"
+      - name: Scan it with the action (five planted problems, so the gate must fail)
+        id: bad
+        continue-on-error: true
+        uses: ./action
+        with:
+          path: kd
+          offline: "true"
+          upload-sarif: "false"   # code scanning is not available to this private repository
+      - name: The gate failed with exit code 1 and the three reports were written
+        env:
+          OUTCOME: ${{ steps.bad.outcome }}
+          CODE: ${{ steps.bad.outputs.exit-code }}
+          DIR: ${{ steps.bad.outputs.report-dir }}
+        run: |
+          echo "outcome=$OUTCOME exit-code=$CODE report-dir=$DIR"
+          test "$OUTCOME" = "failure"
+          test "$CODE" = "1"
+          test -s "$DIR/report.txt"
+          python3 -c "import json, sys; s = json.load(open(sys.argv[1], encoding='utf-8')); assert s['version'] == '2.1.0', s['version']; n = sum(len(r['results']) for r in s['runs']); assert n > 0; print(n, 'SARIF results')" "$DIR/report.sarif"
+          python3 -c "import json, sys; b = json.load(open(sys.argv[1], encoding='utf-8')); assert b['bomFormat'] == 'CycloneDX', b; print('CycloneDX', b['specVersion'])" "$DIR/aibom.cdx.json"
+          rm -rf "$DIR"
+      - name: Scan a clean project with the action
+        id: clean
+        uses: ./action
+        with:
+          path: tests/golden/F02-clean-python
+          offline: "true"
+          upload-sarif: "false"
+      - name: The gate passed with exit code 0
+        env:
+          CODE: ${{ steps.clean.outputs.exit-code }}
+        run: test "$CODE" = "0"
+
+  pre-commit:
+    # the hook in .pre-commit-hooks.yaml, run by pre-commit itself against two throwaway repositories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pre-commit
+        run: python -m pip install --quiet pre-commit==4.3.0
+      - name: The hook blocks the killer-demo repository and passes a clean one
+        run: |
+          hook_repo="$GITHUB_WORKSPACE"
+          python -c "import sys; sys.path.insert(0, 'tools'); import killer_demo, pathlib; killer_demo.build_repo(pathlib.Path(sys.argv[1]))" "$RUNNER_TEMP/bad"
+          cp -r tests/golden/F02-clean-python "$RUNNER_TEMP/good"
+          for d in bad good; do
+            git -C "$RUNNER_TEMP/$d" init -q
+            git -C "$RUNNER_TEMP/$d" add -A
+            git -C "$RUNNER_TEMP/$d" -c user.name=ci -c user.email=ci@example.invalid commit -q -m "fixture"
+          done
+          set +e
+          (cd "$RUNNER_TEMP/bad" && pre-commit try-repo "$hook_repo" aiterprise-scan --all-files)
+          bad=$?
+          (cd "$RUNNER_TEMP/good" && pre-commit try-repo "$hook_repo" aiterprise-scan --all-files)
+          good=$?
+          set -e
+          echo "killer demo: exit $bad (want 1); clean project: exit $good (want 0)"
+          test "$bad" = "1"
+          test "$good" = "0"
 
   binaries:
     # the release's own binary build, minus publishing: Linux, macOS and Windows, each held to the killer demo

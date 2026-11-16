@@ -34,6 +34,7 @@ The full list with severities and measured rates: [Rules reference](rules.md).
 - [Command line](cli.md) — every command and flag.
 - [Policy and suppressions](policy.md) — gate the build, accept a risk with an expiry.
 - [SecDB](secdb.md) — optional signed-in judgements, plans and limits.
+- [Third-party providers](providers.md) — VirusTotal with your own key: what is sent, what never is.
 - [Definition bundles](bundles.md) — signed updates to the malicious-package and KEV data.
 - [Local web UI](ui.md) — history, diff, suppressions, account.
 - [Privacy](privacy.md) — exactly what leaves the machine, and when.

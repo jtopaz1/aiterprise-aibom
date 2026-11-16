@@ -148,6 +148,11 @@ def is_model_candidate(path: Path) -> bool:
     )
 
 
+def is_pickle_family(name: str, fmt: str | None) -> bool:
+    """True when a model file can carry pickle code: by its sniffed format, else by its extension."""
+    return fmt in _PICKLE_FORMATS or _effective_ext(name) in _PICKLE_EXTENSIONS
+
+
 def analyze_model_file(path: Path, root: Path) -> tuple[Component | None, list[Finding]]:
     """Inventory and judge one model file. Returns (None, []) when the file is not a model."""
     path = Path(path)

@@ -22,6 +22,7 @@ nav:
   - Policy and suppressions: policy.md
   - Rules reference: rules.md
   - SecDB: secdb.md
+  - Third-party providers: providers.md
   - Definition bundles: bundles.md
   - Local web UI: ui.md
   - Privacy: privacy.md

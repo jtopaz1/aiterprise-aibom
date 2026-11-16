@@ -61,6 +61,14 @@ def _lower(headers) -> dict[str, str]:
     return {k.lower(): v for k, v in (headers.items() if headers else [])}
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # the 3xx then surfaces as an HTTPError
+
+
+_NO_REDIRECT = urllib.request.build_opener(_NoRedirect)
+
+
 def _decode(raw: bytes, url: str) -> Any:
     if not raw:
         return None
@@ -81,11 +89,15 @@ def request(
     ok: tuple[int, ...] = (),
     retry_on: frozenset[int] | set[int] = RETRY_STATUSES,
     raw: bool = False,
+    follow_redirects: bool = True,
 ) -> Response:
     """One HTTP exchange with retries. Statuses in `ok` (e.g. 304) are returned, not raised.
 
     `raw=True` returns the body as bytes instead of decoding it as JSON (errors are still parsed
-    as problem documents)."""
+    as problem documents). `follow_redirects=False` raises on a 3xx instead of following it:
+    urllib re-sends every request header to the new location, so a caller whose key must reach
+    one host only turns redirects off."""
+    opener = urllib.request.urlopen if follow_redirects else _NO_REDIRECT.open
     data = None
     hdrs = {"User-Agent": USER_AGENT, "Accept": "application/json"}
     if body is not None:
@@ -97,7 +109,7 @@ def request(
     while True:
         req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with opener(req, timeout=timeout) as resp:
                 body_bytes = resp.read(MAX_RESPONSE_BYTES + 1)
                 if len(body_bytes) > MAX_RESPONSE_BYTES:
                     raise NetError(f"response from {url} exceeds {MAX_RESPONSE_BYTES} bytes")

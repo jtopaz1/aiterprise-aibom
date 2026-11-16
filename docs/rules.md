@@ -74,6 +74,13 @@ Severities are defaults; `aibom.policy.yaml` decides which ones fail the build (
 |---|---|---|---|
 | `ait.policy.denied-package` | high | not measured | Matches `deny_packages` in the policy. |
 
+## Third-party providers (your own key)
+
+| Rule | Severity | FP rate | Meaning |
+|---|---|---|---|
+| `ext.virustotal.malicious` | high | not measured | VirusTotal's result, not an AIterprise rule (`--byo virustotal=ENV_VAR`): 5 or more engines flag the file's SHA-256 as malicious. See [Third-party providers](providers.md). |
+| `ext.virustotal.suspicious` | medium | not measured | VirusTotal's result: 1 to 4 engines flag the file as malicious, or engines flag it as suspicious only — a few engines can be a false positive. |
+
 ## Model files
 
 Static analysis only — nothing is unpickled or loaded.

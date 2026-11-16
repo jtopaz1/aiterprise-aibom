@@ -121,6 +121,9 @@ jobs:
           provenance: mode=max
           sbom: true
       - uses: actions/attest-build-provenance@v2
+        # GitHub artifact attestations need a public repository (or Enterprise Cloud for a private one);
+        # the image still carries BuildKit provenance and an SBOM from the build step above
+        if: ${{ !github.event.repository.private }}
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/aiterprise-scan
           subject-digest: ${{ steps.push.outputs.digest }}

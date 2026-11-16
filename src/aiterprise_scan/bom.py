@@ -14,6 +14,7 @@ from typing import Any
 
 from . import TOOL_NAME, __version__
 from .model import Component, Finding, ScanResult
+from .providers import is_external
 
 SUPPORTED_SPEC_VERSIONS = ("1.6", "1.7")
 
@@ -210,7 +211,9 @@ def build(result: ScanResult, spec_version: str = "1.7", include_findings: bool 
     seen_refs: set[str] = set()
     per_comp: dict[tuple, list[Finding]] = {}
     for f in result.findings if include_findings else []:
-        if f.component is not None:
+        # a provider's result (`ext.*`) is listed under `vulnerabilities` with its own source; it
+        # is never written into our description of the component (licences, modelCard)
+        if f.component is not None and not is_external(f.rule_id):
             per_comp.setdefault(f.component.key(), []).append(f)
     for i, comp in enumerate(result.components):
         ref = _bom_ref(comp, i)
