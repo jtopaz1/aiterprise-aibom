@@ -209,8 +209,17 @@ class VirusTotalAdapterTests(unittest.TestCase):
 
     def test_five_or_more_malicious_engines_is_high(self):
         _, f = self.lookup(stats(malicious=5, undetected=65))
-        self.assertEqual((f.rule_id, f.severity, f.verdict), ("ext.virustotal.malicious", "high", "malicious"))
+        self.assertEqual((f.rule_id, f.severity), ("ext.virustotal.malicious", "high"))
         self.assertIn("5 of 70 engines", f.title)
+
+    def test_a_provider_never_sets_our_malicious_verdict(self):
+        # "malicious" is our own judgement (known-malicious data, protected from blanket suppression,
+        # shown as "Known-malicious"); a third party's count of engines is reported as suspicious
+        from aiterprise_scan import policy
+
+        _, f = self.lookup(stats(malicious=40, undetected=30))
+        self.assertEqual((f.severity, f.verdict), ("high", "suspicious"))
+        self.assertFalse(policy.is_protected(f))
 
     def test_one_to_four_malicious_engines_is_medium_and_says_it_can_be_a_false_positive(self):
         for n in (1, 4):

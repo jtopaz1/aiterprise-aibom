@@ -60,8 +60,9 @@ undetected):
 | no engine flags the file | none; counted as known to VirusTotal, never as clean | |
 | `404`, or no engine result yet | none; counted as unknown to VirusTotal | |
 
-Provider findings count towards `--fail-on` like any other finding. `ext.virustotal.malicious`
-has the verdict `malicious`, so only an expiring suppression that names its fingerprint accepts it
+Provider findings count towards `--fail-on` like any other finding. Their verdict is always
+`suspicious`, also for `ext.virustotal.malicious`: the verdict `malicious` is AIterprise's own
+judgement and is never set from a third party's result. They are suppressed like any other finding
 (see [Policy and suppressions](policy.md)). The fingerprint includes the file's SHA-256: new
 content at the same path is a new finding.
 

@@ -89,7 +89,8 @@ class VirusTotal(HashProvider):
         counts, sha = answer, str(target.sha256).lower()
         malicious, suspicious, total = counts["malicious"], counts["suspicious"], sum(counts.values())
         if malicious >= MALICIOUS_HIGH:
-            rule, severity, verdict, confidence = "malicious", "high", "malicious", 80
+            # the verdict stays "suspicious": "malicious" is our own judgement, never a third party's
+            rule, severity, verdict, confidence = "malicious", "high", "suspicious", 80
             said = f"{malicious} of {total} engines flag {target.name} as malicious"
         elif malicious:
             rule, severity, verdict, confidence = "suspicious", "medium", "suspicious", 40
