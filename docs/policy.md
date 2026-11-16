@@ -32,6 +32,27 @@ baseline: .aiterprise/baseline.json
 | `suppressions` | accept a specific finding until a date, with a reason |
 | `baseline` | findings recorded here do not fail the gate |
 
+## Where the gate looks
+
+The policy, the suppressions and the baseline belong to the scanned project:
+
+| Scan | Directory that is read |
+|---|---|
+| a directory | that directory |
+| a single file | the directory that holds it |
+| `--bom FILE` alone | the current directory |
+| `mcp --agent-configs` without `--path` | none: no policy is looked up unless `--policy` names one |
+
+`.aiterprise/suppressions.json` and the `baseline:` path of a policy are read from that directory, also
+when `--policy` names a policy file kept somewhere else. `--baseline FILE` names a baseline directly.
+
+A policy or a suppressions file that does not load stops the scan with exit code 2; nothing is
+scanned. A key the scanner does not know is not an error: it is ignored and listed in the notes of
+the report.
+
+The command line, the [web UI](ui.md) and the MCP tool apply the same gate, so a project passes or
+fails the same way through each of them.
+
 ## Org policy from the cloud
 
 An AIterprise cloud can hold one policy for the whole organisation. Each project pulls it:

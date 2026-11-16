@@ -6,10 +6,9 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import TOOL_NAME, __version__, account, bom, cloudpolicy, credentials, html_report, intel_malicious, report, secdb, vulns
+from . import TOOL_NAME, __version__, account, bom, cloudpolicy, credentials, gate, html_report, intel_malicious, report, vulns
 from . import policy as policy_mod
 from . import providers
-from .cache import Cache
 from .model import ScanResult
 from .scanner import ScanOptions, run_scan
 
@@ -130,21 +129,15 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def _load_policy(args: argparse.Namespace, root: Path | None) -> policy_mod.Policy:
-    path = args.policy or (policy_mod.find_policy(root) if root is not None else None)
-    pol = policy_mod.load_policy(path) if path else policy_mod.Policy()
-    if pol.errors:
-        raise SystemExit(_die(f"policy {path}: " + "; ".join(pol.errors)))
-    for w in pol.warnings:
-        print(f"warning: policy {path}: {w}", file=sys.stderr)
-    if getattr(args, "snyk", None):
-        pol.suppressions.extend(policy_mod.load_snyk(args.snyk))
-    policy_mod.merge_local_suppressions(pol, root)
-    if pol.errors:
-        raise SystemExit(_die("; ".join(pol.errors)))
-    if args.fail_on:
-        pol.fail_on = policy_mod.threshold_set(args.fail_on)
-    return pol
+def _gated_scan(opts: ScanOptions, args: argparse.Namespace, skip_secdb: str | None = None) -> ScanResult:
+    """The gated scan with this command's gate flags; `--write-baseline` writes what it found."""
+    result = gate.gated_scan(opts, gate.GateOverrides(
+        policy_file=args.policy, snyk_file=args.snyk, fail_on=args.fail_on, baseline_file=args.baseline,
+        skip_secdb=skip_secdb))
+    if args.write_baseline:
+        n = policy_mod.write_baseline(result, args.write_baseline)
+        print(f"baseline written to {args.write_baseline} ({n} findings)", file=sys.stderr)
+    return result
 
 
 def _die(msg: str) -> int:
@@ -182,21 +175,6 @@ def _emit(result: ScanResult, args: argparse.Namespace) -> None:
         print(f"AI-BOM written to {args.emit_bom}", file=sys.stderr)
 
 
-def _gate(result: ScanResult, pol: policy_mod.Policy, args: argparse.Namespace) -> int:
-    baseline_path = args.baseline
-    if baseline_path is None and pol.baseline and result.target and Path(result.target).is_dir():
-        candidate = Path(result.target) / pol.baseline
-        baseline_path = candidate if candidate.is_file() else None
-    baseline = policy_mod.load_baseline(baseline_path) if baseline_path else None
-    failing = policy_mod.apply(result, pol, baseline)
-    if args.write_baseline:
-        n = policy_mod.write_baseline(result, args.write_baseline)
-        print(f"baseline written to {args.write_baseline} ({n} findings)", file=sys.stderr)
-    if failing:
-        result.exit_code = 1
-    return result.exit_code
-
-
 def cmd_scan(args: argparse.Namespace) -> int:
     # --byo first: after `--byo virustotal KEY` (a space for the `=`) the key sits where the target
     # goes, and the target check below would print it
@@ -212,11 +190,6 @@ def cmd_scan(args: argparse.Namespace) -> int:
     for b in args.bom:
         if not b.is_file():
             return _die(f"BOM file does not exist: {b}")
-    if target is None:
-        policy_root = Path(".")
-    else:
-        policy_root = target if target.is_dir() else target.parent
-    pol = _load_policy(args, policy_root)
     opts = ScanOptions(
         target=target,
         boms=list(args.bom),
@@ -229,11 +202,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
         registry=not args.no_registry,
         registry_all=args.registry_all,
         exclude=list(args.exclude),
-        policy=pol,
-        cache=Cache(),
         providers=byo,
     )
-    secdb_options(opts, args.no_secdb)
     if args.upload:
         if args.offline:
             return _die("--offline sends nothing, so it cannot --upload; scan offline, then "
@@ -244,8 +214,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
             return _die(str(err))
         if credentials.load() is None:
             return _die("--upload needs a SecDB API key (run `aiterprise-scan login`)")
-    result = run_scan(opts)
-    code = _gate(result, pol, args)
+    result = _gated_scan(opts, args, skip_secdb="disabled (--no-secdb)" if args.no_secdb else None)
+    code = result.exit_code
     _emit(result, args)
     if args.save:
         from . import history
@@ -259,17 +229,6 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return code
 
 
-def secdb_options(opts: ScanOptions, disabled: bool) -> None:
-    if disabled:
-        opts.secdb_skipped = "disabled (--no-secdb)"
-        return
-    cred = credentials.load()
-    if cred is None:
-        opts.secdb_skipped = "not logged in (aiterprise-scan login)"
-    else:
-        opts.secdb = secdb.Client(cred)
-
-
 def cmd_mcp(args: argparse.Namespace) -> int:
     if args.action == "serve":
         from . import mcpserver
@@ -279,20 +238,10 @@ def cmd_mcp(args: argparse.Namespace) -> int:
         args.path = Path(".")
     if args.path is not None and not args.path.is_dir():
         return _die(f"not a directory: {args.path}")
-    pol = _load_policy(args, args.path)
-    opts = ScanOptions(
-        target=args.path,
-        offline=args.offline,
-        agent_configs=args.agent_configs,
-        mcp_only=True,
-        policy=pol,
-        cache=Cache(),
-    )
-    secdb_options(opts, False)
-    result = run_scan(opts)
-    code = _gate(result, pol, args)
+    result = _gated_scan(ScanOptions(target=args.path, offline=args.offline, agent_configs=args.agent_configs,
+                                     mcp_only=True), args)
     _emit(result, args)
-    return code
+    return result.exit_code
 
 
 def cmd_bom(args: argparse.Namespace) -> int:
@@ -422,7 +371,7 @@ def main(argv: list[str] | None = None) -> int:
             return ui.serve(args.port, open_browser=not args.no_browser)
     except SystemExit as exc:
         return int(exc.code) if isinstance(exc.code, int) else 2
-    except (FileNotFoundError, PermissionError) as err:
+    except (gate.PolicyError, FileNotFoundError, PermissionError) as err:
         return _die(str(err))
     except KeyboardInterrupt:
         return 2
