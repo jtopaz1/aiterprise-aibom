@@ -18,8 +18,8 @@ warm and the per-file results the first scan kept (`scancache`). `--check` fails
 first scan takes longer than SECONDS, a planted problem is missed, or a scan does not exit 1;
 `--check-warm` when the second takes longer than its SECONDS.
 
-`--online` scans without `--offline`, so each scan also asks OSV and the package registries, and the
-check also fails unless every report shows that both answered (`killer_demo.mode_problems`). Neither
+`--online` scans without `--offline`, so each scan also asks OSV, the package registries and deps.dev,
+and the check also fails unless every report shows that all three answered (`killer_demo.mode_problems`). Neither
 mode uses SecDB: the scans get no API key and a home directory of their own, so no stored login.
 """
 
@@ -206,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
             tmp.cleanup()
     print(f"tree: {res['files']:,} files, {res['bytes'] / 1e6:.1f} MB "
           f"(Python {res['python']} standard-library sources; {res['platform']})")
-    print("mode: " + ("online (OSV and the package registries asked; no SecDB)" if args.online else "offline"))
+    print("mode: " + ("online (OSV, the package registries and deps.dev asked; no SecDB)" if args.online else "offline"))
     print(f"first scan (cold):  {res['seconds'][0]:6.1f} s, exit {res['exit'][0]}")
     print(f"second scan (warm): {res['seconds'][1]:6.1f} s, exit {res['exit'][1]}")
     print(f"planted problems found: {len(killer_demo.EXPECT) - len(res['missed'])}/{len(killer_demo.EXPECT)}")

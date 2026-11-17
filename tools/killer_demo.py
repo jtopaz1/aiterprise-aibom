@@ -60,7 +60,7 @@ EXPECT = {
 
 
 # sources only an online scan consults (SecDB needs a key, so it is not required here)
-LIVE_SOURCES = ("osv", "registry")
+LIVE_SOURCES = ("osv", "registry", "deps.dev")
 
 
 def mode_problems(report: dict, online: bool) -> list[str]:
