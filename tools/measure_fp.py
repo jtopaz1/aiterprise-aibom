@@ -57,8 +57,12 @@ FAMILIES = {  # rule prefix -> examined sources that give it a chance
     "ait.pkg.typosquat": ("registry",),
     "ait.pkg.dormant-release": ("registry",),
     "ait.pkg.version-jump": ("registry",),
+    "ait.pkg.provenance-dropped": ("registry",),
+    "ait.pkg.publisher-change": ("registry",),
 }
-NAME_FAMILIES = ("ait.pkg.typosquat", "ait.pkg.dormant-release", "ait.pkg.version-jump")
+NAME_FAMILIES = ("ait.pkg.typosquat", "ait.pkg.dormant-release", "ait.pkg.version-jump",
+                 "ait.pkg.provenance-dropped", "ait.pkg.publisher-change")
+PUBLISHER_RULES = ("ait.pkg.provenance-dropped", "ait.pkg.publisher-change")
 SKIP_DIRS = {"__pycache__", "bin", "Scripts", "include"}
 METHOD = ("fp_rate_measured = clean projects where the rule fired / clean projects whose scan examined something "
           "that rule family judges; written only with at least min-samples such projects (tools/measure_fp.py)")
@@ -156,17 +160,26 @@ def measure_names(names: dict[str, list[str]], client=None) -> dict:
                 facts = registry._lookup(client, comp)
             except net.NetError:
                 continue
-            times = facts.version_times if facts else {}
-            if not times:
-                continue
             now = client.now()
-            newest = max(times, key=times.__getitem__)
-            if (now - times[newest]).days > registry.RECENT_RELEASE_DAYS \
-                    or not any(t < times[newest] for t in times.values()):
+            # a chance is a release the rules judge: from the last 30 days, with an earlier release
+            version = registry._release_in_use(comp, facts, now) if facts else None
+            if version is None:
                 continue
-            chances["ait.pkg.dormant-release"] += 1
-            chances["ait.pkg.version-jump"] += 1
-            for f in registry.release_findings(comp, facts, now):
+            times = facts.version_times
+            if version in times and any(t < times[version] for t in times.values()):
+                chances["ait.pkg.dormant-release"] += 1
+                chances["ait.pkg.version-jump"] += 1
+                for f in registry.release_findings(comp, facts, now):
+                    flagged[f.rule_id] += 1
+            if registry._previous(eco, version, facts.versions or list(times)) is None:
+                continue
+            try:
+                published = registry.publisher_findings(comp, facts, client, now)
+            except net.NetError:
+                continue
+            for rule in PUBLISHER_RULES:
+                chances[rule] += 1
+            for f in published:
                 flagged[f.rule_id] += 1
     hits = {rule: n for rule, n in flagged.items() if n}
     return {"projects": total, "unit": "package names", "chances": dict(chances), "flagged_family": hits,

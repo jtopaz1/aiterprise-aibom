@@ -10,6 +10,22 @@
       "flagged": 0,
       "scope": "family"
     },
+    "ait.pkg.provenance-dropped": {
+      "corpus": "names of packages installed on one developer machine, 2026-11 (1017 package names)",
+      "evaluated_at": "2026-11-17",
+      "samples": 317,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "family"
+    },
+    "ait.pkg.publisher-change": {
+      "corpus": "names of packages installed on one developer machine, 2026-11 (1017 package names)",
+      "evaluated_at": "2026-11-17",
+      "samples": 317,
+      "fp_rate_measured": 0.0063,
+      "flagged": 2,
+      "scope": "rule"
+    },
     "ait.pkg.typosquat": {
       "corpus": "names of packages installed on one developer machine, 2026-11 (1017 package names)",
       "evaluated_at": "2026-11-17",
