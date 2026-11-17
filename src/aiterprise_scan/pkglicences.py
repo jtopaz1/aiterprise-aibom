@@ -8,8 +8,9 @@ they are joined with AND. A licence deps.dev cannot map to SPDX comes back as "n
 BOM leaves it empty rather than record a word that names no licence, and a note lists those packages.
 
 The licence lands on the component, so the CycloneDX BOM (`licenses`, acknowledged as declared), the
-JSON report and the HTML report show it. No verdict is drawn from it here: model and dataset licences
-are judged in `licences`.
+JSON report and the HTML report show it. No verdict is drawn from it here: the policy's
+`allow_package_licences` / `deny_package_licences` judge it (`policy.package_policy_findings`), and
+model and dataset licences are judged in `licences`.
 
 Privacy: like the registry lookups, a deps.dev lookup is a GET that shows deps.dev a public package's
 name and version, nothing else. `--offline` and `--no-registry` send nothing. Packages installed
