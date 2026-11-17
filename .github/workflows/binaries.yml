@@ -1,6 +1,7 @@
 name: binaries
 
-# Single-file PyInstaller binaries for Linux, macOS and Windows, each held to the killer demo.
+# Single-file PyInstaller binaries for Linux, macOS and Windows on x86-64 and arm64, each built
+# natively on its own runner and held to the killer demo.
 # Called by ci.yml on every push/PR (nothing is published) and by release.yml on a tag.
 on:
   workflow_call:
@@ -22,9 +23,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Windows, macOS and Linux, each on x86-64 and arm64 (design doc 13 §4.6, launch gate 10.6 #5)
           - { os: ubuntu-latest, name: linux-x86_64, exe: "" }
+          - { os: ubuntu-24.04-arm, name: linux-arm64, exe: "" }
+          - { os: macos-15-intel, name: macos-x86_64, exe: "" }
           - { os: macos-latest, name: macos-arm64, exe: "" }
           - { os: windows-latest, name: windows-x86_64, exe: ".exe" }
+          - { os: windows-11-arm, name: windows-arm64, exe: ".exe" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
