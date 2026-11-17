@@ -9,6 +9,7 @@ from pathlib import Path
 from . import TOOL_NAME, __version__, account, bom, bundles, cloudpolicy, credentials, gate, html_report, intel_malicious, report, reportdoc, vulns
 from . import policy as policy_mod
 from . import providers
+from .cache import default_dir as default_cache_dir
 from .model import ScanResult
 from .scanner import ScanOptions, run_scan
 
@@ -103,6 +104,9 @@ def build_parser() -> argparse.ArgumentParser:
                       help="third-party enrichment with your own key (repeatable; providers: "
                            f"{', '.join(sorted(providers.REGISTRY))}). ENV_VAR is the NAME of an environment "
                            "variable holding the key; the key itself is never given on the command line")
+    scan.add_argument("--no-cache", action="store_true",
+                      help="do not reuse or keep per-file results between scans (kept in "
+                           "AITERPRISE_CACHE_DIR/scan, default ~/.aiterprise/cache/scan)")
     _add_defs_arg(scan)
     _add_output_args(scan)
     _add_gate_args(scan)
@@ -122,6 +126,7 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--out", type=Path, help="output file (default stdout)")
     b.add_argument("--cdx-version", choices=bom.SUPPORTED_SPEC_VERSIONS, default="1.7")
     b.add_argument("--all-files", action="store_true")
+    b.add_argument("--no-cache", action="store_true", help="do not reuse or keep per-file results between scans")
 
     pol = sub.add_parser("policy", help="policy file tools")
     pol_sub = pol.add_subparsers(dest="policy_command")
@@ -203,6 +208,11 @@ def _emit(result: ScanResult, args: argparse.Namespace) -> None:
         print(f"AI-BOM written to {args.emit_bom}", file=sys.stderr)
 
 
+def _file_cache(args: argparse.Namespace) -> Path | None:
+    """Where a scan keeps per-file results for the next one (`scancache`); None with --no-cache."""
+    return None if args.no_cache else default_cache_dir() / "scan"
+
+
 def cmd_scan(args: argparse.Namespace) -> int:
     # --byo first: after `--byo virustotal KEY` (a space for the `=`) the key sits where the target
     # goes, and the target check below would print it
@@ -234,6 +244,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
         registry_all=args.registry_all,
         exclude=list(args.exclude),
         providers=byo,
+        file_cache=_file_cache(args),
     )
     if args.upload:
         if args.offline:
@@ -282,7 +293,7 @@ def cmd_bom(args: argparse.Namespace) -> int:
     if not args.target.exists():
         return _die(f"target does not exist: {args.target}")
     result = run_scan(ScanOptions(target=args.target, all_files=args.all_files, judge=False, secrets=False,
-                                  offline=True))
+                                  offline=True, file_cache=_file_cache(args)))
     text = bom.dumps(result, args.cdx_version, include_findings=False)
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

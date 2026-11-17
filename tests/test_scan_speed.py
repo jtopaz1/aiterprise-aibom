@@ -18,7 +18,7 @@ from collections import Counter
 from pathlib import Path
 from unittest import mock
 
-from aiterprise_scan import discover, modelfiles, scanner, secrets, textio
+from aiterprise_scan import discover, modelfiles, scanner, secrets, textio, walk
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "aiterprise_scan"
 
@@ -450,6 +450,63 @@ class ModelDigestTests(unittest.TestCase):
     def test_a_read_error_mid_file_is_raised_not_hashed_over(self):
         with self.assertRaises(OSError):
             modelfiles._digests(_FailingReader(b"x" * (3 * modelfiles._DIGEST_CHUNK)))  # fails on the threaded path
+
+
+def _reference_rel_posix(path: Path, root: Path) -> str:
+    """walk.rel_posix as it was before the string shortcut."""
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+class RelPathTests(unittest.TestCase):
+    """Every analyzer names each file by its root-relative path: about six calls per file."""
+
+    def _same(self, pairs):
+        for path, root in pairs:
+            with self.subTest(path=str(path), root=str(root)):
+                self.assertEqual(walk.rel_posix(path, root), _reference_rel_posix(path, root))
+
+    def test_the_same_path_as_relative_to_gives(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sep = os.sep
+            self._same([
+                (root / "a.py", root),
+                (root / "pkg" / "sub" / "m.py", root),
+                (root / ".github" / "workflows" / "ci.yml", root),
+                (root / "..odd" / "x.txt", root),
+                (root, root),  # the root itself: "."
+                (Path(tmp + "x") / "y.py", root),  # a sibling whose name starts with the root's
+                (Path(tmp + sep + sep + "z.py"), root),
+                (root.parent / "elsewhere.py", root),
+            ])
+
+    def test_relative_roots_and_the_filesystem_root(self):
+        anchor = Path(Path.cwd().anchor)  # "/" or "C:\\"
+        self._same([
+            (Path("a/b.py"), Path(".")),
+            (Path(".github/ci.yml"), Path(".")),
+            (Path("..odd/x"), Path(".")),
+            (Path("src/a/b.py"), Path("src")),
+            (Path("srcx/a.py"), Path("src")),
+            (Path("src"), Path("src")),
+            (anchor / "usr" / "x.py", anchor),
+            (anchor, anchor),
+        ])
+
+    @unittest.skipUnless(os.name == "nt", "Windows paths")
+    def test_windows_case_and_separators(self):
+        self._same([
+            (Path("C:/Work/Repo/a/b.py"), Path("c:/work/repo")),  # relative_to ignores case here
+            (Path("C:/Work/Repo/a/b.py"), Path("C:/Work/Repo")),
+            (Path("D:/Work/Repo/a.py"), Path("C:/Work/Repo")),
+        ])
+
+    @unittest.skipIf(os.name == "nt", "POSIX file names")
+    def test_a_backslash_is_part_of_a_posix_file_name(self):
+        self._same([(Path("/srv/repo/odd\\name.py"), Path("/srv/repo"))])
 
 
 if __name__ == "__main__":
