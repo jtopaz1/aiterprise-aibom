@@ -9,9 +9,17 @@ Online, each *direct* PyPI/npm dependency is looked up on its public registry:
 - first published < 72 h ago → `ait.pkg.new-package` (medium); most malicious packages are classified
   within about three days, so a brand-new dependency has had no scrutiny yet;
 - the pinned version is not on the registry → `ait.pkg.version-missing` (medium); registries remove
-  malicious releases.
+  malicious releases;
+- the release in use (the pinned one, or the newest when nothing is pinned) is under 30 days old and
+  came after two years without a release → `ait.pkg.dormant-release` (medium), or its major version
+  is 10 or more above every earlier release → `ait.pkg.version-jump` (medium). Both need publish
+  times: every PyPI package has them; on npm only packages with at most 5 versions are read in full.
 
-Offline and online, `ait.pkg.typosquat` (medium) compares names with widely used and AI packages.
+Offline and online, `ait.pkg.typosquat` (medium) compares names with widely used and AI packages
+(design doc 13 C16) and names the kind of slip: separators, lookalike letters (`rn` for `m`), a
+swapped, missing, doubled or adjacent-key letter (US QWERTY). A 4-letter popular name is one
+keystroke from many real packages (`xlsx`/`clsx`, `blob`/`glob`) and from many squats, so such a
+name is flagged only online, when the registry shows it was first published under a year ago.
 
 Privacy: registry lookups are GET requests, so the registry sees the package *name* (never paths,
 versions of other packages or source). `--offline` and `--no-registry` send nothing. Transitive
@@ -175,6 +183,56 @@ def _key(name: str, eco: str) -> str:
     return normalize_name(name, eco) if eco == "pypi" else name.lower()
 
 
+_KEY_ROWS = ("1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm")
+_KEY_POS = {ch: (r, c) for r, row in enumerate(_KEY_ROWS) for c, ch in enumerate(row)}
+# letter groups that read alike in a package listing; the left one is what a squatter types
+HOMOGLYPHS = (("rn", "m"), ("vv", "w"), ("cl", "d"), ("0", "o"), ("1", "l"))
+SHORT = 4  # popular names this long are judged only with registry facts (see ShortNameTests)
+SHORT_LOOKALIKE_DAYS = 365
+
+
+def _adjacent(a: str, b: str) -> bool:
+    """Neighbouring keys on a US QWERTY keyboard (the same row, or the row above or below)."""
+    if a == b or a not in _KEY_POS or b not in _KEY_POS:
+        return False
+    (r1, c1), (r2, c2) = _KEY_POS[a], _KEY_POS[b]
+    return abs(r1 - r2) <= 1 and abs(c1 - c2) <= 1
+
+
+def typo_kind(key: str, target: str) -> str:
+    """How `key` differs from `target`: the kind of slip, for the finding's title and confidence."""
+    if len(key) == len(target):
+        diff = [i for i, (a, b) in enumerate(zip(key, target)) if a != b]
+        if len(diff) == 1:
+            return "adjacent-key" if _adjacent(key[diff[0]], target[diff[0]]) else "substitution"
+        if len(diff) == 2 and diff[1] == diff[0] + 1 and key[diff[0]] == target[diff[1]] \
+                and key[diff[1]] == target[diff[0]]:
+            return "transposition"
+    elif len(key) + 1 == len(target) and any(key == target[:i] + target[i + 1:] for i in range(len(target))):
+        return "omission"
+    elif len(key) == len(target) + 1:
+        for i in range(len(key)):
+            if key[:i] + key[i + 1:] == target:
+                return "repetition" if (i and key[i] == key[i - 1]) or key[i:i + 2] == key[i] * 2 else "insertion"
+    return "two edits"
+
+
+@dataclass(frozen=True)
+class Lookalike:
+    target: str   # the popular package's display name
+    kind: str     # separator, homoglyph, transposition, adjacent-key, omission, repetition, insertion, ...
+    short: bool   # the target is a 4-letter name: judged only with registry facts
+
+
+_CONFIDENCE = {"homoglyph": 75, "separator": 70, "transposition": 65, "adjacent-key": 65, "omission": 65,
+               "repetition": 65, "insertion": 55, "substitution": 55, "two edits": 50}
+_PHRASE = {"homoglyph": "spelled with lookalike letters like", "separator": "the same name, with other separators, as",
+           "transposition": "two swapped letters from", "adjacent-key": "one adjacent-key slip from",
+           "omission": "one missing letter from", "repetition": "one doubled letter from",
+           "insertion": "one extra letter from", "substitution": "one changed letter from",
+           "two edits": "two edits from"}
+
+
 def _damerau(a: str, b: str, cap: int = 3) -> int:
     if abs(len(a) - len(b)) > cap:
         return cap + 1
@@ -191,23 +249,41 @@ def _damerau(a: str, b: str, cap: int = 3) -> int:
     return prev[-1]
 
 
-def looks_like(name: str, eco: str) -> str | None:
-    """The popular package this name imitates, or None."""
+def _flat(key: str) -> str:
+    return key.replace("-", "").replace("_", "").replace(".", "")
+
+
+def lookalike(name: str, eco: str) -> Lookalike | None:
+    """The popular package this name imitates and how, or None."""
     popular, legit = _popular()
     targets = popular.get(eco, {})
     key = _key(name, eco)
-    if key in targets or key in legit.get(eco, set()) or len(key) < 5:
+    if key in targets or key in legit.get(eco, set()) or len(key) < SHORT:
         return None
-    flat = key.replace("-", "").replace("_", "").replace(".", "")
+    if len(key) == SHORT:
+        for tkey, display in targets.items():
+            if len(tkey) == SHORT and (kind := typo_kind(key, tkey)) in ("adjacent-key", "transposition"):
+                return Lookalike(display, kind, True)
+        return None
+    flat = _flat(key)
     for tkey, display in targets.items():
-        if len(tkey) < 5:
+        if len(tkey) <= SHORT:
             continue
-        if flat == tkey.replace("-", "").replace("_", "").replace(".", ""):
-            return display  # separator games: open-ai / openai, py-yaml / pyyaml
+        if flat == _flat(tkey):
+            return Lookalike(display, "separator", False)  # open-ai / openai, py-yaml / pyyaml
         limit = 2 if len(tkey) >= 10 else 1
         if _damerau(key, tkey, limit) <= limit:
-            return display
+            return Lookalike(display, typo_kind(key, tkey), False)
+    for seen, meant in HOMOGLYPHS:  # nurnpy / numpy: two edits, so no distance limit above catches it
+        if seen in key and (display := targets.get(key.replace(seen, meant))) and len(key.replace(seen, meant)) > SHORT:
+            return Lookalike(display, "homoglyph", False)
     return None
+
+
+def looks_like(name: str, eco: str) -> str | None:
+    """The popular package this name imitates, or None (short names included)."""
+    hit = lookalike(name, eco)
+    return hit.target if hit else None
 
 
 # --------------------------------------------------------------------------------------------
@@ -262,18 +338,93 @@ def facts_findings(comp: Component, facts: Facts | None, now: dt.datetime) -> li
             f"{comp.name} {comp.version} is not on {reg}; registries remove malicious and broken releases",
             "Find out why the release was removed before keeping it; move to a version that is published.",
             src, facts.url, {"registry": reg, "pinned": comp.version, "published_versions": len(facts.versions)}))
-    return out
+    return out + release_findings(comp, facts, now)
 
 
-def typosquat_findings(comp: Component) -> list[Finding]:
-    target = looks_like(comp.name, comp.ecosystem or "")
-    if not target:
+def typosquat_findings(comp: Component, hit: Lookalike | None = None, facts: Facts | None = None,
+                       now: dt.datetime | None = None) -> list[Finding]:
+    """A lookalike name. A short-name lookalike needs `facts` showing a package under a year old."""
+    hit = hit or lookalike(comp.name, comp.ecosystem or "")
+    if hit is None:
         return []
-    return [_finding(
-        "ait.pkg.typosquat", "medium", "suspicious", 55, comp,
-        f"{comp.name} looks like the widely used package {target}; check that this is the package you meant",
-        f"If you meant {target}, fix the name. Lookalike names are a common way to slip malware into dependencies.",
-        "ait-rules", None, {"looks_like": target, "fp_rate_measured": None})]
+    fix = (f"If you meant {hit.target}, fix the name. Lookalike names are a common way to slip malware into "
+           "dependencies.")
+    detail: dict[str, Any] = {"looks_like": hit.target, "typo": hit.kind}
+    if not hit.short:
+        return [_finding("ait.pkg.typosquat", "medium", "suspicious", _CONFIDENCE.get(hit.kind, 55), comp,
+                         f"{comp.name} is {_PHRASE[hit.kind]} the widely used package {hit.target}; check that this "
+                         "is the package you meant", fix, "ait-rules", None, detail)]
+    if facts is None or facts.created is None or now is None:
+        return []
+    days = _hours(now, facts.created) // 24
+    if days >= SHORT_LOOKALIKE_DAYS:
+        return []
+    eco = comp.ecosystem or ""
+    return [_finding("ait.pkg.typosquat", "medium", "suspicious", 60, comp,
+                     f"{comp.name} is {_PHRASE[hit.kind]} the widely used package {hit.target}, and was first "
+                     f"published {days} days ago; check that this is the package you meant", fix,
+                     "pypi" if eco == "pypi" else "npm-registry", facts.url,
+                     {**detail, "first_published": facts.created.isoformat(), "age_days": days})]
+
+
+RECENT_RELEASE_DAYS = 30   # release signals judge only a release this recent: older ones have had scrutiny
+DORMANT_DAYS = 730         # no release for two years, then one
+VERSION_JUMP = 10          # majors above every earlier release (1.x → 99.0.0); CalVer years are not jumps
+CALVER_YEARS = range(2000, 2101)
+
+
+def _major(version: str) -> int | None:
+    digits = ""
+    for ch in version.lstrip("vV"):
+        if not ch.isdigit():
+            break
+        digits += ch
+    return int(digits) if digits else None
+
+
+def release_findings(comp: Component, facts: Facts, now: dt.datetime) -> list[Finding]:
+    """A recent release after years of silence, or one whose major version jumps far ahead.
+
+    Judged for the pinned version, or for the newest release when nothing is pinned (what an install
+    fetches). Needs publish times: every PyPI package, and npm packages whose full document is read."""
+    times = facts.version_times
+    eco = comp.ecosystem or ""
+    if comp.version:
+        version = next((v for v in times if versions_equal(eco, comp.version, v)), None)
+    else:
+        version = max(times, key=times.__getitem__) if times else None
+    if version is None:
+        return []
+    when = times[version]
+    age = _hours(now, when) // 24
+    earlier = {v: t for v, t in times.items() if t < when}
+    if age > RECENT_RELEASE_DAYS or not earlier:
+        return []
+    reg = REGISTRY_NAMES.get(eco, eco)
+    src = "pypi" if eco == "pypi" else "npm-registry"
+    out: list[Finding] = []
+    previous = max(earlier, key=earlier.__getitem__)
+    quiet = (when - earlier[previous]).days
+    if quiet >= DORMANT_DAYS:
+        out.append(_finding(
+            "ait.pkg.dormant-release", "medium", "suspicious", 50, comp,
+            f"{comp.name} {version} was published {age} days ago, the first release in {quiet / 365.25:.1f} years; "
+            "a long-quiet package that suddenly releases can mean a taken-over account",
+            f"Stay on {previous} until you have checked who published {version} and what it changed.",
+            src, facts.url, {"registry": reg, "version": version, "published": when.isoformat(),
+                             "previous": previous, "quiet_days": quiet}))
+    new = _major(version)
+    majors = [m for v in earlier if (m := _major(v)) is not None]
+    if new is not None and majors and new - max(majors) >= VERSION_JUMP and new not in CALVER_YEARS:
+        out.append(_finding(
+            "ait.pkg.version-jump", "medium", "suspicious", 50, comp,
+            f"{comp.name} {version} jumps from major version {max(majors)} to {new} ({age} days ago); "
+            "dependency-confusion attacks publish inflated version numbers so that installers prefer them",
+            f"Check that {version} comes from the package's own maintainers. If you use a private package of "
+            "this name, install it from your private index with the index pinned (pip --index-url, an .npmrc scope).",
+            src, facts.url, {"registry": reg, "version": version, "published": when.isoformat(),
+                             "previous_major": max(majors), "major": new}))
+    return out
 
 
 def _lookup(client: RegistryClient, comp: Component) -> Facts | None:
@@ -293,11 +444,22 @@ def judge(components: list[Component], result: ScanResult, client: RegistryClien
     findings: list[Finding] = []
     libs = [c for c in components if c.ctype == "library" and c.ecosystem in REGISTRY_NAMES
             and c.source not in ("import",)]
+    short: dict[int, Lookalike] = {}  # id(component) -> a short-name lookalike, judged with registry facts
     for comp in libs:
-        findings += typosquat_findings(comp)
+        hit = lookalike(comp.name, comp.ecosystem or "")
+        if hit is not None and hit.short:
+            short[id(comp)] = hit
+        elif hit is not None:
+            findings += typosquat_findings(comp, hit)
     examined = result.examine(sources.REGISTRY.name)
     if client.offline:
         examined.skipped = "offline"
+        if short:
+            pairs = [f"{c.name} / {short[id(c)].target}" for c in libs if id(c) in short]
+            result.notes.append(
+                f"registry: {len(pairs)} package name(s) one keystroke from a popular 4-letter name were not judged "
+                f"({', '.join(pairs[:3])}{' …' if len(pairs) > 3 else ''}); only the registry can tell an "
+                "established package from a new squat")
         return findings
     seen: dict[tuple, list[Component]] = {}
     transitive = 0
@@ -331,6 +493,8 @@ def judge(components: list[Component], result: ScanResult, client: RegistryClien
             examined.with_data += 1
             for comp in comps:
                 findings += facts_findings(comp, facts, now)
+                if id(comp) in short and facts is not None:
+                    findings += typosquat_findings(comp, short[id(comp)], facts, now)
     if errors:
         result.notes.append(f"registry: {len(errors)} lookup(s) failed — existence and age UNVERIFIED, not safe: "
                             + "; ".join(errors[:3]) + (" …" if len(errors) > 3 else ""))

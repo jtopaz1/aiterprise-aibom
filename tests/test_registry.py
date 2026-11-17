@@ -146,6 +146,100 @@ class TyposquatTests(unittest.TestCase):
                                     lib("pyaml", "1.0"), lib("six", "1.0"), lib("numpy", "1.0"),
                                     lib("transformers", "4.0")), [])
 
+    def test_the_kind_of_slip_is_named(self):
+        kinds = {f.component.name: f.evidence[0].detail["typo"]
+                 for f in self.judge(lib("reqeusts"), lib("rquests"), lib("requestss"), lib("requeats"),
+                                     lib("requbsts"), lib("open-ai", eco="npm"))}
+        self.assertEqual(kinds, {"reqeusts": "transposition", "rquests": "omission", "requestss": "repetition",
+                                 "requeats": "adjacent-key", "requbsts": "substitution", "open-ai": "separator"})
+        fs = self.judge(lib("requeats"))
+        self.assertIn("one adjacent-key slip from", fs[0].title)
+        # a finger slip is likelier than an arbitrary letter change
+        self.assertGreater(fs[0].confidence, self.judge(lib("requbsts"))[0].confidence)
+
+    def test_lookalike_letters(self):
+        # rn reads as m, vv as w, cl as d, 0 as o, 1 as l: no edit distance limit catches nurnpy
+        fs = self.judge(lib("nurnpy"), lib("panclas"))
+        self.assertEqual(sorted((f.evidence[0].detail["looks_like"], f.evidence[0].detail["typo"]) for f in fs),
+                         [("numpy", "homoglyph"), ("pandas", "homoglyph")])
+
+    def test_known_legitimate_near_names_are_quiet(self):
+        # measured: real packages installed on a developer machine that are one edit from a popular name
+        self.assertEqual(self.judge(lib("psycopg"), lib("psycopg-binary"), lib("pycryptodomex"),
+                                    lib("safer-buffer", eco="npm")), [])
+
+
+class ShortNameTests(unittest.TestCase):
+    """A 4-letter popular name is one keystroke from many real packages (xlsx/clsx, blob/glob), and
+    from many squats: only the registry can tell an established package from a new one."""
+
+    def test_offline_a_short_lookalike_is_not_judged_but_said(self):
+        c, _ = client({}, offline=True)
+        result = ScanResult("t", "offline")
+        self.assertEqual(registry.judge([lib("jesr", "1.0.0", "npm")], result, c), [])
+        self.assertTrue(any("jesr" in n and "jest" in n for n in result.notes), result.notes)
+
+    def test_a_young_short_lookalike_is_flagged(self):
+        abbreviated = {"name": "jesr", "versions": {"1.0.0": {}}, "dist-tags": {"latest": "1.0.0"}}
+        full = {"name": "jesr", "time": {"created": iso(24 * 20), "1.0.0": iso(24 * 20)}}
+        c, _ = client({NPM.format("jesr"): abbreviated, NPM.format("jesr") + "#full": full})
+        fs = registry.judge([lib("jesr", "1.0.0", "npm")], ScanResult("t", "online"), c)
+        self.assertEqual([(f.rule_id, f.evidence[0].detail["looks_like"], f.evidence[0].detail["typo"]) for f in fs],
+                         [("ait.pkg.typosquat", "jest", "adjacent-key")])
+        self.assertIn("20 days", fs[0].title)
+
+    def test_an_established_short_lookalike_is_quiet(self):
+        c, _ = client({PYPI.format("lxmk"): pypi_simple("lxmk", {"0.1": 24 * 800})})
+        self.assertEqual(registry.judge([lib("lxmk", "0.1")], ScanResult("t", "online"), c), [])
+
+    def test_a_short_name_transposition_counts_but_other_edits_do_not(self):
+        young = {"0.1": 24 * 3 + 100}
+        c, _ = client({PYPI.format(n): pypi_simple(n, young) for n in ("rfuf", "lxmz")})
+        fs = registry.judge([lib("rfuf", "0.1"), lib("lxmz", "0.1")], ScanResult("t", "online"), c)
+        self.assertEqual([(f.component.name, f.evidence[0].detail["typo"]) for f in fs if f.rule_id == "ait.pkg.typosquat"],
+                         [("rfuf", "transposition")])
+
+
+class ReleaseSignalTests(unittest.TestCase):
+    """Release timing from the registry: a long-quiet package that suddenly releases, and a version
+    number that jumps far ahead — both only for releases of the last 30 days."""
+
+    def findings(self, name, versions, pinned):
+        c, _ = client({PYPI.format(name): pypi_simple(name, versions)})
+        return [f for f in registry.judge([lib(name, pinned)], ScanResult("t", "online"), c)
+                if f.rule_id in ("ait.pkg.dormant-release", "ait.pkg.version-jump")]
+
+    def test_a_dormant_package_that_suddenly_releases(self):
+        fs = self.findings("old-helper", {"1.0": 24 * 365 * 4, "1.1": 24 * 5}, "1.1")
+        self.assertEqual([(f.rule_id, f.severity, f.verdict) for f in fs],
+                         [("ait.pkg.dormant-release", "medium", "suspicious")])
+        self.assertIn("5 days ago", fs[0].title)
+        self.assertEqual(fs[0].evidence[0].detail["quiet_days"], 365 * 4 - 5)
+
+    def test_quiet_periods_and_old_releases_that_are_not_signals(self):
+        self.assertEqual(self.findings("helper", {"1.0": 24 * 600, "1.1": 24 * 5}, "1.1"), [])        # < 2 years
+        self.assertEqual(self.findings("helper", {"1.0": 24 * 2000, "1.1": 24 * 90}, "1.1"), [])     # > 30 days ago
+        self.assertEqual(self.findings("helper", {"1.0": 24 * 2000, "1.1": 24 * 5}, "1.0"), [])      # pinned old one
+
+    def test_an_unpinned_dependency_is_judged_by_the_newest_release(self):
+        fs = self.findings("old-helper", {"1.0": 24 * 365 * 4, "1.1": 24 * 5}, None)
+        self.assertEqual([f.rule_id for f in fs], ["ait.pkg.dormant-release"])
+        self.assertEqual(fs[0].evidence[0].detail["version"], "1.1")
+
+    def test_a_version_that_jumps_far_ahead(self):
+        fs = self.findings("corp-utils", {"1.2.0": 24 * 400, "1.3.0": 24 * 200, "99.0.0": 24 * 2}, "99.0.0")
+        self.assertEqual([(f.rule_id, f.severity) for f in fs], [("ait.pkg.version-jump", "medium")])
+        self.assertEqual(fs[0].evidence[0].detail["previous_major"], 1)
+        self.assertIn("99.0.0", fs[0].title)
+
+    def test_version_changes_that_are_not_jumps(self):
+        self.assertEqual(self.findings("lib", {"3.4.8": 24 * 100, "2026.1": 24 * 2}, "2026.1"), [])    # to CalVer
+        self.assertEqual(self.findings("lib", {"3.4.8": 24 * 800, "35.0.0": 24 * 700}, "35.0.0"), [])  # long ago
+        self.assertEqual(self.findings("lib", {"1.0.0": 24 * 100, "9.0.0": 24 * 2}, "9.0.0"), [])      # +8
+        self.assertEqual(self.findings("lib", {"0.1": 24 * 2}, "0.1"), [])                            # first release
+        # measured against the highest earlier major, not the first release
+        self.assertEqual(self.findings("lib", {"1.0.0": 24 * 900, "12.0.0": 24 * 300, "15.0.0": 24 * 2}, "15.0.0"), [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,7 +20,9 @@ Severities are defaults; `aibom.policy.yaml` decides which ones fail the build (
 | `ait.pkg.security-holder` | critical | not measured | npm replaced the package with a security holder: it was malicious. |
 | `ait.pkg.new-package` | medium | not measured | First published in the last 72 hours. |
 | `ait.pkg.version-missing` | medium | not measured | The pinned version does not exist on the registry (yanked or never published). |
-| `ait.pkg.typosquat` | medium | not measured | The name looks like a widely used or AI package (a lookalike). |
+| `ait.pkg.typosquat` | medium | 0.20 % (n=1017) | The name looks like a widely used or AI package: a separator change, lookalike letters (rn for m), a swapped, missing, doubled or adjacent-key letter. A name one keystroke from a 4-letter popular name counts only when the registry shows it is under a year old. |
+| `ait.pkg.dormant-release` | medium | 0.00 % (n=131) | The release in use is under 30 days old and came after two years or more with no release: a sign of a taken-over account. |
+| `ait.pkg.version-jump` | medium | 0.00 % (n=131) | The release in use is under 30 days old and its major version is 10 or more above every earlier release (1.x to 99.0.0), as dependency-confusion attacks publish; CalVer years are not jumps. |
 | `ait.pkg.secdb.<verdict>` | varies | not measured | SecDB's verdict for the package (logged in only). |
 
 ## Vulnerabilities

@@ -1,7 +1,31 @@
 {
-  "version": "2026.11.16",
+  "version": "2026.11.17",
   "method": "fp_rate_measured = clean projects where the rule fired / clean projects whose scan examined something that rule family judges; written only with at least min-samples such projects (tools/measure_fp.py)",
   "rules": {
+    "ait.pkg.dormant-release": {
+      "corpus": "names of packages installed on one developer machine, 2026-11 (1017 package names)",
+      "evaluated_at": "2026-11-17",
+      "samples": 131,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "family"
+    },
+    "ait.pkg.typosquat": {
+      "corpus": "names of packages installed on one developer machine, 2026-11 (1017 package names)",
+      "evaluated_at": "2026-11-17",
+      "samples": 1017,
+      "fp_rate_measured": 0.002,
+      "flagged": 2,
+      "scope": "rule"
+    },
+    "ait.pkg.version-jump": {
+      "corpus": "names of packages installed on one developer machine, 2026-11 (1017 package names)",
+      "evaluated_at": "2026-11-17",
+      "samples": 131,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "family"
+    },
     "ait.secret.*": {
       "corpus": "local site-packages sample (two Python environments), 2026-11 (210 projects)",
       "evaluated_at": "2026-11-14",
