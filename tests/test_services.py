@@ -100,6 +100,17 @@ class EndpointTests(unittest.TestCase):
                          {"http://localhost:11434": "Ollama", "http://gpu-box:11434": "Ollama"})
         self.assertEqual(found["http://gpu-box:11434"].properties["found_by"], ["env OLLAMA_HOST"])
 
+    def test_comments_and_commented_out_settings_are_not_in_use(self):
+        found = discover({
+            "client.ts": "/**\n * e.g. 'https://my-resource.services.ai.azure.com'\n */\n"
+                         "// fetch('https://api.openai.com/v1')\n/* https://api.mistral.ai */\n",
+            "app.py": "# URL = 'https://api.groq.com/openai/v1'\n",
+            ".env": "# OPENAI_BASE_URL=https://old-proxy.example/v1\n",
+            "compose.yml": "services:\n  q:\n    # image: qdrant/qdrant:v1.12.4\n",
+            "Dockerfile": "FROM python:3.12\n# ENV OPENAI_BASE_URL https://gw.corp.example/v1\n",
+        })
+        self.assertEqual(found, {})
+
     def test_placeholders_are_not_hosts(self):
         found = endpoints({".env": "ANTHROPIC_BASE_URL=http://<dashboard>:3787\nOPENAI_BASE_URL=http://${HOST}:4000\n"})
         self.assertEqual(found, {})

@@ -12,7 +12,7 @@ no imports, no MCP server launches, no install scripts.
 | default (online) | `pypi.org`, `registry.npmjs.org` | direct dependency names (registry paths) — existence and age checks; `--no-registry` turns this off |
 | logged in to SecDB | `secdb.aiterprise.net` | model-file SHA-256 hashes, package purls, MCP server names, and the first 8 hex digits of the SHA-256 of each private MCP URL; `--no-secdb` turns this off |
 | `--byo virustotal=ENV_VAR` | `www.virustotal.com` | the SHA-256 of the model files and package archives the scan examined, with your own VirusTotal key — never file content, and nothing of it goes to AIterprise; see [Third-party providers](providers.md) |
-| `--upload` | SecDB or your `--cloud` | the JSON report: component names, versions, hashes, findings — target reduced to its directory name, home paths to `~/…`; third-party provider findings are left out |
+| `--upload` | SecDB or your `--cloud` | the JSON report: component names, versions, hashes, findings — target reduced to its directory name, home paths to `~/…`; third-party provider findings are left out. Component names include the URLs of MCP servers and AI endpoints (an internal proxy's host among them; credentials, paths and queries are cut) and the paths of prompt files (never their text) |
 | `report-fp` | SecDB | the rule id and your notes, after you consent |
 | `login`, `status` | SecDB | your API key, to read the plan, limits and usage |
 | `login --install` | SecDB | the scanner's name and version and the operating-system family (`windows`, `macos`, `linux`) — no credential, nothing about the user or the machine |

@@ -18,6 +18,15 @@ def line_at(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
 
+_COMMENT_STARTS = ("#", "//", "/*", "*", "<!--")
+
+
+def commented(text: str, offset: int) -> bool:
+    """Whether `offset` is on a comment line: a commented-out setting or an example is not in use."""
+    line_start = text.rfind("\n", 0, offset) + 1
+    return text[line_start:offset].lstrip().startswith(_COMMENT_STARTS)
+
+
 def _skip_string(text: str, i: int) -> int:
     """`text[i]` is a quote; return the index just past the closing quote."""
     q = text[i]

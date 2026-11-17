@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from . import data
-from .callargs import line_at
+from .callargs import commented, line_at
 from .model import Component, Location, merge_components
 from .skills import as_list, front_matter
 from .textio import TooLarge, read_text
@@ -84,8 +84,7 @@ def _file_component(path: Path, rel: str, what: dict[str, Any]) -> Component:
 def _hub_refs(text: str, rel: str) -> list[Component]:
     out: list[Component] = []
     for m in _hub_re().finditer(text):
-        line_start = text.rfind("\n", 0, m.start()) + 1
-        if text[line_start:m.start()].lstrip().startswith(("#", "//")) or text[m.start() - 1:m.start()] == "`":
+        if commented(text, m.start()) or text[m.start() - 1:m.start()] == "`":
             continue  # a comment, or an example quoted in a docstring
         ref = m.group(2)
         if not _HUB_ID.match(ref):

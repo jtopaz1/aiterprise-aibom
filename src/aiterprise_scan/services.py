@@ -32,7 +32,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from . import data, taxonomy
-from .callargs import line_at, literal_args
+from .callargs import commented as _commented, line_at, literal_args
 from .model import Component, Location
 from .textio import TooLarge, read_text
 from .walk import is_test_path, rel_posix
@@ -219,12 +219,14 @@ def _scan_file(found: _Found, path: Path, rel: str) -> None:
     source = "code-ref" if code else "config"
     if "://" in text:
         for m in _URL_RE.finditer(text):
-            found.endpoint(m.group(0), Location(rel, line_at(text, m.start())), "url", source, None)
+            if not _commented(text, m.start()):
+                found.endpoint(m.group(0), Location(rel, line_at(text, m.start())), "url", source, None)
     for m in _env_re().finditer(text):
-        found.endpoint(m.group(2), Location(rel, line_at(text, m.start())), f"env {m.group(1)}", source,
-                       env_labels[m.group(1)])
+        if not _commented(text, m.start()):
+            found.endpoint(m.group(2), Location(rel, line_at(text, m.start())), f"env {m.group(1)}", source,
+                           env_labels[m.group(1)])
     if docker:
-        for m in _docker_env_re().finditer(text):
+        for m in _docker_env_re().finditer(text):  # anchored at the line start: a comment never matches
             if "$" not in m.group(2) and ("://" in m.group(2) or _HOST_PORT_RE.match(m.group(2))):
                 found.endpoint(m.group(2), Location(rel, line_at(text, m.start())), f"env {m.group(1)}", "config",
                                env_labels[m.group(1)])
@@ -232,12 +234,14 @@ def _scan_file(found: _Found, path: Path, rel: str) -> None:
         python = suffix in _PY
         if _uses_ai_client(text, python):
             for m in _kwarg_re("python" if python else "javascript").finditer(text):
+                if _commented(text, m.start()):
+                    continue
                 found.endpoint(m.group(3), Location(rel, line_at(text, m.start(3))), "client base_url", "code-ref",
                                "unknown")
         _store_clients(found, text, rel)
     if docker or suffix in _YAML:
         images = _spec()["vector_stores"]["images"]
-        for m in (_FROM_RE if docker else _IMAGE_RE).finditer(text):
+        for m in (_FROM_RE if docker else _IMAGE_RE).finditer(text):  # anchored too
             parsed = _image(m.group(1))
             if parsed and parsed[0] in images:
                 found.add("vector-store", images[parsed[0]], Location(rel, line_at(text, m.start(1))),
@@ -251,8 +255,7 @@ def _store_clients(found: _Found, text: str, rel: str) -> None:
         if call["uses"] not in lowered:
             continue
         for m in pattern.finditer(text):
-            line_start = text.rfind("\n", 0, m.start()) + 1
-            if text[line_start:m.start()].lstrip().startswith(("#", "//")):
+            if _commented(text, m.start()):
                 continue
             parsed = literal_args(text, m.end())
             if parsed is None:

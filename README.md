@@ -23,7 +23,7 @@ Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ 
 
 | Area | What is judged | Rule ids |
 |---|---|---|
-| Packages | Known-malicious versions (OSV `MAL-` snapshot; withdrawn records reported as `withdrawn`, never active); ranges that admit a malicious version; names that do not exist on PyPI/npm (slopsquatting), packages published in the last 72 h, npm security holders, typosquats of popular and AI packages | `ait.pkg.*` |
+| Packages | Known-malicious versions (OSV `MAL-` snapshot; withdrawn records reported as `withdrawn`, never active); ranges that admit a malicious version; names that do not exist on PyPI/npm (slopsquatting), packages published in the last 72 h, npm security holders, typosquats of popular and AI packages; a recent release after years of silence or with a sudden major-version jump, or one that dropped its provenance or came from a new publisher | `ait.pkg.*` |
 | Vulnerabilities | OSV advisories per exact version, alias-deduplicated, fix versions; CISA KEV upgrades to critical; a bundled AI-package advisory subset keeps this working offline and during OSV outages | `ait.vuln.*` |
 | Model files | Pickle opcodes (raw and zip-wrapped, protocol 0–5) with dangerous callables, safetensors/GGUF/ONNX/HDF5/Keras/TFLite inventory, Keras `Lambda`, ONNX custom ops, GGUF chat-template injection, malformed containers; SecDB known-bad hashes when logged in | `ait.model.*` |
 | Package archives | Wheels, sdists, tarballs, eggs: `.pth` start-up payloads, `setup.py` and npm lifecycle commands, path traversal, model files inside | `ait.archive.*` |
@@ -31,6 +31,7 @@ Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ 
 | Agent skills | `SKILL.md` trees, Claude Code plugins/commands: instruction poisoning, install-script commands, risk score | `ait.skill.*` |
 | Licences | Model and dataset licence verdicts (Llama, Gemma, OpenRAIL, Mistral, Qwen, DBRX, DeepSeek, Falcon, CC-BY-NC, …) against your `use_context` — advisory, not legal advice; written into the AI-BOM's `licenses[]` | `ait.licence.*` |
 | Secrets | AI-provider keys in configs and code, reported redacted | `ait.secret.*` |
+| Prompts, endpoints, vector stores | Listed in the AI-BOM, not judged: agent instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, Copilot and Cursor rules, …), sub-agents and their tool grants, prompt templates and hub prompts; the AI APIs the code calls (provider URLs, `OPENAI_BASE_URL` and other endpoint variables, a client's `base_url`); vector stores (Chroma, Qdrant, Milvus, Weaviate, pgvector, LanceDB, FAISS, Pinecone). The text of a prompt is never copied, and credentials are cut from URLs | — |
 | Third-party (your own key) | `--byo virustotal=ENV_VAR`: VirusTotal's verdict on model files and package archives, by SHA-256 only — labelled VirusTotal, never uploaded, cached, sent to SecDB or merged into AIterprise data ([docs](docs/providers.md)) | `ext.virustotal.*` |
 
 Inputs: `requirements*.txt`, `pyproject.toml` (PEP 621 + Poetry), `Pipfile(.lock)`, `poetry.lock`,
