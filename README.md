@@ -110,14 +110,31 @@ suppression, or a baseline; only an expiring suppression that names its fingerpr
 
 ## CI
 
-GitHub Action (uploads SARIF, then gates):
+GitHub Action (comments the findings on the pull request, writes the job summary, uploads SARIF, then gates):
 
 ```yaml
-- uses: jtopaz1/aiterprise-aibom/action@main
-  with:
-    fail-on: high
-    api-key: ${{ secrets.AITERPRISE_API_KEY }}   # optional: SecDB judgements
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write          # the pull-request comment
+  security-events: write        # the SARIF upload
+jobs:
+  aibom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jtopaz1/aiterprise-aibom/action@main
+        with:
+          fail-on: high
+          api-key: ${{ secrets.AITERPRISE_API_KEY }}   # optional: SecDB judgements
 ```
+
+The comment lists the new findings (suppressed and baselined ones are only counted) and is
+updated in place on every push, never posted twice. Scanned text in it is shown as code, so a
+hostile package name or tool description cannot mention people, load images or break the table.
+A pull request from a fork gets a read-only token: the action then warns and leaves the report in
+the job summary, and the gate still decides. `comment: "false"` and `job-summary: "false"` turn
+either off.
 
 pre-commit:
 

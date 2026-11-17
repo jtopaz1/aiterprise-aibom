@@ -249,3 +249,56 @@ def render_table(result: ScanResult, stream: TextIO, show_inventory: bool = Fals
             w(f"  - {_safe(n.get('text', ''))}{_safe(url)}\n")
     outcome = {0: "pass", 1: "policy failure", 2: "error or incomplete scan"}.get(result.exit_code, "")
     w(f"\nRESULT     exit {result.exit_code} — {outcome} · {result.duration_s:.1f}s\n")
+
+
+# --------------------------------------------------------------------------------------------
+# Markdown: the GitHub Action's pull-request comment and job summary (C42)
+# --------------------------------------------------------------------------------------------
+
+MARKDOWN_MARKER = "<!-- aiterprise-scan report -->"
+_MD_CELL = 200
+_MD_NOTES = 20
+_MD_STATE = {0: "passes the gate", 1: "fails the gate", 2: "incomplete scan (exit 2)"}
+
+
+def _md_code(text: Any, limit: int = _MD_CELL) -> str:
+    """Scanned text as one inline code span, where GitHub renders no link, image, HTML, mention or
+    emoji. A backtick would close the span and a pipe would split a table cell, so both are
+    replaced; line breaks and invisible characters become spaces."""
+    s = " ".join(_safe(text).split()).replace("`", "'").replace("|", "¦")
+    if len(s) > limit:
+        s = s[: limit - 1] + "…"
+    return f"`{s}`" if s else ""
+
+
+def render_markdown(result: ScanResult, defs_line: str = "", max_rows: int = 50) -> str:
+    """The new findings as a Markdown table, safe to post where scanned text must stay inert."""
+    new = [f for f in sort_findings(result.findings) if f.status == "new"]
+    hidden = sum(1 for f in result.findings if f.status in ("suppressed", "acknowledged"))
+    s = summary(result)
+    scope = f"{s['components']} components ({s['ai_components']} AI) · {result.mode}"
+    if hidden:
+        scope += f" · {hidden} suppressed or baselined"
+    state = _MD_STATE.get(result.exit_code, f"exit {result.exit_code}")
+    out = [MARKDOWN_MARKER, f"### {TOOL_NAME}: {state}", ""]
+    if new:
+        by_sev = {k: sum(1 for f in new if f.severity == k) for k in SEVERITIES}
+        sev_txt = ", ".join(f"{n} {k}" for k, n in by_sev.items() if n)
+        out += [f"**{len(new)} new finding{'s' if len(new) != 1 else ''}** ({sev_txt}) · {scope}", "",
+                "| Severity | Finding | Where | Rule |", "|---|---|---|---|"]
+        for f in new[:max_rows]:
+            out.append(f"| {f.severity} | {_md_code(f.title)} | {_md_code(f.location or '')} | {_md_code(f.rule_id)} |")
+        if len(new) > max_rows:
+            out += ["", f"…and {len(new) - max_rows} more: the table, JSON and SARIF reports list every finding."]
+    else:
+        out += ["No new findings.", "", scope]
+    if result.notes:
+        out += ["", f"<details><summary>Notes ({len(result.notes)})</summary>", ""]
+        out += [f"- {_md_code(n, 500)}" for n in result.notes[:_MD_NOTES]]
+        out += ["", "</details>"]
+    if result.notices:
+        out += ["", "Data notices (reproduced as the sources require):", ""]
+        out += [f"- {_md_code(n.get('text', ''), 1000)} {_md_code(n.get('url', ''))}".rstrip() for n in result.notices]
+    tail = f"{TOOL_NAME} {__version__}" + (f" · {_safe(defs_line)}" if defs_line else "") + f" · exit {result.exit_code}"
+    out += ["", f"<sub>{tail}</sub>", ""]
+    return "\n".join(out)

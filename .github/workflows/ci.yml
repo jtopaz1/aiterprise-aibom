@@ -119,6 +119,9 @@ jobs:
   action:
     # the composite action in action/, used the way another repository would use it
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write  # the action's pull-request comment, checked below
     steps:
       - uses: actions/checkout@v4
       - name: Build the killer-demo repository
@@ -141,6 +144,7 @@ jobs:
           test "$OUTCOME" = "failure"
           test "$CODE" = "1"
           test -s "$DIR/report.txt"
+          grep -q "fails the gate" "$DIR/report.md"
           python3 -c "import json, sys; s = json.load(open(sys.argv[1], encoding='utf-8')); assert s['version'] == '2.1.0', s['version']; n = sum(len(r['results']) for r in s['runs']); assert n > 0; print(n, 'SARIF results')" "$DIR/report.sarif"
           python3 -c "import json, sys; b = json.load(open(sys.argv[1], encoding='utf-8')); assert b['bomFormat'] == 'CycloneDX', b; print('CycloneDX', b['specVersion'])" "$DIR/aibom.cdx.json"
           rm -rf "$DIR"
@@ -155,6 +159,14 @@ jobs:
         env:
           CODE: ${{ steps.clean.outputs.exit-code }}
         run: test "$CODE" = "0"
+      - name: One comment on the pull request, updated in place by the second scan
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments?per_page=100
+        run: |
+          gh api "$URL" > comments.json
+          python3 -c "import json; c = [x for x in json.load(open('comments.json', encoding='utf-8')) if x['user']['login'] == 'github-actions[bot]' and '<!-- aiterprise-scan report -->' in x['body']]; assert len(c) == 1, len(c); assert 'passes the gate' in c[0]['body'], c[0]['body'][:300]; print('one comment, now the clean scan:', c[0]['html_url'])"
 
   pre-commit:
     # the hook in .pre-commit-hooks.yaml, run by pre-commit itself against two throwaway repositories
