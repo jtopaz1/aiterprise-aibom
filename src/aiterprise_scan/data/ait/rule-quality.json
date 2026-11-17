@@ -1,6 +1,6 @@
 {
   "version": "2026.11.17",
-  "method": "fp_rate_measured = clean projects where the rule fired / clean projects whose scan examined something that rule family judges; written only with at least min-samples such projects (tools/measure_fp.py)",
+  "method": "fp_rate_measured = clean projects where the rule fired / clean projects whose scan examined something that rule family judges; written only with at least min-samples such projects, and at 0 for a rule listed in a data file that never fired (tools/measure_fp.py)",
   "rules": {
     "ait.pkg.dormant-release": {
       "corpus": "names of packages installed on one developer machine, 2026-11 (1017 package names)",
@@ -84,23 +84,447 @@
     },
     "ait.skill.*": {
       "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
-      "evaluated_at": "2026-11-16",
+      "evaluated_at": "2026-11-17",
       "samples": 275,
       "fp_rate_measured": 0.1164,
       "flagged": 32,
       "scope": "family"
     },
+    "ait.skill.cmd.cred.aws": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.cred.browser": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.cred.cloud-token": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.cred.dotfiles": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.cred.env-exfil": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.cred.env-file": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.cred.env-read": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.cred.history": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.cred.keychain": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.cred.ssh-keys": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.destroy.dd-disk": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.destroy.fork-bomb": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.destroy.mkfs": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.destroy.no-preserve-root": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.destroy.rm-rf-root": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.destroy.windows-del": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.destroy.windows-format": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.docker.host-mount": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.docker.network-host": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.docker.pid-host": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.docker.privileged": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.download-exec.bitsadmin": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.download-exec.certutil-urlcache": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.download-exec.curl-pipe-python": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.download-exec.curl-pipe-shell": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.download-exec.node-eval-fetch": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.download-exec.pipe-interpreter": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.download-exec.powershell-encoded": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.download-exec.powershell-iex": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.download-exec.python-exec": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.exec.base64-pipe-shell": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.exec.eval-subshell": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.exfil.dns": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.exfil.paste-webhook": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
     "ait.skill.cmd.hygiene.temp-dir": {
       "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
-      "evaluated_at": "2026-11-16",
+      "evaluated_at": "2026-11-17",
       "samples": 275,
       "fp_rate_measured": 0.0255,
       "flagged": 7,
       "scope": "rule"
     },
+    "ait.skill.cmd.net.plain-http": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.net.raw-ip-url": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.net.tunnel": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.persist.cron": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.persist.launchd": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.persist.ps-profile": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.persist.registry-run": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.persist.schtasks": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.persist.shell-rc": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.persist.systemd": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.privilege.doas": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.privilege.setuid": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.privilege.sudo": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.revshell.bash-dev-tcp": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.revshell.mkfifo": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.revshell.netcat": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.revshell.perl-socket": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.revshell.powershell-tcpclient": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.revshell.python-socket": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
     "ait.skill.cmd.supply.npx-latest": {
       "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
-      "evaluated_at": "2026-11-16",
+      "evaluated_at": "2026-11-17",
       "samples": 275,
       "fp_rate_measured": 0.0036,
       "flagged": 1,
@@ -108,39 +532,135 @@
     },
     "ait.skill.cmd.supply.npx-unpinned": {
       "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
-      "evaluated_at": "2026-11-16",
+      "evaluated_at": "2026-11-17",
       "samples": 275,
       "fp_rate_measured": 0.04,
       "flagged": 11,
+      "scope": "rule"
+    },
+    "ait.skill.cmd.supply.pip-url": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.desc.exfil.context-smuggle": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.desc.exfil.markdown-image": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.desc.exfil.system-prompt": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
       "scope": "rule"
     },
     "ait.skill.desc.exfil.url": {
       "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
-      "evaluated_at": "2026-11-16",
+      "evaluated_at": "2026-11-17",
       "samples": 275,
       "fp_rate_measured": 0.0073,
       "flagged": 2,
       "scope": "rule"
     },
+    "ait.skill.desc.hidden.agent-addressed": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.desc.hidden.chat-template": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
     "ait.skill.desc.hidden.conceal": {
       "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
-      "evaluated_at": "2026-11-16",
+      "evaluated_at": "2026-11-17",
       "samples": 275,
       "fp_rate_measured": 0.04,
       "flagged": 11,
       "scope": "rule"
     },
+    "ait.skill.desc.hidden.forget-previous": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
     "ait.skill.desc.hidden.ignore-previous": {
       "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
-      "evaluated_at": "2026-11-16",
+      "evaluated_at": "2026-11-17",
       "samples": 275,
       "fp_rate_measured": 0.0073,
       "flagged": 2,
       "scope": "rule"
     },
+    "ait.skill.desc.hidden.important-block": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.desc.hidden.self-conceal": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.desc.obfuscation.base64-blob": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.desc.persistence.auto-approve": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.desc.secret.agent-config": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
     "ait.skill.desc.secret.read-exfil": {
       "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
-      "evaluated_at": "2026-11-16",
+      "evaluated_at": "2026-11-17",
       "samples": 275,
       "fp_rate_measured": 0.0182,
       "flagged": 5,
@@ -148,10 +668,42 @@
     },
     "ait.skill.desc.shadow.cross-tool": {
       "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
-      "evaluated_at": "2026-11-16",
+      "evaluated_at": "2026-11-17",
       "samples": 275,
       "fp_rate_measured": 0.0036,
       "flagged": 1,
+      "scope": "rule"
+    },
+    "ait.skill.desc.shadow.precedence": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.desc.unicode.mixed-script": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.desc.unicode.tag-chars": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
+      "scope": "rule"
+    },
+    "ait.skill.desc.unicode.zero-width-bidi": {
+      "corpus": "agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini; assumed benign, one per skill name), 2026-11 (275 projects)",
+      "evaluated_at": "2026-11-17",
+      "samples": 275,
+      "fp_rate_measured": 0.0,
+      "flagged": 0,
       "scope": "rule"
     }
   }
