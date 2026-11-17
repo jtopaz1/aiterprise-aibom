@@ -178,6 +178,7 @@ python -m venv .venv && .venv/bin/pip install -e .
 PYTHONPATH=src python -m unittest discover -s tests -p "test_*.py"
 python tools/killer_demo.py            # the five-problem acceptance demo; exit 0 only if all five hit
 python tools/bench_scan.py --check 60  # cold scan of a 10,000-file monorepo against the 60 s target
+python tools/bench_models.py --check   # 2 GiB safetensors, 1 GiB PyTorch zip and pickle against their budgets (4 GiB of disk)
 python tools/build_malicious.py --zip PyPI-all.zip --zip npm-all.zip --replace   # refresh the MAL snapshot
 python tools/build_vuln_subset.py --zip PyPI-all.zip --zip npm-all.zip           # refresh the AI advisory subset
 python tools/build_kev.py --url                                                  # refresh CISA KEV
