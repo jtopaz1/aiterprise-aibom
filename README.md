@@ -52,7 +52,7 @@ aiterprise-scan .                                   # table report on stdout, ex
 aiterprise-scan . --offline                         # bundled definitions + cache only, no network
 aiterprise-scan scan --bom cdxgen-aibom.json        # judge someone else's AI-BOM
 aiterprise-scan scan dist/mypkg-1.0-py3-none-any.whl  # judge a package before you publish or install it
-aiterprise-scan . --format sarif --out reports/     # report.sarif for GitHub code scanning
+aiterprise-scan . --format sarif --out results.sarif  # SARIF for GitHub code scanning
 aiterprise-scan . --emit-bom aibom.cdx.json         # CycloneDX 1.7 AI-BOM: findings, licence verdicts, modelCard
 aiterprise-scan . --save                            # keep the scan in the local history (`ui`)
 aiterprise-scan mcp --agent-configs                 # this machine's MCP servers and skills
