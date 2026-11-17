@@ -6,6 +6,8 @@ the result is what the slow path gave.
 """
 
 import ast
+import hashlib
+import io
 import os
 import pathlib
 import sys
@@ -16,7 +18,7 @@ from collections import Counter
 from pathlib import Path
 from unittest import mock
 
-from aiterprise_scan import discover, scanner, secrets, textio
+from aiterprise_scan import discover, modelfiles, scanner, secrets, textio
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "aiterprise_scan"
 
@@ -356,6 +358,53 @@ class ReadOnceTests(unittest.TestCase):
                 for i in range(5):
                     self.assertEqual(textio.read_text(self.root / f"f{i}.txt"), "y" * 100)
         self.assertEqual(sum(reads.values()), 5 + 3)  # two files fit the budget; three are read twice
+
+
+class _FailingReader(io.BytesIO):
+    """Gives `good` bytes, then fails the way a disk or network share can mid-file."""
+
+    def __init__(self, good: bytes):
+        super().__init__(good)
+        self.left = len(good)
+
+    def read(self, n=-1):
+        if self.left <= 0:
+            raise OSError("device went away")
+        chunk = super().read(n)
+        self.left -= len(chunk)
+        return chunk
+
+    def readinto(self, b):
+        if self.left <= 0:
+            raise OSError("device went away")
+        n = super().readinto(b)
+        self.left -= n
+        return n
+
+
+class ModelDigestTests(unittest.TestCase):
+    """A model file is hashed in one read (SHA-256 for the report and both for known-bad lookups)."""
+
+    def test_digests_match_hashlib_at_every_chunk_boundary(self):
+        c = modelfiles._DIGEST_CHUNK
+        for size in (0, 1, c - 1, c, c + 1, 3 * c + 5):
+            with self.subTest(size=size):
+                blob = bytes((i * 7 + size) % 251 for i in range(size))
+                want = (hashlib.sha256(blob).hexdigest(), hashlib.sha1(blob).hexdigest())
+                self.assertEqual(modelfiles._digests(io.BytesIO(blob)), want)
+
+    def test_a_reader_that_returns_short_reads_is_hashed_to_the_end(self):
+        class Trickle(io.BytesIO):
+            def read(self, n=-1):
+                return super().read(1000 if n < 0 else min(n, 1000))
+
+        blob = bytes(range(256)) * 5000
+        self.assertEqual(modelfiles._digests(Trickle(blob)),
+                         (hashlib.sha256(blob).hexdigest(), hashlib.sha1(blob).hexdigest()))
+
+    def test_a_read_error_mid_file_is_raised_not_hashed_over(self):
+        with self.assertRaises(OSError):
+            modelfiles._digests(_FailingReader(b"x" * (3 * modelfiles._DIGEST_CHUNK)))  # fails on the threaded path
 
 
 if __name__ == "__main__":
