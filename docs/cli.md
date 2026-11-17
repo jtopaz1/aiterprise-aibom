@@ -39,7 +39,7 @@
 | `--byo PROVIDER=ENV_VAR` | third-party enrichment with your own key, e.g. `virustotal=VT_API_KEY` (repeatable). `ENV_VAR` is the name of an environment variable holding the key, never the key itself — see [Third-party providers](providers.md) |
 | `--defs-version REL_ID` | use this installed definitions release (`rel_…`), or `bundled` for the data shipped with this version. The scan exits 2 without running if the release is not installed or a file changed since it was — see [Pinning a release](bundles.md#pinning-a-release) |
 | `--format F` | `table`, `json`, `sarif`, `cyclonedx`, `html`, `markdown` (repeatable; default `table`). `markdown` is the new findings as a table for a pull-request comment, with every scanned string shown as code; `compact` is one `path:line: error|warning|info: title [severity rule]` line per new finding, for editor problem matchers; `codequality` is GitLab's Code Quality report. See [Editors and CI](integrations.md). The JSON report names its layout in `schema` (`aiterprise-report/1`) |
-| `--out DIR` | write reports into this directory instead of stdout |
+| `--out PATH` | write reports into this directory instead of stdout, named `report.json`, `report.sarif`, `aibom.cdx.json`, `report.html`, … With one `--format`, a path ending in `.json`, `.sarif`, `.html`, `.htm`, `.md` or `.txt` is the report file itself (`--format sarif --out results.sarif`), unless a directory of that name exists already |
 | `--emit-bom FILE` | also write the CycloneDX AI-BOM to FILE |
 | `--cdx-version 1.6\|1.7` | CycloneDX version (default 1.7) |
 | `--inventory` | list every discovered component in the table |
