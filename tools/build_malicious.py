@@ -21,7 +21,9 @@ Output schema `ait-malicious-versions/2` (gzip, compact JSON, deterministic byte
      "withdrawn": {"<ecosystem>": {"<name>": [[id, published-date, all_versions 0|1, [versions], [aliases], withdrawn-date]]}}}
 
 `record_count` and the other counts cover active records only. The summary text is not kept:
-every OSV MAL summary is "Malicious code in <name>".
+every OSV MAL summary is "Malicious code in <name>". `terms` names the database and licence of the
+records kept (`tools/osv_terms.py`); a record from any other database is left out and counted in
+`excluded`, even when an older snapshot carried it.
 """
 
 from __future__ import annotations
@@ -36,6 +38,9 @@ import sys
 import urllib.request
 import zipfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import osv_terms  # noqa: E402  (a sibling tool, not part of the package)
 
 DATA = Path(__file__).resolve().parents[1] / "src" / "aiterprise_scan" / "data" / "ait"
 OUT = DATA / "malicious-versions.json.gz"
@@ -139,6 +144,8 @@ def read_existing(path: Path) -> tuple[list[dict], list[dict]]:
 
 
 def encode(records: list[dict], inputs: list[dict]) -> bytes:
+    terms, excluded = osv_terms.summarise(r["id"] for r in records)
+    records = [r for r in records if osv_terms.terms(r["id"]) is not None]
     sections: dict[str, dict[str, dict[str, list]]] = {"packages": {}, "withdrawn": {}}
     for r in sorted(records, key=lambda r: (r["ecosystem"], r["name"].lower(), r["name"], r["id"])):
         entry = [r["id"], r.get("published") or "", 1 if r["all_versions"] else 0, list(r["versions"])]
@@ -154,8 +161,11 @@ def encode(records: list[dict], inputs: list[dict]) -> bytes:
         "schema": SCHEMA,
         "generated_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "source": "OSV MAL- records (OpenSSF malicious-packages); withdrawn records kept apart",
-        "licence_note": "OSV/OpenSSF record terms; per-record check before redistribution (design doc 13, H.3)",
+        "licence_note": "each record is under its database's licence, listed in `terms`; records from "
+                        "other databases are left out and counted in `excluded`",
         "inputs": inputs,
+        "terms": terms,
+        "excluded": excluded,
         "record_count": len(active),
         "version_count": sum(len(r["versions"]) for r in active),
         "all_versions_count": sum(1 for r in active if r["all_versions"]),
@@ -209,9 +219,12 @@ def main(argv: list[str] | None = None) -> int:
     legacy = DATA / "malicious-versions.json"
     if args.out == OUT and legacy.exists():
         legacy.unlink()  # superseded by the v2 snapshot
-    active = [r for r in records if not r.get("withdrawn")]
-    print(f"wrote {args.out}: {len(active)} records ({len(records) - len(active)} withdrawn kept apart), "
-          f"{sum(len(r['versions']) for r in active)} versions, {len(blob) / 1e6:.2f} MB")
+    built = json.loads(gzip.decompress(blob))
+    print(f"wrote {args.out}: {built['record_count']} records ({built['withdrawn_count']} withdrawn kept apart), "
+          f"{built['version_count']} versions, {len(blob) / 1e6:.2f} MB")
+    if built["excluded"]:
+        print(f"left out {sum(built['excluded'].values())} records from databases not cleared for "
+              f"redistribution: {osv_terms.describe_excluded(built['excluded'])}")
     return 0
 
 

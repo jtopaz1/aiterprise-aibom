@@ -13,11 +13,13 @@ Input is the OSV per-ecosystem export (download it yourself; this tool never fet
 Kept per advisory: id, aliases, summary, published, modified, severity, database_specific.severity
 and the `affected` entries for the AI package (ECOSYSTEM/SEMVER ranges; the explicit `versions`
 list only when no such range decides). `MAL-` records live in the malicious snapshot and withdrawn
-advisories are not active, so neither is kept here.
+advisories are not active, so neither is kept here. Only advisories from a database whose licence
+allows redistribution are kept (`tools/osv_terms.py`); the rest are counted in `excluded`.
 
 Output schema `ait-vuln-subset/1` (gzip, compact JSON, deterministic bytes):
 
     {"schema", "generated_at", "inputs": [{"file", "sha256", "bytes", "advisories"}],
+     "terms": [{"prefix", "source", "licence", "url", "records"}], "excluded": {"<prefix>": count},
      "package_count", "advisory_count",
      "packages": {"<ecosystem>": {"<canonical name>": [<trimmed OSV advisory>, ...]}}}
 """
@@ -33,6 +35,9 @@ import re
 import sys
 import zipfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import osv_terms  # noqa: E402  (a sibling tool, not part of the package)
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "src" / "aiterprise_scan" / "data" / "ait"
@@ -127,19 +132,24 @@ def from_zip(path: Path, wanted: dict[str, set[str]]) -> tuple[str | None, list[
 def encode(items: list[tuple[str, str, dict]], inputs: list[dict], covered: dict[str, set[str]]) -> bytes:
     """`covered`: every AI package of each exported ecosystem, kept even with no advisories so an
     offline scan can tell "checked, nothing known" from "outside the subset"."""
+    items = [(eco, name, slim) for eco, name, slim in items if eco in covered]
+    terms, excluded = osv_terms.summarise(slim["id"] for _, _, slim in items)
     packages: dict[str, dict[str, dict[str, dict]]] = {eco: {n: {} for n in names} for eco, names in covered.items()}
     for eco, name, slim in items:
-        if eco not in covered:
-            continue
+        if osv_terms.terms(slim["id"]) is None:
+            continue  # its database's licence does not allow redistribution, or was never checked
         packages.setdefault(eco, {}).setdefault(name, {})[slim["id"]] = slim  # one copy per id
     ordered = {eco: {name: [docs[i] for i in sorted(docs)] for name, docs in sorted(names.items())}
                for eco, names in sorted(packages.items())}
     doc = {
         "schema": SCHEMA,
         "generated_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "source": "OSV advisories (GHSA CC-BY-4.0, PYSEC CC-BY-4.0, ...) for packages in the AI taxonomy",
-        "licence_note": "per-record licences apply; see each advisory at https://osv.dev/vulnerability/<id>",
+        "source": "OSV advisories for packages in the AI taxonomy, trimmed to the fields the scanner reads",
+        "licence_note": "each advisory is under its database's licence, listed in `terms`; advisories from "
+                        "other databases are left out and counted in `excluded`",
         "inputs": inputs,
+        "terms": terms,
+        "excluded": excluded,
         "package_count": sum(len(v) for v in ordered.values()),
         "packages_with_advisories": sum(1 for names in ordered.values() for docs in names.values() if docs),
         "advisory_count": len({d["id"] for names in ordered.values() for docs in names.values() for d in docs}),
@@ -171,6 +181,9 @@ def main(argv: list[str] | None = None) -> int:
     built = json.loads(gzip.decompress(blob))
     print(f"wrote {args.out}: {built['advisory_count']} advisories; {built['package_count']} AI packages covered, "
           f"{built['packages_with_advisories']} with advisories; {len(blob) / 1e6:.2f} MB")
+    if built["excluded"]:
+        print(f"left out {sum(built['excluded'].values())} advisories from databases not cleared for "
+              f"redistribution: {osv_terms.describe_excluded(built['excluded'])}")
     return 0
 
 
