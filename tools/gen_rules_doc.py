@@ -137,7 +137,7 @@ def render() -> str:
     sys.path.insert(0, str(ROOT / "src"))
     from aiterprise_scan import secrets
 
-    kinds = list(dict.fromkeys(kind for _rid, kind, _rx in secrets._RULES))
+    kinds = list(dict.fromkeys(rule[1] for rule in secrets._RULES))
     out += ["## Secrets", "",
             "AI-provider and cloud keys in configuration and code, always reported redacted (severity high). "
             "The rule id is `ait.secret.<kind>`.", "",

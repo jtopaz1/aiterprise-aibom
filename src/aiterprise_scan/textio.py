@@ -7,6 +7,8 @@ so every parser reads through these helpers: UTF-8 (with or without BOM) and UTF
 from __future__ import annotations
 
 import codecs
+import contextlib
+import contextvars
 import json
 import re
 from pathlib import Path
@@ -45,7 +47,47 @@ def decode_bytes(raw: bytes) -> str:
         return raw.decode("latin-1")
 
 
+READ_ONCE_BUDGET = 256 * 1024 * 1024  # characters of text a scan keeps for its other analyzers
+
+
+class _ReadOnce:
+    def __init__(self, budget: int) -> None:
+        self.budget = budget
+        self.used = 0
+        self.sizes: dict[Path, int] = {}
+        self.texts: dict[Path, str] = {}
+
+
+_read_once: contextvars.ContextVar[_ReadOnce | None] = contextvars.ContextVar("textio_read_once", default=None)
+
+
+@contextlib.contextmanager
+def read_once(budget: int = READ_ONCE_BUDGET):
+    """Within this block, a file read with `read_text` is read from disk once: several analyzers
+    look at the same source file, and opening it again is most of what a large scan costs on some
+    machines. Texts are kept until `budget` characters are held; later files are read each time."""
+    token = _read_once.set(_ReadOnce(budget))
+    try:
+        yield
+    finally:
+        _read_once.reset(token)
+
+
 def read_text(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> str:
+    memo = _read_once.get()
+    if memo is not None:
+        size = memo.sizes.get(path)
+        if size is None:
+            size = memo.sizes[path] = path.stat().st_size
+        if size > max_bytes:
+            raise TooLarge(f"{path} is {size} bytes (limit {max_bytes})")
+        text = memo.texts.get(path)
+        if text is None:
+            text = decode_bytes(path.read_bytes())
+            if memo.used + len(text) <= memo.budget:
+                memo.texts[path] = text
+                memo.used += len(text)
+        return text
     size = path.stat().st_size
     if size > max_bytes:
         raise TooLarge(f"{path} is {size} bytes (limit {max_bytes})")

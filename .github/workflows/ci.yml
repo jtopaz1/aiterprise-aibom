@@ -82,6 +82,21 @@ jobs:
           AITERPRISE_HOME: ${{ runner.temp }}/aiterprise-home
         run: python tools/killer_demo.py --online
 
+  benchmark:
+    # design doc 13 §5.5: a cold scan of a 10,000-file monorepo in under 60 s
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cold offline scan of a 10,000-file monorepo in under 60 s, all five planted problems found
+        run: python tools/bench_scan.py --files 10000 --check 60 --json bench.json
+      - name: Timings in the job summary
+        if: always()
+        run: |
+          { echo '```json'; cat bench.json; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
   licence-check:
     runs-on: ubuntu-latest
     steps:

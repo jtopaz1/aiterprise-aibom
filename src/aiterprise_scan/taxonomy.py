@@ -21,6 +21,11 @@ def ai_category(name: str, ecosystem: str | None) -> str | None:
     return _libraries().get(ecosystem, {}).get(normalize_name(name, ecosystem))
 
 
+def ai_names(ecosystem: str) -> frozenset[str]:
+    """Every AI package name of an ecosystem, normalised."""
+    return frozenset(_libraries().get(ecosystem, {}))
+
+
 def is_ai_package(name: str, ecosystem: str | None) -> bool:
     return ai_category(name, ecosystem) is not None
 

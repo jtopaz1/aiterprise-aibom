@@ -221,7 +221,7 @@ def _scan_file(found: _Found, path: Path, rel: str) -> None:
         for m in _URL_RE.finditer(text):
             if not _commented(text, m.start()):
                 found.endpoint(m.group(0), Location(rel, line_at(text, m.start())), "url", source, None)
-    for m in _env_re().finditer(text):
+    for m in _env_re().finditer(text) if any(n in text for n in env_labels) else ():
         if not _commented(text, m.start()):
             found.endpoint(m.group(2), Location(rel, line_at(text, m.start())), f"env {m.group(1)}", source,
                            env_labels[m.group(1)])

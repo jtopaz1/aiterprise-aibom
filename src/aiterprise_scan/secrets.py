@@ -35,26 +35,40 @@ class SecretMatch:
     digest: str  # sha256 hex prefix of the raw value; raw value is never stored
 
 
-# Each rule: (rule_id, kind, compiled regex). Order matters only for overlap
+# Each rule: (rule_id, kind, prefixes, compiled regex). Every match begins with one of the
+# prefixes, so a text that contains none of them skips the regex: most files hold no key at all,
+# and a substring test is far cheaper than a regex pass. Order matters only for overlap
 # resolution (more specific prefixes first). Patterns are deliberately tight.
-_RULES: list[tuple[str, str, re.Pattern[str]]] = [
-    ("openai-project", "openai", re.compile(r"\bsk-proj-[A-Za-z0-9_-]{20,}\b")),
-    ("openai-service", "openai", re.compile(r"\bsk-(?:svcacct|admin)-[A-Za-z0-9_-]{20,}\b")),
-    ("anthropic", "anthropic", re.compile(r"\bsk-ant-(?:api03-|sid01-)?[A-Za-z0-9_-]{24,}\b")),
-    ("openai-legacy", "openai", re.compile(r"\bsk-[A-Za-z0-9]{48}\b")),
-    ("huggingface", "huggingface", re.compile(r"\bhf_[A-Za-z0-9]{34,40}\b")),
-    ("github-pat", "github", re.compile(r"\bghp_[A-Za-z0-9]{36}\b")),
-    ("github-oauth", "github", re.compile(r"\bgho_[A-Za-z0-9]{36}\b")),
-    ("github-fine-grained", "github", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{60,}\b")),
-    ("xai", "xai", re.compile(r"\bxai-[A-Za-z0-9]{32,}\b")),
-    ("groq", "groq", re.compile(r"\bgsk_[A-Za-z0-9]{40,}\b")),
-    ("replicate", "replicate", re.compile(r"\br8_[A-Za-z0-9]{37,40}\b")),
-    ("aws-access-key", "aws", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
-    ("google-api-key", "google", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b")),
-    ("slack-token", "slack", re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}\b")),
-    ("private-key-pem", "private-key",
+_RULES: list[tuple[str, str, tuple[str, ...], re.Pattern[str]]] = [
+    ("openai-project", "openai", ("sk-proj-",), re.compile(r"\bsk-proj-[A-Za-z0-9_-]{20,}\b")),
+    ("openai-service", "openai", ("sk-svcacct-", "sk-admin-"),
+     re.compile(r"\bsk-(?:svcacct|admin)-[A-Za-z0-9_-]{20,}\b")),
+    ("anthropic", "anthropic", ("sk-ant-",), re.compile(r"\bsk-ant-(?:api03-|sid01-)?[A-Za-z0-9_-]{24,}\b")),
+    ("openai-legacy", "openai", ("sk-",), re.compile(r"\bsk-[A-Za-z0-9]{48}\b")),
+    ("huggingface", "huggingface", ("hf_",), re.compile(r"\bhf_[A-Za-z0-9]{34,40}\b")),
+    ("github-pat", "github", ("ghp_",), re.compile(r"\bghp_[A-Za-z0-9]{36}\b")),
+    ("github-oauth", "github", ("gho_",), re.compile(r"\bgho_[A-Za-z0-9]{36}\b")),
+    ("github-fine-grained", "github", ("github_pat_",), re.compile(r"\bgithub_pat_[A-Za-z0-9_]{60,}\b")),
+    ("xai", "xai", ("xai-",), re.compile(r"\bxai-[A-Za-z0-9]{32,}\b")),
+    ("groq", "groq", ("gsk_",), re.compile(r"\bgsk_[A-Za-z0-9]{40,}\b")),
+    ("replicate", "replicate", ("r8_",), re.compile(r"\br8_[A-Za-z0-9]{37,40}\b")),
+    ("aws-access-key", "aws", ("AKIA", "ASIA"), re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
+    ("google-api-key", "google", ("AIza",), re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b")),
+    ("slack-token", "slack", ("xox",), re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}\b")),
+    ("private-key-pem", "private-key", ("-----BEGIN ",),
      re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----")),
 ]
+
+
+def _matches(text: str):
+    """(rule_id, kind, match) for each rule whose prefix occurs in `text`; placeholders dropped."""
+    for rule_id, kind, prefixes, rx in _RULES:
+        if not any(p in text for p in prefixes):
+            continue
+        for m in rx.finditer(text):
+            if kind != "private-key" and _is_placeholder(m.group(0)):
+                continue
+            yield rule_id, kind, m
 
 # A matched value that looks like one of these is a placeholder, not a secret.
 _PLACEHOLDER_WORDS = re.compile(
@@ -101,13 +115,7 @@ def _digest(value: str) -> str:
 
 def find_secrets(text: str) -> list[SecretMatch]:
     """Every distinct secret in `text`, placeholders filtered out, no overlaps."""
-    raw: list[tuple[int, int, str, str]] = []  # (start, end, rule_id, kind)
-    for rule_id, kind, rx in _RULES:
-        for m in rx.finditer(text):
-            value = m.group(0)
-            if kind != "private-key" and _is_placeholder(value):
-                continue
-            raw.append((m.start(), m.end(), rule_id, kind))
+    raw = [(m.start(), m.end(), rule_id, kind) for rule_id, kind, m in _matches(text)]
     raw.sort(key=lambda t: (t[0], -(t[1] - t[0])))
     out: list[SecretMatch] = []
     covered = -1
@@ -129,13 +137,7 @@ def find_secrets(text: str) -> list[SecretMatch]:
 
 def redact_secrets_in(text: str) -> str:
     """Return `text` with every detected secret replaced by its redacted preview."""
-    spans: list[tuple[int, int, str]] = []  # (start, end, redacted)
-    for _rule_id, kind, rx in _RULES:
-        for m in rx.finditer(text):
-            value = m.group(0)
-            if kind != "private-key" and _is_placeholder(value):
-                continue
-            spans.append((m.start(), m.end(), redact(value)))
+    spans = [(m.start(), m.end(), redact(m.group(0))) for _rule_id, _kind, m in _matches(text)]
     if not spans:
         return text
     spans.sort(key=lambda t: (t[0], -(t[1] - t[0])))

@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from . import ingest, intel_malicious, registry, sources, vulns
+from . import ingest, intel_malicious, registry, sources, textio, vulns
 from . import policy as policy_mod
 from . import walk as walker
 from .cache import Cache
@@ -145,6 +145,11 @@ def _ingest_boms(paths: list[Path], root: Path | None, run: _Runner, explicit: b
 
 
 def run_scan(opts: ScanOptions) -> ScanResult:
+    with textio.read_once():  # the analyzers share one read of each file
+        return _run_scan(opts)
+
+
+def _run_scan(opts: ScanOptions) -> ScanResult:
     t0 = time.monotonic()
     started = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     if opts.target:
