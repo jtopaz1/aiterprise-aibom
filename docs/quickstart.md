@@ -13,7 +13,7 @@ pipx install aiterprise-scan          # or: pip install aiterprise-scan
 
 Other ways, all from the same release:
 
-- a single-file binary for Linux, macOS or Windows from the GitHub release (each file has a
+- a single-file binary for Linux, macOS or Windows (x86-64 or arm64) from the GitHub release (each file has a
   Sigstore bundle and is listed in `SHA256SUMS`);
 - the container image: `docker run --rm -v "$PWD:/src" ghcr.io/jtopaz1/aiterprise-scan:latest`;
 - `uvx aiterprise-scan …` without installing.

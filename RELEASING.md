@@ -10,7 +10,7 @@ binaries ──┴─ sign ─┬─ pypi       Sigstore bundle per file, SHA256
 ```
 
 No release has been made yet. CI already runs most of it on every pull request: the wheel, the sdist,
-the self-SBOM, the three binaries (each held to the killer demo) and the container image. The parts
+the self-SBOM, the six binaries (Linux, macOS and Windows on x86-64 and arm64, each held to the killer demo) and the container image. The parts
 that only a real tag exercises are signing, the PyPI upload, the ghcr.io push and the GitHub release.
 
 ## One-time setup (needs the repository owner)

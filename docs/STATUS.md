@@ -1,6 +1,6 @@
 # Implementation status — `aiterprise-scan` 0.1.0 (rewrite)
 
-Updated 2026-11-16. Design of record: `aiterprise-doc/13-APP-AIBOM.md` (AI2). This is a clean-room
+Updated 2026-11-17. Design of record: `aiterprise-doc/13-APP-AIBOM.md` (AI2). This is a clean-room
 rewrite of the OSS engine; the v0.2.0 code described in that document's Appendix H was not available,
 so this table restates Appendix H.1 against what exists in this repository today.
 
@@ -34,8 +34,8 @@ so this table restates Appendix H.1 against what exists in this repository today
 | Coverage honesty: skipped files are `ait.*.not-analysable` findings; an unreachable source exits 2 | `model.not_analysable`, `scanner.py`, `sources.py` | working — every source is named once in `sources.py`, with the rule families it raises, and counts its own coverage; every judgement, the licence and deny-list ones included, is counted as a source; a test scans all golden fixtures and fails if a finding reports data from zero consulted sources |
 | Local web UI: scan history, findings with filters, inventory, coverage, diff between scans, suppress, SecDB account, defs update; 127.0.0.1 only, token → HttpOnly cookie, Host check, CSRF + Origin, CSP nonce | `ui.py`, `history.py`, `ui`, `scan --save` | working — checked in a real browser, including a 375 px viewport |
 | Local MCP server exposing `scan_ai_supply_chain` (C44), protocol 2025-06-18; registry manifest | `mcpserver.py`, `mcp serve`, `server.json` | working; `server.json` fits the registry schema (2025-12-11); not published to the MCP registry, which needs the PyPI release first. The tool goes through the same gate as the CLI and the UI; it never consults SecDB, and its coverage says so |
-| Acceptance demo: five planted problems, one offline scan; `--exe` holds a built binary to the same five | `tools/killer_demo.py` | working — 5/5 from source, and from the Linux x86-64, macOS arm64 and Windows x86-64 binaries in CI |
-| Packaging: wheel + sdist, single-file binaries (PyInstaller), container image, Sigstore-signed release, self-SBOM, PyPI trusted publishing | `packaging/`, `Dockerfile`, `.github/workflows/release.yml`, `binaries.yml` | wheel, sdist, self-SBOM and container image built and checked in CI; CI builds the Linux, macOS and Windows binaries with the release's own `binaries.yml` and each passes the killer demo (5/5, exit 1); the tag-triggered release (signing, PyPI, ghcr.io) **not yet run** — `RELEASING.md` lists the one-time setup it needs (a PyPI trusted publisher; the name is free) |
+| Acceptance demo: five planted problems, one offline scan; `--exe` holds a built binary to the same five | `tools/killer_demo.py` | working — 5/5 from source, and from the six binaries in CI (Linux, macOS and Windows, each x86-64 and arm64) |
+| Packaging: wheel + sdist, single-file binaries (PyInstaller), container image, Sigstore-signed release, self-SBOM, PyPI trusted publishing | `packaging/`, `Dockerfile`, `.github/workflows/release.yml`, `binaries.yml` | wheel, sdist, self-SBOM and container image built and checked in CI; CI builds the six binaries (Linux, macOS and Windows, each x86-64 and arm64, natively on its own runner) with the release's own `binaries.yml` and each passes the killer demo (5/5, exit 1); the tag-triggered release (signing, PyPI, ghcr.io) **not yet run** — `RELEASING.md` lists the one-time setup it needs (a PyPI trusted publisher; the name is free) |
 | CI: test matrix, wheel and sdist, self-scan, killer demo, licence check, minisign interop, docs, container, binaries, the GitHub Action, the pre-commit hook | `.github/workflows/ci.yml` | working — green on `main` |
 | Scheduled definition refresh (MAL + KEV + advisory subset) | `.github/workflows/refresh-defs.yml` | working — weekly. The first scheduled run (2026-11-16) rebuilt the data, passed the full tests and the killer demo on it, and opened the refresh pull request itself (the repository lets Actions create pull requests); it was merged the same day. CI on such a pull request starts only when it is closed and reopened |
 | Documentation site (MkDocs, strict build); generated rules reference | `mkdocs.yml`, `docs/`, `tools/gen_rules_doc.py` | working — builds locally with `--strict` |
@@ -73,7 +73,6 @@ already listed above; the cloud's are in its row under *Built*.
 | SkillSpector integration | G3 / C30 | not built — the skill analyzer has its own 0–100 risk score |
 | Opt-in telemetry (rule ids and counts) | §4.8 | not built — there is no telemetry code at all |
 | `--defs-version` pin | §5.4 | not built |
-| Six signed binaries | §10.6 #5 | three targets: Linux x86-64, macOS arm64, Windows x86-64 |
 | Pull-request comments from the Action | C42 | not built — the Action uploads SARIF and gates |
 | Editor task templates; GitLab CI template | C45 / S3 | not built |
 | The killer demo online | §10.6 #1 | CI runs it offline only |
