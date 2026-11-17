@@ -28,7 +28,7 @@
 | `--no-imports` | skip manifest-free import discovery |
 | `--no-secrets` | skip the secret scan |
 | `--max-vulns N` | at most N advisory findings per component |
-| `--no-registry` | do not look packages up on PyPI/npm (existence and age); name checks still run |
+| `--no-registry` | do not look packages up on PyPI/npm (existence and age) or on deps.dev (licences); name checks still run |
 | `--registry-all` | look up transitive dependencies on their registry too (default: direct only) |
 | `--no-secdb` | do not consult SecDB even when logged in |
 | `--upload` | upload the JSON report after the scan (SecDB Pro+, or `--cloud`); refused with `--offline` |
@@ -81,6 +81,20 @@ configs), `--agent-configs`, `--offline` and `--defs-version`.
 | `AITERPRISE_VIRUSTOTAL_URL` | VirusTotal base URL for `--byo` (a proxy or test server; https, or http to this machine only) |
 | `AITERPRISE_ROOT_KEY` | minisign root public key file for bundle verification |
 | `AITERPRISE_DEFS` | `bundled`: ignore installed bundles and use the wheel's data; `rel_…`: pin that installed release, like `--defs-version` (which wins) |
+
+## Package licences
+
+A package's licence goes into the BOM (CycloneDX `licenses`, marked as declared), the JSON report
+(`licence`) and the HTML report. Offline it comes from the lockfile: npm's `package-lock.json`
+(v2 and v3) records each package's licence. Online, each pinned PyPI or npm package still without
+one is looked up on [deps.dev](https://deps.dev), one request per name and version, cached like the
+registry answers. When deps.dev lists several licences for a version they are joined with `AND`.
+A licence deps.dev cannot map to an SPDX id comes back as `non-standard`: the BOM leaves those
+empty and a note in the report names them. The report's coverage has a `deps.dev` entry with the
+number of versions looked up and how many had a licence; a failed lookup is counted there and
+makes the scan exit 2, like any source that did not answer. `--offline` and `--no-registry` turn
+the lookups off; `bom` never goes online, so its BOM has the lockfile licences only. No verdict is drawn from a package's licence; model and dataset licences are
+judged (see [Policy](policy.md)).
 
 ## Re-scans
 

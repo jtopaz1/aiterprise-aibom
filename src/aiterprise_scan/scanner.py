@@ -268,8 +268,12 @@ def _run_scan(opts: ScanOptions) -> ScanResult:
         elif opts.secdb_skipped and not opts.offline:
             result.examine(sources.SECDB.name).skipped = opts.secdb_skipped
         if not opts.mcp_only:
-            from . import licences
+            from . import licences, pkglicences
 
+            # package licences for the BOM: deps.dev sees what the registries see, so the same switch
+            run.step(sources.DEPS_DEV.name, lambda: pkglicences.judge(merged, result, reg), None)
+            if not opts.registry and not opts.offline:
+                result.examine(sources.DEPS_DEV.name).skipped = "disabled (--no-registry)"
             findings += run.step(
                 sources.LICENCES.name,
                 lambda: licences.judge_licences(
