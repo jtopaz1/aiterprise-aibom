@@ -2,7 +2,7 @@ name: release
 
 # Tag vX.Y.Z (matching aiterprise_scan.__version__) to publish:
 #   wheel + sdist → PyPI (trusted publishing, no token) · single-file binaries for Linux, macOS and
-#   Windows · CycloneDX SBOM of the scanner itself · Sigstore (cosign keyless) bundles for every file
+#   Windows on x86-64 and arm64 · CycloneDX SBOM of the scanner itself · Sigstore (cosign keyless) bundles for every file
 #   · container image on ghcr.io with provenance · a GitHub release carrying all of it.
 on:
   push:
