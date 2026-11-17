@@ -106,19 +106,55 @@ class _LazyIndex(Mapping):
     scan, while a scan only ever looks up the packages it found. Entries are
     `[id, published, all_versions, versions, aliases?]`; withdrawn entries add the withdrawal date
     as a sixth element.
+
+    Nearly every name in the snapshot is already its own key (normalized), so the snapshot's own
+    dictionaries serve as the index: only the few names that normalize to something else are
+    gathered at load (about a hundred of 235k; keying every name took ~0.45 s per scan).
     """
 
     def __init__(self, *sections: dict[str, dict[str, list]]) -> None:
-        self._raw: dict[tuple[str, str], list[tuple[str, str, list]]] = {}
+        self._sections = sections
+        # per section: ecosystem -> key -> the names (in the snapshot's order) that normalize to it
+        self._odd: list[dict[str, dict[str, list[str]]]] = []
         for packages in sections:
+            odd: dict[str, dict[str, list[str]]] = {}
             for eco, names in packages.items():
-                for name, entries in names.items():
-                    self._raw.setdefault((eco, normalize_name(name, eco)), []).append((eco, name, entries))
+                for name in names:
+                    key = normalize_name(name, eco)
+                    if key != name:
+                        odd.setdefault(eco, {}).setdefault(key, []).append(name)
+            self._odd.append(odd)
         self._built: dict[tuple[str, str], list[MalRecord]] = {}
+        self._keys: dict[tuple[str, str], None] | None = None
+
+    def _names(self, key: tuple[str, str]) -> list[tuple[str, str, list]]:
+        """(ecosystem, name, entries) of every name that normalizes to `key`, in snapshot order."""
+        if not (isinstance(key, tuple) and len(key) == 2 and all(isinstance(k, str) for k in key)):
+            return []
+        eco, norm = key
+        if normalize_name(norm, eco) != norm:
+            return []  # not a key: keys are normalized names
+        found: list[tuple[str, str, list]] = []
+        for packages, odd in zip(self._sections, self._odd):
+            names = packages.get(eco)
+            if not names:
+                continue
+            others = odd.get(eco, {}).get(norm, [])
+            if not others:
+                if norm in names:
+                    found.append((eco, norm, names[norm]))
+            elif norm not in names:
+                found += [(eco, n, names[n]) for n in others]
+            else:  # the key's own spelling and others: keep the snapshot's order (rare)
+                found += [(eco, n, e) for n, e in names.items() if n == norm or n in others]
+        return found
 
     def __getitem__(self, key: tuple[str, str]) -> list[MalRecord]:
         built = self._built.get(key)
         if built is None:
+            names = self._names(key)
+            if not names:
+                raise KeyError(key)
             built = [
                 MalRecord(
                     id=entry[0],
@@ -131,20 +167,26 @@ class _LazyIndex(Mapping):
                     aliases=tuple(entry[4]) if len(entry) > 4 else (),
                     withdrawn=(entry[5] or None) if len(entry) > 5 else None,
                 )
-                for eco, name, entries in self._raw[key]
+                for eco, name, entries in names
                 for entry in entries
             ]
             self._built[key] = built
         return built
 
     def __contains__(self, key: object) -> bool:
-        return key in self._raw
+        return bool(self._names(key))
+
+    def _all_keys(self) -> dict[tuple[str, str], None]:
+        if self._keys is None:  # only for iterating or counting: a scan never does
+            self._keys = {(eco, normalize_name(name, eco)): None
+                          for packages in self._sections for eco, names in packages.items() for name in names}
+        return self._keys
 
     def __iter__(self) -> Iterator[tuple[str, str]]:
-        return iter(self._raw)
+        return iter(self._all_keys())
 
     def __len__(self) -> int:
-        return len(self._raw)
+        return len(self._all_keys())
 
 
 def _parse_v2(raw: dict) -> Snapshot:
