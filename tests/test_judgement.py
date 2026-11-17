@@ -15,7 +15,7 @@ from unittest import mock
 from aiterprise_scan import bom, discover, ingest, intel_malicious, net, report, vulns
 from aiterprise_scan import policy as pol
 from aiterprise_scan.cache import Cache
-from aiterprise_scan.model import Component, Finding, Location, ScanResult
+from aiterprise_scan.model import Component, Finding, Location, ScanResult, normalize_name
 from aiterprise_scan.scanner import ScanOptions, run_scan
 
 GOLDEN = Path(__file__).parent / "golden"
@@ -32,6 +32,78 @@ def load_builder():
 def lib(name, version=None, eco="pypi", spec=None, path="requirements.txt"):
     return Component(name, ecosystem=eco, version=version, version_spec=spec, locations=[Location(path, 1)],
                      source="lockfile" if version else "manifest")
+
+
+def _reference_index(*sections):
+    """intel_malicious._LazyIndex's keys and entries as it built them before: every name, at load."""
+    raw = {}
+    for packages in sections:
+        for eco, names in packages.items():
+            for name, entries in names.items():
+                raw.setdefault((eco, normalize_name(name, eco)), []).append((eco, name, entries))
+    return raw
+
+
+def _records(entries):
+    return [(eco, name, e[0], tuple(e[3]), bool(e[2]), (e[5] or None) if len(e) > 5 else None)
+            for eco, name, es in entries for e in es]
+
+
+class SnapshotIndexTests(unittest.TestCase):
+    ACTIVE = {
+        "npm": {"Foo": [["MAL-1", "", 0, ["1.0.0"]]], "foo": [["MAL-2", "", 1, []]], "bar": [["MAL-3", "", 0, ["2"]]],
+                "Baz": [["MAL-4", "", 0, ["1"]]], "@Scope/Pkg": [["MAL-12", "", 0, ["1"]]]},
+        # the exact spelling between two others that normalize to it: records keep the file's order
+        "pypi": {"Evil_Pkg": [["MAL-5", "2026-01-02", 0, ["1.0"], ["GHSA-a"]]], "evil-pkg": [["MAL-6", "", 0, ["2.0"]]],
+                 "evil.pkg": [["MAL-7", "", 0, ["3.0"]]], "clean": [["MAL-8", "", 0, ["1"]]]},
+        "crates.io": {"Odd_Crate": [["MAL-11", "", 0, ["0.1"]]]},
+    }
+    WITHDRAWN = {"npm": {"foo": [["MAL-9", "", 0, ["1.0.1"], [], "2026-03-01"]]},
+                 "pypi": {"Evil_Pkg": [["MAL-10", "", 0, ["4"], [], "2026-03-02"]]}}
+
+    def same(self, idx, ref, keys):
+        for key in keys:
+            with self.subTest(key=key):
+                self.assertIn(key, idx)
+                got = [(r.ecosystem, r.name, r.id, r.versions, r.all_versions, r.withdrawn) for r in idx[key]]
+                self.assertEqual(got, _records(ref[key]))
+
+    def test_the_index_answers_what_a_full_index_does(self):
+        idx = intel_malicious._LazyIndex(self.ACTIVE, self.WITHDRAWN)
+        ref = _reference_index(self.ACTIVE, self.WITHDRAWN)
+        self.same(idx, ref, list(ref))
+        self.assertEqual(list(idx), list(ref))
+        self.assertEqual(len(idx), len(ref))
+        self.assertEqual([r.id for r in idx[("pypi", "evil-pkg")]], ["MAL-5", "MAL-6", "MAL-7", "MAL-10"])
+        self.assertEqual(idx[("pypi", "evil-pkg")][0].aliases, ("GHSA-a",))
+
+    def test_only_normalized_keys_are_found(self):
+        idx = intel_malicious._LazyIndex(self.ACTIVE, self.WITHDRAWN)
+        for key in [("npm", "Foo"), ("npm", "Baz"), ("pypi", "Evil_Pkg"), ("pypi", "evil.pkg"), ("npm", "nothing"),
+                    ("cargo", "foo"), ("crates.io", "odd_crate")]:
+            with self.subTest(key=key):
+                self.assertNotIn(key, idx)
+                self.assertIsNone(idx.get(key))
+                with self.assertRaises(KeyError):
+                    idx[key]
+        self.assertIn(("crates.io", "Odd_Crate"), idx)  # no rule for this ecosystem: the name as it is
+        for key in ["foo", ("npm",), ("npm", "foo", "x"), ("npm", None), None]:
+            with self.subTest(key=key):
+                self.assertNotIn(key, idx)
+                with self.assertRaises(KeyError):
+                    idx[key]
+
+    def test_the_bundled_snapshot_answers_what_a_full_index_does(self):
+        raw = intel_malicious.data.load(intel_malicious.SNAPSHOT_FILE)
+        sections = (raw["packages"], raw.get("withdrawn") or {})
+        idx = intel_malicious._LazyIndex(*sections)
+        ref = _reference_index(*sections)
+        keys = list(ref)
+        merged = [k for k, v in ref.items() if len(v) > 1 or v[0][1] != k[1]]  # a name unlike its key
+        self.assertTrue(merged)
+        self.same(idx, ref, merged + keys[::97])
+        self.assertEqual(len(idx), len(ref))
+        self.assertEqual(list(idx), keys)
 
 
 class MaliciousSnapshotTests(unittest.TestCase):
