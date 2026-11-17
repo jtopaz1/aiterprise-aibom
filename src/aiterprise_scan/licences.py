@@ -370,6 +370,8 @@ def _valid_id(value: str, root: Path | None, *, allow_single: bool, dataset: boo
 
 
 def _scan_calls(text: str, root: Path | None, *, python: bool) -> list[_Ref]:
+    if not any(name in text for name in _CALLS):
+        return []  # the regex needs one of the call names: most files have none
     refs: list[_Ref] = []
     comment = "#" if python else "//"
     for m in _CALL_RE.finditer(text):
@@ -457,7 +459,9 @@ def _is_doc_citation(hub_path: str) -> bool:
 
 def _scan_urls(text: str) -> list[_Ref]:
     refs: list[_Ref] = []
-    for regex, proto in ((_HF_URL_RE, False), (_HF_PROTO_RE, True)):
+    for regex, proto, needles in ((_HF_URL_RE, False, ("huggingface.co", "hf.co")), (_HF_PROTO_RE, True, ("hf://",))):
+        if not any(n in text for n in needles):
+            continue  # each regex needs its host or scheme literally
         for m in regex.finditer(text):
             if _is_doc_citation(m.group(1)):
                 continue

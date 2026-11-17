@@ -171,6 +171,7 @@ MCP: `aiterprise-scan mcp serve` exposes `scan_ai_supply_chain` to any MCP clien
 python -m venv .venv && .venv/bin/pip install -e .
 PYTHONPATH=src python -m unittest discover -s tests -p "test_*.py"
 python tools/killer_demo.py            # the five-problem acceptance demo; exit 0 only if all five hit
+python tools/bench_scan.py --check 60  # cold scan of a 10,000-file monorepo against the 60 s target
 python tools/build_malicious.py --zip PyPI-all.zip --zip npm-all.zip --replace   # refresh the MAL snapshot
 python tools/build_vuln_subset.py --zip PyPI-all.zip --zip npm-all.zip           # refresh the AI advisory subset
 python tools/build_kev.py --url                                                  # refresh CISA KEV

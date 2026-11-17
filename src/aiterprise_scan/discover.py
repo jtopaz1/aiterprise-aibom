@@ -116,12 +116,13 @@ def discover_imports(root: Path, files: list[Path]) -> list[Component]:
     """AI packages imported by Python / notebook / JS / TS sources (version unknown)."""
     root = Path(root)
     imap = taxonomy.python_import_map()
+    words = _ai_import_words(imap)
     comps: dict[tuple[str, str], Component] = {}
     for path in files:
         path = Path(path)
         suffix = path.suffix.lower()
         if suffix in _PY_SUFFIXES:
-            extract = lambda text: _python_hits(text, imap)  # noqa: E731
+            extract = lambda text: _python_hits(text, imap, words)  # noqa: E731
         elif suffix == ".ipynb":
             extract = lambda text: _notebook_hits(text, imap)  # noqa: E731
         elif suffix in _JS_SUFFIXES:
@@ -1671,7 +1672,11 @@ def _python_imports(source: str) -> list[tuple[str, int]]:
     except (SyntaxError, ValueError, RecursionError, MemoryError):
         return _python_imports_regex(source)
     found: list[tuple[str, int]] = []
-    for node in ast.walk(tree):
+    # An import is always a statement, so walking statement bodies finds every one; the full walk
+    # (every expression too, most of a module's nodes) is needed only for a dynamic import, whose
+    # function name then appears in the text.
+    dynamic = "import_module" in source or "__import__" in source
+    for node in ast.walk(tree) if dynamic else _statements(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 found.append((alias.name, node.lineno))
@@ -1689,6 +1694,22 @@ def _python_imports(source: str) -> list[tuple[str, int]]:
                 found.append((arg.value, node.lineno))
     found.sort(key=lambda t: t[1])
     return found
+
+
+_STATEMENT_LISTS = ("body", "orelse", "finalbody", "handlers", "cases")
+
+
+def _statements(tree: ast.AST):
+    """Every statement of a module, in the nested bodies of compound statements too (if, try,
+    except, with, for, while, match cases, function and class bodies); no expressions."""
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        yield node
+        for name in _STATEMENT_LISTS:
+            children = getattr(node, name, None)
+            if isinstance(children, list):
+                stack.extend(reversed(children))
 
 
 def _python_imports_regex(source: str) -> list[tuple[str, int]]:
@@ -1723,7 +1744,28 @@ def _map_python_import(dotted: str, imap: dict[str, str]) -> tuple[str, str] | N
     return None
 
 
-def _python_hits(source: str, imap: dict[str, str]) -> list[tuple[str, str, str, int | None]]:
+def _ai_import_words(imap: dict[str, str]) -> tuple[str, ...]:
+    """Lower-case words of which at least one occurs in any Python source that imports an AI
+    package: the first part of each AI package name (as an identifier) and of each AI import
+    name. A word that contains a shorter one is dropped, the shorter one already covers it."""
+    words = {name.split("-")[0] for name in taxonomy.ai_names("pypi")}
+    words |= {key.split(".")[0].lower() for key, dist in imap.items() if taxonomy.is_ai_package(dist, "pypi")}
+    words.discard("")
+    return tuple(sorted(w for w in words if not any(o != w and o in w for o in words)))
+
+
+def _python_hits(source: str, imap: dict[str, str],
+                 words: tuple[str, ...] | None = None) -> list[tuple[str, str, str, int | None]]:
+    """AI package imports of a Python source. With `words` (see `_ai_import_words`), a source
+    that contains none of them is not parsed: an import's top-level name appears in the text as
+    written, so an AI import there is impossible. That holds for ASCII text without a dynamic
+    import only; Python reads identifiers NFKC-normalised (`torch` in fullwidth letters is `torch`) and
+    a string can spell a module with escapes, so any other source is always parsed."""
+    if words is not None and source.isascii() \
+            and "import_module" not in source and "__import__" not in source:
+        low = source.lower()
+        if not any(w in low for w in words):
+            return []
     out = []
     for dotted, line in _python_imports(source):
         hit = _map_python_import(dotted, imap)
