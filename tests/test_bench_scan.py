@@ -60,6 +60,20 @@ class RunTests(unittest.TestCase):
         self.assertTrue(bench_scan.problems({**ok, "missed": ["unsafe pickle in model.pt"]}, budget=60))
         self.assertTrue(bench_scan.problems({**ok, "exit": [2, 1]}, budget=60))
 
+    def test_check_warm_fails_when_the_re_scan_is_over_its_budget(self):
+        ok = {"files": 10, "bytes": 1, "seconds": [50.0, 9.0], "exit": [1, 1], "missed": [], "python": "3"}
+        self.assertEqual(bench_scan.problems(ok, budget=60, warm_budget=10), [])
+        self.assertEqual(bench_scan.problems({**ok, "seconds": [50.0, 11.0]}, budget=60),
+                         [])  # no warm budget given
+        self.assertEqual(bench_scan.problems({**ok, "seconds": [50.0, 11.0]}, budget=60, warm_budget=10),
+                         ["the second scan took 11.0 s, over the 10 s budget for a re-scan of an unchanged tree"])
+
+    def test_the_second_scan_reuses_what_the_first_kept(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bench_scan.run(Path(tmp), 200)
+            kept = list((Path(tmp) / "cache" / "scan").glob("*.json"))
+        self.assertTrue(kept)
+
 
 if __name__ == "__main__":
     unittest.main()

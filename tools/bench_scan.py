@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Scan speed against design doc 13 §5.5: a cold scan of a 10,000-file monorepo in under 60 s.
+"""Scan speed against design doc 13 §5.5: a cold scan of a 10,000-file monorepo in under 60 s, and
+a re-scan of it unchanged in under 10 s.
 
-    python tools/bench_scan.py [--files 10000] [--check SECONDS] [--work DIR] [--exe BINARY] [--json FILE]
+    python tools/bench_scan.py [--files 10000] [--check SECONDS] [--check-warm SECONDS] [--work DIR]
+                               [--exe BINARY] [--json FILE]
 
 It builds a monorepo of exactly `--files` files: packages of 100 files, each with a requirements.txt,
 a package.json, a README, three config files, eight TypeScript modules and the rest Python modules
@@ -10,9 +12,11 @@ Python versions, so the report names the version). One package also holds the ki
 planted problems, so the timed scan has to judge files, not just walk them.
 
 The tree is then scanned twice, offline, each time by the CLI in a new process (start-up, data
-loading and the report included): the first scan is the cold one; the second shows the same scan
-with the operating system's file cache warm. `--check` fails (exit 1) when the first scan takes
-longer than SECONDS, a planted problem is missed, or a scan does not exit 1.
+loading and the report included), with a cache directory that starts empty: the first scan is the
+cold one; the second is a re-scan of the unchanged tree, with the operating system's file cache
+warm and the per-file results the first scan kept (`scancache`). `--check` fails (exit 1) when the
+first scan takes longer than SECONDS, a planted problem is missed, or a scan does not exit 1;
+`--check-warm` when the second takes longer than its SECONDS.
 """
 
 from __future__ import annotations
@@ -156,10 +160,13 @@ def _children_peak_rss_mb() -> float | None:
     return round(peak / (1024 * 1024 if sys.platform == "darwin" else 1024), 1)  # bytes on macOS, KiB on Linux
 
 
-def problems(res: dict, budget: float) -> list[str]:
+def problems(res: dict, budget: float, warm_budget: float | None = None) -> list[str]:
     out = []
     if res["seconds"][0] > budget:
         out.append(f"the first scan took {res['seconds'][0]:.1f} s, over the {budget:g} s budget")
+    if warm_budget is not None and res["seconds"][1] > warm_budget:
+        out.append(f"the second scan took {res['seconds'][1]:.1f} s, over the {warm_budget:g} s budget for a "
+                   "re-scan of an unchanged tree")
     out += [f"missed: {label}" for label in res["missed"]]
     out += [f"scan {i + 1} exited {code}, not 1" for i, code in enumerate(res["exit"]) if code != 1]
     return out
@@ -169,6 +176,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--files", type=int, default=10_000)
     ap.add_argument("--check", type=float, metavar="SECONDS", help="fail if the first scan takes longer")
+    ap.add_argument("--check-warm", type=float, metavar="SECONDS",
+                    help="with --check: also fail if the second scan (unchanged tree) takes longer")
     ap.add_argument("--work", type=Path, help="working directory, which must not hold a tree yet")
     ap.add_argument("--exe", help="scan with this executable (e.g. a release binary) instead of this checkout")
     ap.add_argument("--json", type=Path, help="also write the result to this file")
@@ -186,13 +195,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"tree: {res['files']:,} files, {res['bytes'] / 1e6:.1f} MB "
           f"(Python {res['python']} standard-library sources; {res['platform']})")
     print(f"first scan (cold):  {res['seconds'][0]:6.1f} s, exit {res['exit'][0]}")
-    print(f"second scan:        {res['seconds'][1]:6.1f} s, exit {res['exit'][1]}")
+    print(f"second scan (warm): {res['seconds'][1]:6.1f} s, exit {res['exit'][1]}")
     print(f"planted problems found: {len(killer_demo.EXPECT) - len(res['missed'])}/{len(killer_demo.EXPECT)}")
     if res["peak_rss_mb"] is not None:
         print(f"peak memory of a scan: {res['peak_rss_mb']:.0f} MB")
     if args.json:
         args.json.write_text(json.dumps(res, indent=2), encoding="utf-8")
-    found = problems(res, args.check) if args.check is not None else []
+    found = problems(res, args.check, args.check_warm) if args.check is not None else []
     for p in found:
         print(f"  FAIL  {p}")
     return 1 if found else 0

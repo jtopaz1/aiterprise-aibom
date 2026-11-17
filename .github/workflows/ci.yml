@@ -91,7 +91,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Cold offline scan of a 10,000-file monorepo in under 60 s, all five planted problems found
-        run: python tools/bench_scan.py --files 10000 --check 60 --json bench.json
+        run: python tools/bench_scan.py --files 10000 --check 60 --check-warm 10 --json bench.json
       - name: Timings in the job summary
         if: always()
         run: |

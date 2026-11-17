@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from . import bundles, ingest, intel_malicious, registry, sources, textio, vulns
+from . import bundles, ingest, intel_malicious, registry, scancache, sources, textio, vulns
 from . import policy as policy_mod
 from . import walk as walker
 from .cache import Cache
@@ -42,6 +42,7 @@ class ScanOptions:
     exclude: list[str] = field(default_factory=list)  # globs on root-relative posix paths
     policy: policy_mod.Policy = field(default_factory=policy_mod.Policy)
     cache: Cache | None = None
+    file_cache: Path | None = None  # keep per-file results here between scans (scancache); None: keep none
     providers: list[Any] = field(default_factory=list)  # BYO-key adapters (`--byo`), see providers/
 
 
@@ -145,7 +146,8 @@ def _ingest_boms(paths: list[Path], root: Path | None, run: _Runner, explicit: b
 
 
 def run_scan(opts: ScanOptions) -> ScanResult:
-    with textio.read_once():  # the analyzers share one read of each file
+    # the analyzers share one read of each file, and a re-scan reuses the results of unchanged files
+    with textio.read_once(), scancache.session(opts.file_cache):
         return _run_scan(opts)
 
 
@@ -177,6 +179,7 @@ def _run_scan(opts: ScanOptions) -> ScanResult:
         target = opts.target.resolve()
         if not target.exists():
             raise FileNotFoundError(f"scan target does not exist: {opts.target}")
+        scancache.use_tree(target, result.release_id)
         root = target if target.is_dir() else target.parent
         if target.is_file():
             files = [target]
@@ -293,6 +296,10 @@ def _run_scan(opts: ScanOptions) -> ScanResult:
     result.findings = sort_findings(_dedupe(_drop_shadowed_secrets(findings)))
     # files of the release that were not used (changed on disk, missing): the wheel's copy stood in
     result.notes.extend(f"definitions: {w}" for w in dict.fromkeys(bundles.WARNINGS))
+    reused, used = scancache.reused()
+    if reused:
+        result.notes.append(f"file cache: {reused:,} of {used:,} per-file results are from an earlier scan of "
+                            "this target with the same scanner and definitions")
     result.duration_s = time.monotonic() - t0
     if run.errors or any(ex.errors for ex in result.examined.values()):
         result.exit_code = 2

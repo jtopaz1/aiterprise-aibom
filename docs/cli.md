@@ -35,6 +35,7 @@
 | `--project NAME` | project name for `--upload` (default: the target directory name) |
 | `--cloud URL` | AIterprise cloud URL for `--upload` (or `AITERPRISE_CLOUD_URL`) |
 | `--save` | keep this scan in the local history shown by `ui` |
+| `--no-cache` | do not reuse or keep per-file results between scans (see [Re-scans](#re-scans)) |
 | `--byo PROVIDER=ENV_VAR` | third-party enrichment with your own key, e.g. `virustotal=VT_API_KEY` (repeatable). `ENV_VAR` is the name of an environment variable holding the key, never the key itself — see [Third-party providers](providers.md) |
 | `--defs-version REL_ID` | use this installed definitions release (`rel_…`), or `bundled` for the data shipped with this version. The scan exits 2 without running if the release is not installed or a file changed since it was — see [Pinning a release](bundles.md#pinning-a-release) |
 | `--format F` | `table`, `json`, `sarif`, `cyclonedx`, `html`, `markdown` (repeatable; default `table`). `markdown` is the new findings as a table for a pull-request comment, with every scanned string shown as code; `compact` is one `path:line: error|warning|info: title [severity rule]` line per new finding, for editor problem matchers; `codequality` is GitLab's Code Quality report. See [Editors and CI](integrations.md). The JSON report names its layout in `schema` (`aiterprise-report/1`) |
@@ -56,7 +57,7 @@ configs), `--agent-configs`, `--offline` and `--defs-version`.
 
 | Command | Flags |
 |---|---|
-| `bom [target]` | `--out FILE` (default: stdout), `--cdx-version` (`1.6` or `1.7`; default 1.7), `--all-files` |
+| `bom [target]` | `--out FILE` (default: stdout), `--cdx-version` (`1.6` or `1.7`; default 1.7), `--all-files`, `--no-cache` |
 | `policy pull` | `--cloud URL`, `--out FILE` (default: `aibom.policy.yaml` in the current directory) |
 | `defs verify DIR`, `defs install DIR` | `--root-key FILE` |
 | `defs update` | `--root-key FILE`, `--channel NAME` (default: your account's), `--signing-keys URL` (default: next to the manifest) |
@@ -73,13 +74,27 @@ configs), `--agent-configs`, `--offline` and `--defs-version`.
 |---|---|
 | `AITERPRISE_API_KEY` | SecDB API key (CI); takes precedence over a saved key |
 | `AITERPRISE_HOME` | where credentials, history and installed bundles live (default `~/.aiterprise`) |
-| `AITERPRISE_CACHE_DIR` | OSV and registry response cache |
+| `AITERPRISE_CACHE_DIR` | OSV and registry response cache, and the per-file results of earlier scans in its `scan` folder (default `~/.aiterprise/cache`) |
 | `AITERPRISE_SECDB_URL` | SecDB base URL (default `https://secdb.aiterprise.net`) |
 | `AITERPRISE_CLOUD_URL` | AIterprise cloud URL for uploads and `policy pull` (https, or http to this machine only) |
 | `AITERPRISE_VIRUSTOTAL_MAX_LOOKUPS` | VirusTotal lookups per scan with `--byo` (default 4, the public key's per-minute limit) |
 | `AITERPRISE_VIRUSTOTAL_URL` | VirusTotal base URL for `--byo` (a proxy or test server; https, or http to this machine only) |
 | `AITERPRISE_ROOT_KEY` | minisign root public key file for bundle verification |
 | `AITERPRISE_DEFS` | `bundled`: ignore installed bundles and use the wheel's data; `rel_…`: pin that installed release, like `--defs-version` (which wins) |
+
+## Re-scans
+
+`scan` and `bom` keep what the import and endpoint analyzers found in each file, under the file's
+SHA-256, in `AITERPRISE_CACHE_DIR/scan` (one file per analyzer and target). The next scan of the
+same target takes an unchanged file's results from there instead of reading the file again, and
+the report says how many it took (`file cache: … per-file results are from an earlier scan`).
+Results are used only by the same build of the scanner (its version and every file of the
+package) with the same definitions release; anything else starts empty. A target not scanned for
+30 days is forgotten, and at most 256 such files are kept. Judging (advisories, malicious
+packages, policy) runs in full on every scan. `--no-cache` turns this off.
+
+The folder is trusted: whoever can write it can hide what a file holds from later scans. Do not
+share it across a trust boundary, for example in a CI cache that untrusted pull requests fill.
 
 ## Exit codes
 
