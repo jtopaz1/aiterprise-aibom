@@ -217,6 +217,7 @@ class _Ctx:
         top: bool = False,
         dev_known: bool = False,
         ai_lookup: tuple[str, str] | None = None,
+        licence: str | None = None,
         **props: Any,
     ) -> Component | None:
         name = _clean(name)
@@ -232,6 +233,7 @@ class _Ctx:
             version_spec=None if version else spec,
             locations=[Location(self.rel, line)],
             source=self.kind,
+            licence=licence,
         )
         lookup_name, lookup_eco = ai_lookup or (name, ecosystem)
         category = taxonomy.ai_category(lookup_name, lookup_eco)
@@ -493,6 +495,7 @@ def _finish(comps: list[Component]) -> list[Component]:
             existing.add_location(loc)
         for alg, digest in comp.hashes.items():
             existing.hashes.setdefault(alg, digest)
+        existing.licence = existing.licence or comp.licence
         if comp.source == LOCK:
             existing.source = LOCK
         if not comp.properties.get("dev"):
@@ -1317,6 +1320,14 @@ def _sri_hashes(integrity: Any) -> dict[str, str]:
 _GIT_REF_RE = re.compile(r"^(?:git\+|git:|git@|github:|gitlab:|bitbucket:)")
 
 
+def _npm_licence(value: Any) -> str | None:
+    """A lockfile entry's `license`: an SPDX expression, or the old `{"type": ...}` form."""
+    if isinstance(value, dict):
+        value = value.get("type")
+    value = _clean(value) if isinstance(value, str) else None
+    return value[:200] if value else None
+
+
 def _parse_package_lock(ctx: _Ctx, text: str) -> None:
     data = textio.loads_json(text)
     if not isinstance(data, dict):
@@ -1370,7 +1381,8 @@ def _npm_lock_packages(ctx: _Ctx, text: str, lines: _LineIndex, packages: dict) 
                 integrity=info.get("integrity") if isinstance(info.get("integrity"), str) else None,
                 url=resolved if _GIT_REF_RE.match(resolved) else None,
                 optional=info.get("optional") is True, peer=info.get("peer") is True,
-                bundled=info.get("inBundle") is True, alias=install if install != name else None)
+                bundled=info.get("inBundle") is True, alias=install if install != name else None,
+                licence=_npm_licence(info.get("license")))
 
 
 def _npm_lock_v1(ctx: _Ctx, deps: dict, cursor: _KeyCursor, depth: int) -> None:

@@ -77,7 +77,7 @@ jobs:
           python-version: "3.12"
       - name: One offline scan finds all five planted problems
         run: python tools/killer_demo.py
-      - name: One online scan (live OSV and registries, no SecDB key) finds all five and shows it asked them
+      - name: One online scan (live OSV, registries and deps.dev, no SecDB key) finds all five and shows it asked them
         env:
           AITERPRISE_HOME: ${{ runner.temp }}/aiterprise-home
         run: python tools/killer_demo.py --online
@@ -94,7 +94,7 @@ jobs:
           python-version: "3.12"
       - name: Cold offline scan of a 10,000-file monorepo in under 60 s, re-scan in under 10 s, all five planted problems found
         run: python tools/bench_scan.py --files 10000 --check 60 --check-warm 10 --json bench.json
-      - name: The same with live OSV and registry checks (no SecDB) in under 120 s, re-scan in under 10 s, and both answered
+      - name: The same with live OSV, registry and deps.dev checks (no SecDB) in under 120 s, re-scan in under 10 s, and all answered
         if: always()
         run: python tools/bench_scan.py --files 10000 --online --check 120 --check-warm 10 --json bench-online.json
       - name: 2 GiB safetensors under 5 s; 1 GiB PyTorch zip and 1 GiB pickle under 30 s each

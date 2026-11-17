@@ -25,31 +25,38 @@ class KillerDemoTests(unittest.TestCase):
 
     def test_an_online_run_must_have_asked_the_live_sources(self):
         live = {"mode": "online", "examined": {"osv": {"checked": 4, "with_data": 2},
-                                               "registry": {"checked": 4, "with_data": 4}}}
+                                               "registry": {"checked": 4, "with_data": 4},
+                                               "deps.dev": {"checked": 3, "with_data": 2}}}
         self.assertEqual(killer_demo.mode_problems(live, online=True), [])
         # the network was not reached, or the scan quietly ran offline: the five hits prove nothing online
-        quiet = {"mode": "online", "examined": {"osv": {"checked": 0, "with_data": 0, "skipped": "offline (cache only)"},
-                                                "registry": {"checked": 4, "with_data": 4}}}
+        quiet = {"mode": "online", "examined": {**live["examined"], "osv": {"checked": 0, "with_data": 0,
+                                                                            "skipped": "offline (cache only)"}}}
         self.assertEqual(killer_demo.mode_problems(quiet, online=True),
                          ["osv was not consulted (offline (cache only))"])
+        # package licences come from deps.dev online, so it must have answered too
+        no_licences = {"mode": "online", "examined": {k: v for k, v in live["examined"].items() if k != "deps.dev"}}
+        self.assertEqual(killer_demo.mode_problems(no_licences, online=True), ["deps.dev was not consulted (missing)"])
         self.assertEqual(killer_demo.mode_problems({**live, "mode": "offline"}, online=True),
                          ["the report says mode offline, not online"])
         self.assertEqual(killer_demo.mode_problems({"mode": "online", "examined": {}}, online=True),
-                         ["osv was not consulted (missing)", "registry was not consulted (missing)"])
+                         ["osv was not consulted (missing)", "registry was not consulted (missing)",
+                          "deps.dev was not consulted (missing)"])
         # what an online scan with no network reports: the five still hit from bundled data, exit 1
         unreachable = {"mode": "online", "examined": {"osv": {"checked": 0, "with_data": 0, "errors": 1},
-                                                      "registry": {"checked": 0, "with_data": 0, "errors": 4}}}
+                                                      "registry": {"checked": 0, "with_data": 0, "errors": 4},
+                                                      "deps.dev": {"checked": 0, "with_data": 0, "errors": 3}}}
         self.assertEqual(killer_demo.mode_problems(unreachable, online=True),
-                         ["osv was not consulted (1 failed lookups)", "registry was not consulted (4 failed lookups)"])
+                         ["osv was not consulted (1 failed lookups)", "registry was not consulted (4 failed lookups)",
+                          "deps.dev was not consulted (3 failed lookups)"])
 
     def test_the_demo_fails_when_an_online_run_did_not_reach_the_network(self):
         from unittest import mock
 
         quiet = {"mode": "online", "findings": [],
                  "examined": {"osv": {"checked": 0, "with_data": 0, "errors": 1},
-                              "registry": {"checked": 4, "with_data": 4}}}
+                              "registry": {"checked": 4, "with_data": 4}, "deps.dev": {"checked": 3}}}
         all_hit = {label: [{"severity": "critical"}] for label in killer_demo.EXPECT}
-        answered = {**quiet, "examined": {"osv": {"checked": 4}, "registry": {"checked": 4}}}
+        answered = {**quiet, "examined": {"osv": {"checked": 4}, "registry": {"checked": 4}, "deps.dev": {"checked": 3}}}
         with tempfile.TemporaryDirectory() as work:
             with mock.patch.object(killer_demo, "run", return_value=(1, quiet, all_hit)), \
                     mock.patch("sys.stdout", new_callable=io.StringIO) as out:

@@ -49,6 +49,8 @@ WORKERS = 8
 PYPI_SIMPLE = "https://pypi.org/simple/{}/"
 NPM_REGISTRY = "https://registry.npmjs.org/{}"
 REGISTRY_NAMES = {"pypi": "PyPI", "npm": "npm"}
+DEPS_DEV = "https://api.deps.dev/v3/systems/{}/packages/{}/versions/{}"
+DEPS_DEV_SYSTEMS = {"pypi": "PYPI", "npm": "NPM"}
 
 Fetch = Callable[[str, dict], Any]
 
@@ -96,6 +98,13 @@ class RegistryClient:
     def pypi_provenance(self, url: str) -> dict | None:
         """A PEP 740 provenance document (the URL comes from the simple index)."""
         return self._get("pypi-provenance", url, {"Accept": "application/json"})
+
+    def depsdev_version(self, ecosystem: str, name: str, version: str) -> dict | None:
+        """deps.dev's record of one PyPI or npm version (its `licenses`), None when it has none."""
+        if ecosystem == "pypi":
+            name = normalize_name(name, "pypi")
+        url = DEPS_DEV.format(DEPS_DEV_SYSTEMS[ecosystem], quote(name, safe=""), quote(version, safe=""))
+        return self._get("depsdev-version", url, {"Accept": "application/json"})
 
 
 # --------------------------------------------------------------------------------------------

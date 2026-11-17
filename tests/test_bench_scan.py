@@ -91,7 +91,8 @@ class RunTests(unittest.TestCase):
     def test_an_online_run_must_show_the_live_sources_answered(self):
         offline_report = {"mode": "offline", "findings": [], "examined": {}}
         online_report = {"mode": "online", "findings": [],
-                         "examined": {"osv": {"checked": 4, "with_data": 1}, "registry": {"checked": 4, "with_data": 4}}}
+                         "examined": {"osv": {"checked": 4, "with_data": 1}, "registry": {"checked": 4, "with_data": 4},
+                                      "deps.dev": {"checked": 4, "with_data": 4}}}
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(bench_scan, "_scan", return_value=(1.0, 1, offline_report)):
                 res = bench_scan.run(Path(tmp) / "a", 120, online=True)
@@ -100,7 +101,7 @@ class RunTests(unittest.TestCase):
                 res = bench_scan.run(Path(tmp) / "b", 120, online=True)
             self.assertEqual(res["online"], True)
             self.assertEqual(res["mode"], [])
-            no_registry = {**online_report, "examined": {"osv": {"checked": 4, "with_data": 1},
+            no_registry = {**online_report, "examined": {**online_report["examined"],
                                                          "registry": {"checked": 0, "with_data": 0, "errors": 4}}}
             with mock.patch.object(bench_scan, "_scan", return_value=(1.0, 1, no_registry)) as scan:
                 res = bench_scan.run(Path(tmp) / "d", 120, online=True)
