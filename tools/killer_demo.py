@@ -10,7 +10,8 @@ It builds a small repository with five planted problems and expects one scan to 
 4. Llama 3 weights, whose licence is conditional above 700M monthly active users;
 5. transformers 4.44.0, which has known CVEs.
 
-Offline (the default, and what CI runs) uses only the definitions bundled in the wheel.
+Offline (the default) uses only the definitions bundled in the wheel; `--online` also asks OSV and the
+package registries, and fails unless the report shows it did. CI runs both.
 """
 
 from __future__ import annotations
@@ -56,6 +57,30 @@ EXPECT = {
     "transformers 4.44.0 known CVE":
         lambda f: f["rule_id"].startswith("ait.vuln.") and "transformers" in (f.get("component") or {}).get("name", ""),
 }
+
+
+# sources only an online scan consults (SecDB needs a key, so it is not required here)
+LIVE_SOURCES = ("osv", "registry")
+
+
+def mode_problems(report: dict, online: bool) -> list[str]:
+    """Why the report does not show a scan in the mode asked for; empty when it does.
+
+    Five hits from an "online" run prove nothing online if the scan never reached the network."""
+    want = "online" if online else "offline"
+    if report.get("mode") != want:
+        return [f"the report says mode {report.get('mode')}, not {want}"]
+    examined = report.get("examined") or {}
+    problems = []
+    for name in LIVE_SOURCES:
+        entry = examined.get(name) or {}
+        checked = entry.get("checked", 0)
+        if online and not checked:
+            why = entry.get("skipped") or (f"{entry['errors']} failed lookups" if entry.get("errors") else "missing")
+            problems.append(f"{name} was not consulted ({why})")
+        elif not online and checked:
+            problems.append(f"{name} was consulted offline")
+    return problems
 
 
 def build_repo(repo: Path) -> None:
@@ -106,7 +131,8 @@ def run(work: Path, online: bool = False, exe: list[str] | None = None) -> tuple
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--work", type=Path, help="working directory (default: a temporary one)")
-    ap.add_argument("--online", action="store_true", help="also consult OSV, registries and SecDB")
+    ap.add_argument("--online", action="store_true",
+                    help="also consult OSV and the registries (and SecDB when logged in); fails unless they answered")
     ap.add_argument("--exe", help="run this executable (e.g. a release binary) instead of the checkout's CLI")
     args = ap.parse_args(argv)
     tmp = None
@@ -126,7 +152,10 @@ def main(argv: list[str] | None = None) -> int:
         missed = [label for label, found in hits.items() if not found]
         if code != 1:
             print(f"expected exit 1 (policy failure), got {code}")
-        return 0 if not missed and code == 1 else 1
+        problems = mode_problems(rep, args.online)
+        for problem in problems:
+            print(f"  MODE  {problem}")
+        return 0 if not missed and not problems and code == 1 else 1
     finally:
         if tmp is not None:
             tmp.cleanup()

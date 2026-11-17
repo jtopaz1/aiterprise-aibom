@@ -77,6 +77,10 @@ jobs:
           python-version: "3.12"
       - name: One offline scan finds all five planted problems
         run: python tools/killer_demo.py
+      - name: One online scan (live OSV and registries, no SecDB key) finds all five and shows it asked them
+        env:
+          AITERPRISE_HOME: ${{ runner.temp }}/aiterprise-home
+        run: python tools/killer_demo.py --online
 
   licence-check:
     runs-on: ubuntu-latest
