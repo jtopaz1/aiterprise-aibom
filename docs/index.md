@@ -17,6 +17,11 @@ aiterprise-scan ui           # local web UI: history, findings, diff, suppressio
 
 Apache-2.0 · no runtime dependencies (standard library only) · Python 3.11+
 
+![One offline scan of a repository with five planted problems, all found](assets/killer-demo.svg)
+
+*One offline scan of a four-file repository with five planted problems, all found; an excerpt of
+the table report.*
+
 ## What it judges
 
 | Area | Examples |
