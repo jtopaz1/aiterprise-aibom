@@ -168,6 +168,37 @@ jobs:
           gh api "$URL" > comments.json
           python3 -c "import json; c = [x for x in json.load(open('comments.json', encoding='utf-8')) if x['user']['login'] == 'github-actions[bot]' and '<!-- aiterprise-scan report -->' in x['body']]; assert len(c) == 1, len(c); assert 'passes the gate' in c[0]['body'], c[0]['body'][:300]; print('one comment, now the clean scan:', c[0]['html_url'])"
 
+  gitlab-template:
+    # the GitLab job's script lines, run in the image the job names, the way a GitLab runner runs them
+    runs-on: ubuntu-latest
+    container: python:3.12-slim
+    env:
+      AIBOM_INSTALL: "."
+      AIBOM_FAIL_ON: high
+      AIBOM_ARGS: --offline
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write the template's script to job.sh
+        run: |
+          python -c "import sys; sys.path.insert(0, 'tools'); import killer_demo, pathlib; killer_demo.build_repo(pathlib.Path('kd'))"
+          python -c "import sys; sys.path.insert(0, 'src'); from aiterprise_scan import miniyaml; job = miniyaml.load(open('templates/gitlab/aiterprise-scan.gitlab-ci.yml', encoding='utf-8').read())['aiterprise-scan']; open('job.sh', 'w').write('\n'.join(job['script']) + '\n')"
+          cat job.sh
+      - name: On the killer demo the job fails and writes the Code Quality report and a CycloneDX 1.6 AI-BOM
+        shell: bash
+        run: |
+          set +e
+          AIBOM_PATH=kd bash -e job.sh
+          code=$?
+          set -e
+          echo "exit $code"
+          test "$code" = "1"
+          python -c "import json; i = json.load(open('aiterprise-report/codequality.json', encoding='utf-8')); assert i and all(set(x) == {'description', 'check_name', 'fingerprint', 'severity', 'location'} for x in i); print(len(i), 'Code Quality issues')"
+          python -c "import json; b = json.load(open('aiterprise-report/aibom.cdx.json', encoding='utf-8')); assert b['specVersion'] == '1.6', b['specVersion']; print('CycloneDX', b['specVersion'])"
+          rm -rf aiterprise-report
+      - name: On a clean fixture the job passes
+        shell: bash
+        run: AIBOM_PATH=tests/golden/F02-clean-python bash -e job.sh
+
   pre-commit:
     # the hook in .pre-commit-hooks.yaml, run by pre-commit itself against two throwaway repositories
     runs-on: ubuntu-latest

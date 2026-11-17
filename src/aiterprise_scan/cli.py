@@ -14,9 +14,10 @@ from .scanner import ScanOptions, run_scan
 
 COMMANDS = {"scan", "mcp", "bom", "policy", "defs", "version", "login", "logout", "status", "report-fp", "upload",
             "ui"}
-FORMATS = ("table", "json", "sarif", "cyclonedx", "html", "markdown")
+FORMATS = ("table", "json", "sarif", "cyclonedx", "html", "markdown", "compact", "codequality")
 _OUT_NAMES = {"table": "report.txt", "json": "report.json", "sarif": "report.sarif", "cyclonedx": "aibom.cdx.json",
-              "html": "report.html", "markdown": "report.md"}
+              "html": "report.html", "markdown": "report.md", "compact": "report.compact.txt",
+              "codequality": "codequality.json"}
 
 
 def defs_line() -> str:
@@ -163,6 +164,8 @@ def _emit(result: ScanResult, args: argparse.Namespace) -> None:
             "cyclonedx": lambda: bom.dumps(result, args.cdx_version),
             "html": lambda: html_report.render(result),
             "markdown": lambda: report.render_markdown(result, defs_line()),
+            "compact": lambda: report.render_compact(result),
+            "codequality": lambda: report.dumps_codequality(result),
         }[fmt]()
         if args.out:
             (args.out / _OUT_NAMES[fmt]).write_text(text, encoding="utf-8")

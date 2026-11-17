@@ -36,7 +36,7 @@
 | `--cloud URL` | AIterprise cloud URL for `--upload` (or `AITERPRISE_CLOUD_URL`) |
 | `--save` | keep this scan in the local history shown by `ui` |
 | `--byo PROVIDER=ENV_VAR` | third-party enrichment with your own key, e.g. `virustotal=VT_API_KEY` (repeatable). `ENV_VAR` is the name of an environment variable holding the key, never the key itself — see [Third-party providers](providers.md) |
-| `--format F` | `table`, `json`, `sarif`, `cyclonedx`, `html`, `markdown` (repeatable; default `table`). `markdown` is the new findings as a table for a pull-request comment, with every scanned string shown as code. The JSON report names its layout in `schema` (`aiterprise-report/1`) |
+| `--format F` | `table`, `json`, `sarif`, `cyclonedx`, `html`, `markdown` (repeatable; default `table`). `markdown` is the new findings as a table for a pull-request comment, with every scanned string shown as code; `compact` is one `path:line: error|warning|info: title [severity rule]` line per new finding, for editor problem matchers; `codequality` is GitLab's Code Quality report. See [Editors and CI](integrations.md). The JSON report names its layout in `schema` (`aiterprise-report/1`) |
 | `--out DIR` | write reports into this directory instead of stdout |
 | `--emit-bom FILE` | also write the CycloneDX AI-BOM to FILE |
 | `--cdx-version 1.6\|1.7` | CycloneDX version (default 1.7) |
