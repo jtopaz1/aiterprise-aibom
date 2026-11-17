@@ -34,7 +34,7 @@ Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ 
 | Package archives | Wheels, sdists, tarballs, eggs: `.pth` start-up payloads, `setup.py` and npm lifecycle commands, path traversal, model files inside | `ait.archive.*` |
 | MCP servers | Every agent's config (Claude Desktop/Code, Cursor, VS Code, Codex, Windsurf, Gemini, OpenClaw, DeepSeek Harness) and MCPB/DXT bundles: dangerous commands (57 rules), poisoned descriptions (20 patterns: hidden directives, forged chat turns, exfiltration through URLs, images and tool arguments, credential reads, homoglyphs), literal secrets, scope — **without launching anything**; SecDB reputation when logged in | `ait.mcp.*` |
 | Agent skills | `SKILL.md` trees, Claude Code plugins/commands: instruction poisoning, install-script commands, risk score — in a project, and with `--agent-configs` in the skills folders of the machine (Claude Code, Codex, OpenClaw, `~/.agents/skills`) | `ait.skill.*` |
-| Licences | Model and dataset licence verdicts (Llama, Gemma, OpenRAIL, Mistral, Qwen, DBRX, DeepSeek, Falcon, CC-BY-NC, …) against your `use_context` — advisory, not legal advice; written into the AI-BOM's `licenses[]` | `ait.licence.*` |
+| Licences | Model and dataset licence verdicts (Llama, Gemma, OpenRAIL, Mistral, Qwen, DBRX, DeepSeek, Falcon, CC-BY-NC, …) against your `use_context` — advisory, not legal advice; written into the AI-BOM's `licenses[]`. Package licences go there too, from `package-lock.json` offline and from deps.dev online | `ait.licence.*` |
 | Secrets | AI-provider keys in configs and code, reported redacted | `ait.secret.*` |
 | Prompts, endpoints, vector stores | Listed in the AI-BOM, not judged: agent instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, Copilot and Cursor rules, …), sub-agents and their tool grants, prompt templates and hub prompts; the AI APIs the code calls (provider URLs, `OPENAI_BASE_URL` and other endpoint variables, a client's `base_url`); vector stores (Chroma, Qdrant, Milvus, Weaviate, pgvector, LanceDB, FAISS, Pinecone). The text of a prompt is never copied, and credentials are cut from URLs | — |
 | Third-party (your own key) | `--byo virustotal=ENV_VAR`: VirusTotal's verdict on model files and package archives, by SHA-256 only — labelled VirusTotal, never uploaded, cached, sent to SecDB or merged into AIterprise data ([docs](docs/providers.md)) | `ext.virustotal.*` |
@@ -167,8 +167,8 @@ MCP: `aiterprise-scan mcp serve` exposes `scan_ai_supply_chain` to any MCP clien
 ## Principles
 
 - **Local-first.** Source never leaves the machine. Online mode sends package names and versions to
-  OSV and the PyPI/npm registries, and (when logged in) hashes, purls and URL prefixes to SecDB —
-  all in POST bodies or registry paths, never your code. `--offline` sends nothing.
+  OSV, the PyPI/npm registries and deps.dev, and (when logged in) hashes, purls and URL prefixes to
+  SecDB — all in POST bodies or request paths, never your code. `--offline` sends nothing.
 - **Never execute what we scan.** No unpickling, no imports, no MCP server launches, no archive
   extraction to disk except model members, which are only read.
 - **"No match" is not "never checked".** Every report lists which sources were consulted and how
@@ -184,7 +184,7 @@ python -m venv .venv && .venv/bin/pip install -e .
 PYTHONPATH=src python -m unittest discover -s tests -p "test_*.py"
 python tools/killer_demo.py            # the five-problem acceptance demo; exit 0 only if all five hit
 python tools/bench_scan.py --check 60 --check-warm 10  # a 10,000-file monorepo: cold scan against 60 s, re-scan against 10 s
-python tools/bench_scan.py --online --check 120 --check-warm 10  # the same with live OSV and registry checks
+python tools/bench_scan.py --online --check 120 --check-warm 10  # the same with live OSV, registry and deps.dev checks
 python tools/bench_models.py --check   # 2 GiB safetensors, 1 GiB PyTorch zip and pickle against their budgets (4 GiB of disk)
 python tools/build_malicious.py --zip PyPI-all.zip --zip npm-all.zip --replace   # refresh the MAL snapshot
 python tools/build_vuln_subset.py --zip PyPI-all.zip --zip npm-all.zip           # refresh the AI advisory subset
