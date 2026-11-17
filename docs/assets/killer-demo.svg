@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="936" height="604" viewBox="0 0 936 604" role="img" aria-label="aiterprise-scan: one offline scan of the killer demo">
+<title>aiterprise-scan: one offline scan of the killer demo</title>
+<rect width="936" height="604" rx="8" fill="#0d1117"/>
+<circle cx="18" cy="15" r="5" fill="#ff5f56"/><circle cx="34" cy="15" r="5" fill="#ffbd2e"/><circle cx="50" cy="15" r="5" fill="#27c93f"/>
+<g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" fill="#e6edf3">
+<text x="16" y="44" xml:space="preserve" fill="#3fb950">$ aiterprise-scan . --offline</text>
+<text x="16" y="62" xml:space="preserve">aiterprise-scan 0.1.0 · defs: bundled (malicious 235,492 records @2026-11-16 · KEV 1,781 CVEs)</text>
+<text x="16" y="80" xml:space="preserve">target: . · mode: offline · telemetry: off</text>
+<text x="16" y="98" xml:space="preserve"></text>
+<text x="16" y="116" xml:space="preserve">DISCOVERY  4 files walked · 8 components (7 AI)</text>
+<text x="16" y="134" xml:space="preserve" fill="#8b949e">           4 libraries · 1 mcp-config · 1 mcp-server · 1 model · 1 model-file</text>
+<text x="16" y="152" xml:space="preserve">JUDGEMENT  53 findings (13 critical, 24 high, 15 medium, 1 low)</text>
+<text x="16" y="170" xml:space="preserve" fill="#8b949e">           sources (with data/checked): ait-malicious 1/4 · archives 0/0 · kev 3/42 · licences 1/2 · mcp 1/1 · mode…</text>
+<text x="16" y="188" xml:space="preserve"></text>
+<text x="16" y="206" xml:space="preserve"> <tspan fill="#ff6b6b" font-weight="bold">CRITICAL</tspan>  xyz-tools — Prompt poisoning in xyz-tools (description): Instruction to send/post data to an external UR…</text>
+<text x="16" y="224" xml:space="preserve" fill="#8b949e">           evidence: ait-rules exfil.url</text>
+<text x="16" y="242" xml:space="preserve" fill="#8b949e">           at .mcp.json:3 · fix: Remove the exfiltration directive; treat the tool as malicious.</text>
+<text x="16" y="260" xml:space="preserve" fill="#8b949e">           id: c6a01fa44d09e5f2 · rule: ait.mcp.desc.exfil.url · confidence 90</text>
+<text x="16" y="278" xml:space="preserve"> <tspan fill="#ff6b6b" font-weight="bold">CRITICAL</tspan>  model.pt — Pickle imports dangerous callable os.system (os-command)</text>
+<text x="16" y="296" xml:space="preserve" fill="#8b949e">           evidence: ait-rules ait.model.pickle.dangerous-global (callable os.system; opcode GLOBAL; offset 2)</text>
+<text x="16" y="314" xml:space="preserve" fill="#8b949e">           at model.pt · fix: Do not load this file. Treat its source as compromised; obtain the model from a trust…</text>
+<text x="16" y="332" xml:space="preserve" fill="#8b949e">           id: 32e9d08ad104a444 · rule: ait.model.pickle.dangerous-global · confidence 90</text>
+<text x="16" y="350" xml:space="preserve"> <tspan fill="#ff6b6b" font-weight="bold">CRITICAL</tspan>  pkg:pypi/litellm@1.82.7 — Known-malicious package version (litellm 1.82.7)</text>
+<text x="16" y="368" xml:space="preserve" fill="#8b949e">           evidence: ait-malicious MAL-2026-2144 (published 2026-03-24; affected 1.107.0, 1.82.7, 1.82.8)</text>
+<text x="16" y="386" xml:space="preserve" fill="#8b949e">           at requirements.txt:1 · fix: Remove the package; pin to a release that is not listed as affected; rotate…</text>
+<text x="16" y="404" xml:space="preserve" fill="#8b949e">           id: 56fa84cfb6fa3d31 · rule: ait.pkg.malicious · confidence 98</text>
+<text x="16" y="422" xml:space="preserve"> <tspan fill="#ff6b6b" font-weight="bold">CRITICAL</tspan>  pkg:pypi/transformers@4.44.0 — transformers 4.44.0: CVE-2026-5241 — huggingface/transformers: Arbitrary …</text>
+<text x="16" y="440" xml:space="preserve" fill="#8b949e">           evidence: osv-subset GHSA-fgcw-684q-jj6r (published 2026-06-03; severity_basis cvss3 9.6) · +1 more sour…</text>
+<text x="16" y="458" xml:space="preserve" fill="#8b949e">           at requirements.txt:2 · fix: Upgrade transformers to 5.5.0 or later.</text>
+<text x="16" y="476" xml:space="preserve" fill="#8b949e">           id: ef6c2f1ca13e21aa · rule: ait.vuln.advisory · confidence 75</text>
+<text x="16" y="494" xml:space="preserve"> <tspan fill="#d8c25a" font-weight="bold">MEDIUM</tspan>    pkg:huggingface/meta-llama/Meta-Llama-3-8B — licence: attribution required + &gt;700M MAU clause vs use_con…</text>
+<text x="16" y="512" xml:space="preserve" fill="#8b949e">           evidence: ait-licence llama3-community-v1</text>
+<text x="16" y="530" xml:space="preserve" fill="#8b949e">           at app.py:2 · fix: Show &quot;Built with Meta Llama 3&quot; in product docs/UI, start any distributed fine-tune&#x27;s …</text>
+<text x="16" y="548" xml:space="preserve" fill="#8b949e">           id: e55347d034afab1b · rule: ait.licence.conditional · confidence 75</text>
+<text x="16" y="566" xml:space="preserve"></text>
+<text x="16" y="584" xml:space="preserve" fill="#8b949e"> … 48 more findings in the full report · exit 1: the gate fails (--fail-on high)</text>
+</g>
+</svg>

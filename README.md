@@ -19,6 +19,11 @@ aiterprise-scan ui                  # local web UI: history, findings, diff, sup
 
 Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ · docs in [`docs/`](docs/index.md)
 
+![One offline scan of a repository with five planted problems: a poisoned MCP tool description, a pickle that runs os.system, the malicious litellm 1.82.7, a transformers CVE and the Llama 3 licence's 700M-user clause](docs/assets/killer-demo.svg)
+
+*One offline scan of a four-file repository with five planted problems, all found
+([`tools/killer_demo.py`](tools/killer_demo.py)); an excerpt of the table report.*
+
 ## What it finds
 
 | Area | What is judged | Rule ids |
