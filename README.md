@@ -162,7 +162,8 @@ MCP: `aiterprise-scan mcp serve` exposes `scan_ai_supply_chain` to any MCP clien
 - **"No match" is not "never checked".** Every report lists which sources were consulted and how
   many items had data; unverified checks are reported as unverified, never as safe.
 - **No invented numbers.** A rule shows a false-positive rate only after it was measured on a
-  corpus (`tools/measure_fp.py`); otherwise `fp_rate_measured: null`.
+  corpus (`tools/measure_fp.py`); otherwise `fp_rate_measured: null`. The corpora and their limits:
+  [docs/fp-methodology.md](docs/fp-methodology.md).
 
 ## Development
 
@@ -176,6 +177,8 @@ python tools/build_kev.py --url                                                 
 python tools/check_licences.py                                                   # release licence check
 ```
 
+Contributing (DCO sign-off, how a detection rule is accepted): [CONTRIBUTING.md](CONTRIBUTING.md).
+Reporting a vulnerability and the disclosure policy: [SECURITY.md](SECURITY.md).
 What is built, what is not, and the data provenance: [docs/STATUS.md](docs/STATUS.md).
 The project's own terms (scan, gated scan, gate, policy root, source, report document): [GLOSSARY.md](GLOSSARY.md).
 Design of record: `aiterprise-doc/13-APP-AIBOM.md` (AI2).

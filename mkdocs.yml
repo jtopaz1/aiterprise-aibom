@@ -22,6 +22,7 @@ nav:
   - Editors and CI: integrations.md
   - Policy and suppressions: policy.md
   - Rules reference: rules.md
+  - False-positive rates: fp-methodology.md
   - SecDB: secdb.md
   - Third-party providers: providers.md
   - Definition bundles: bundles.md

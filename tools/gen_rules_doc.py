@@ -88,7 +88,8 @@ INTRO = """\
 Every finding names a rule id. The **FP rate** column is the false-positive rate the scanner itself
 reports for the rule: measured on a corpus by `tools/measure_fp.py`, or **not measured** — never an
 estimate. A measured rate is the share of clean projects (that gave the rule something to judge) on
-which it fired anyway.
+which it fired anyway. [How false-positive rates are measured](fp-methodology.md) names the corpora
+and what they cannot tell you.
 
 Severities are defaults; `aibom.policy.yaml` decides which ones fail the build (`fail_on`).
 """
