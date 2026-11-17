@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
-from . import sources
+from . import scancache, sources
 from .model import OWASP_SENSITIVE_INFO, Evidence, Finding, Location, ScanResult
 from .textio import TooLarge, read_text
 from .walk import rel_posix
@@ -256,6 +256,12 @@ def _finding(match: SecretMatch, location: Location) -> Finding:
     )
 
 
+def _file_secrets(text: str) -> list[list]:
+    """A file's secrets as its findings show them, and no more: kept between scans (`scancache`),
+    so neither the value nor more of its digest than the report shows."""
+    return [[m.rule_id, m.kind, m.line, m.redacted, m.digest[:8]] for m in find_secrets(text)]
+
+
 def scan_secrets(root: Path, files: list[Path], result: ScanResult | None = None) -> list[Finding]:
     """Scan every scannable text file for secrets and return high findings.
 
@@ -274,8 +280,9 @@ def scan_secrets(root: Path, files: list[Path], result: ScanResult | None = None
             skipped.append(rel_posix(path, root))
             continue
         checked += 1
-        for match in find_secrets(text):
-            findings.append(_finding(match, Location(rel_posix(path, root), match.line)))
+        for rule_id, kind, line, redacted, digest in scancache.memo("secrets", text, _file_secrets):
+            match = SecretMatch(rule_id=rule_id, kind=kind, start=-1, line=line, redacted=redacted, digest=digest)
+            findings.append(_finding(match, Location(rel_posix(path, root), line)))
     if result is not None:
         ex = result.examine(sources.SECRETS.name)
         ex.checked += checked

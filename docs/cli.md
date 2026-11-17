@@ -84,10 +84,14 @@ configs), `--agent-configs`, `--offline` and `--defs-version`.
 
 ## Re-scans
 
-`scan` and `bom` keep what the import and endpoint analyzers found in each file, under the file's
-SHA-256, in `AITERPRISE_CACHE_DIR/scan` (one file per analyzer and target). The next scan of the
-same target takes an unchanged file's results from there instead of reading the file again, and
-the report says how many it took (`file cache: … per-file results are from an earlier scan`).
+`scan` and `bom` keep what four analyzers found in each file (imports, endpoints and vector stores,
+model and dataset references, secrets), under the file's SHA-256, in `AITERPRISE_CACHE_DIR/scan`
+(one file per analyzer and target). The next scan of the same target still reads every file, but
+takes an unchanged file's results from there instead of analysing it again, and the report says how
+many it took (`file cache: … per-file results are from an earlier scan`). A secret is kept as the
+report shows it: rule, line, redacted preview and an 8-character digest, never the value. Whether a
+model id in code names a folder of the tree is checked again on every scan; notebooks are always
+analysed again.
 Results are used only by the same build of the scanner (its version and every file of the
 package) with the same definitions release; anything else starts empty. A target not scanned for
 30 days is forgotten, and at most 256 such files are kept. Judging (advisories, malicious

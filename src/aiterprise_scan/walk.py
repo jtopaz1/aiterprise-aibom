@@ -89,6 +89,25 @@ class GitIgnore:
 
 
 def rel_posix(path: Path, root: Path) -> str:
+    """`path` relative to `root` in posix form; `path` itself when it is not under `root`.
+
+    Every analyzer names each file this way, so the common case (a path that starts with the root's
+    own spelling, which `walk` keeps) is a string slice; anything else goes to `relative_to`."""
+    p, r = str(path), str(root)
+    if r == ".":
+        return path.as_posix()  # what relative_to(".") gives, and its fallback, for every path
+    if p.startswith(r):
+        rest = p[len(r):]
+        if not rest:
+            return "."
+        if r.endswith(os.sep):  # a filesystem root: "/" or "C:\\"
+            pass
+        elif rest[0] == os.sep:
+            rest = rest[1:]
+        else:
+            rest = ""  # a sibling that only starts with the root's name: let relative_to decide
+        if rest:
+            return rest.replace("\\", "/") if os.sep == "\\" else rest
     try:
         return path.relative_to(root).as_posix()
     except ValueError:

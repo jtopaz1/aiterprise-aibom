@@ -11,7 +11,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from aiterprise_scan import cli, discover, scancache, services  # noqa: E402
+from aiterprise_scan import cli, discover, licences, scancache, secrets, services  # noqa: E402
 from aiterprise_scan.scanner import ScanOptions, run_scan  # noqa: E402
 
 
@@ -223,6 +223,9 @@ class FingerprintTests(unittest.TestCase):
         self.assertNotEqual(other, scancache.package_fingerprint(Path(scancache.__file__).parent))
 
 
+KEY = "qRsTuVwXyZ4KpM8NvW2JtH6LgQ9BdF3K7P"  # 34 characters after "hf_": a Hugging Face token's shape
+TWIN = '// AutoModel.from_pretrained("acme/commented-out")\np = pipeline("text-generation", "acme/in-all-code")\n'
+
 SAMPLE = {
     "app/main.py": 'import os\nimport openai\nclient = openai.OpenAI(base_url="http://10.0.0.5:8000/v1")\n',
     ".env": "OPENAI_BASE_URL=https://llm-proxy.internal.example/v1\n",
@@ -235,7 +238,25 @@ SAMPLE = {
     "app/util.py": "import json\n",
     "nb/analysis.ipynb": json.dumps({"cells": [{"cell_type": "code", "source": "import torch\n"}]}),
     "web/index.ts": "import Anthropic from '@anthropic-ai/sdk';\n",
+    # a secret, in two files with the same text, so each keeps its own location
+    "config/settings.yaml": f"hf_token: hf_{KEY}\n",
+    "config/copy.yaml": f"hf_token: hf_{KEY}\n",
+    # model and dataset references in code and in a document; acme/tiny-model may become a folder
+    "app/models.py": ('from transformers import AutoModel\nfrom datasets import load_dataset\n'
+                      'm = AutoModel.from_pretrained("meta-llama/Meta-Llama-3-8B")\n'
+                      'd = load_dataset("rajpurkar/squad_v2")\n'
+                      'local = AutoModel.from_pretrained("acme/tiny-model")\n'),
+    "web/models.js": 'const p = await pipeline("text-generation", "Xenova/gpt2");\n',
+    "docs/models.md": "Weights: https://huggingface.co/google/gemma-2b\n",
+    # the same text read three ways: calls in Python ("//" is no comment), not in JavaScript, links only in a document
+    "app/twin_models.py": TWIN,
+    "web/twin_models.js": TWIN,
+    "docs/twin_models.md": TWIN,
+    "nb/refs.ipynb": json.dumps({"cells": [{"cell_type": "code", "source":
+                                            "# notebook cell\nm = AutoModel.from_pretrained('Qwen/Qwen2-0.5B')\n"}]}),
 }
+REFS = {"meta-llama/Meta-Llama-3-8B", "rajpurkar/squad_v2", "acme/tiny-model", "Xenova/gpt2", "google/gemma-2b",
+        "Qwen/Qwen2-0.5B"}
 
 
 class ScanTests(unittest.TestCase):
@@ -266,19 +287,63 @@ class ScanTests(unittest.TestCase):
 
     def test_a_warm_scan_reports_what_a_cold_scan_does_without_parsing_again(self):
         cold = self.run_scan()
+        seen: list[str] = []
+
+        def spy(real):
+            def analyse(text, *args, **kwargs):
+                seen.append(text)
+                return real(text, *args, **kwargs)
+            return analyse
+
         with mock.patch.object(discover, "_python_hits", side_effect=AssertionError("parsed")), \
                 mock.patch.object(discover, "_notebook_hits", side_effect=AssertionError("parsed")), \
                 mock.patch.object(discover, "_js_hits", side_effect=AssertionError("parsed")), \
-                mock.patch.object(services, "_scan_text", side_effect=AssertionError("read")):
+                mock.patch.object(services, "_scan_text", side_effect=AssertionError("read")), \
+                mock.patch.object(secrets, "find_secrets", spy(secrets.find_secrets)), \
+                mock.patch.object(licences, "_scan_calls", spy(licences._scan_calls)), \
+                mock.patch.object(licences, "_scan_urls", spy(licences._scan_urls)):
             warm = self.run_scan()
+        # notebooks are read for model references every time (their lines depend on what is kept)
+        texts = set(SAMPLE.values())  # as written; on Windows the files hold CRLF line ends
+        again = [t for t in seen if t.replace("\r\n", "\n") in texts and not t.startswith('{"cells"')]
+        self.assertEqual(again, [])
+        self.assertTrue(seen)  # the notebooks were
         self.assertEqual(self.summary(warm), self.summary(cold))
         self.assertEqual(self.summary(warm), self.summary(self.run_scan(cache=False)))
         names = {c.name for c in warm.components}
-        self.assertTrue({"openai", "torch", "@anthropic-ai/sdk"} <= names, names)
+        self.assertTrue({"openai", "torch", "@anthropic-ai/sdk"} | REFS <= names, names)
         endpoints = {c.name for c in warm.components if c.ctype == "ai-endpoint"}
         self.assertEqual(endpoints, {"http://10.0.0.5:8000", "https://llm-proxy.internal.example",
                                      "https://gw.corp.example"})
         self.assertIn("vector-store", {c.ctype for c in warm.components})
+        where = {c.name: sorted(loc.path for loc in c.locations) for c in warm.components}
+        self.assertEqual(where["acme/commented-out"], ["app/twin_models.py"])
+        self.assertEqual(where["acme/in-all-code"], ["app/twin_models.py", "web/twin_models.js"])  # not the .md
+        found = sorted((f.rule_id, f.location.path, f.location.line) for f in warm.findings
+                       if f.rule_id.startswith("ait.secret."))
+        self.assertEqual(found, [("ait.secret.huggingface", "config/copy.yaml", 1),
+                                 ("ait.secret.huggingface", "config/settings.yaml", 1)])
+
+    def test_a_reference_that_is_now_a_local_folder_is_dropped_by_a_warm_scan(self):
+        self.assertIn("acme/tiny-model", {c.name for c in self.run_scan().components})
+        (self.root / "acme" / "tiny-model").mkdir(parents=True)  # no file in it: the scanned files are the same
+        (self.root / "google" / "gemma-2b").mkdir(parents=True)  # a link is a reference whatever the folders
+        warm = self.run_scan()
+        reused, used = self.cache_note(warm)
+        self.assertEqual(reused, used)
+        names = {c.name for c in warm.components}
+        self.assertNotIn("acme/tiny-model", names)
+        self.assertTrue({"meta-llama/Meta-Llama-3-8B", "google/gemma-2b"} <= names, names)
+        self.assertEqual(self.summary(warm), self.summary(self.run_scan(cache=False)))
+
+    def test_kept_secret_results_hold_only_what_the_report_shows(self):
+        self.run_scan()
+        kept = "".join(p.read_text(encoding="utf-8") for p in self.cache.glob("*.json"))
+        digest = secrets._digest(f"hf_{KEY}")
+        self.assertNotIn(KEY, kept)
+        self.assertNotIn(digest, kept)  # the report shows 8 of its 16 characters
+        self.assertIn(digest[:8], kept)
+        self.assertIn(secrets.redact(f"hf_{KEY}"), kept)
 
     def cache_note(self, result):
         notes = [n for n in result.notes if n.startswith("file cache")]
@@ -301,7 +366,7 @@ class ScanTests(unittest.TestCase):
         warm = self.run_scan()
         self.assertIn("anthropic", {c.name for c in warm.components})
         reused, used = self.cache_note(warm)
-        self.assertEqual(reused, used - 2)  # util.py, for its imports and for its endpoints
+        self.assertEqual(reused, used - 4)  # util.py: its imports, endpoints, secrets and model references
 
     def test_no_cache_unless_asked(self):
         self.run_scan(cache=False)
