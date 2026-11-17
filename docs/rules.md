@@ -23,6 +23,8 @@ Severities are defaults; `aibom.policy.yaml` decides which ones fail the build (
 | `ait.pkg.typosquat` | medium | 0.20 % (n=1017) | The name looks like a widely used or AI package: a separator change, lookalike letters (rn for m), a swapped, missing, doubled or adjacent-key letter. A name one keystroke from a 4-letter popular name counts only when the registry shows it is under a year old. |
 | `ait.pkg.dormant-release` | medium | 0.00 % (n=131) | The release in use is under 30 days old and came after two years or more with no release: a sign of a taken-over account. |
 | `ait.pkg.version-jump` | medium | 0.00 % (n=131) | The release in use is under 30 days old and its major version is 10 or more above every earlier release (1.x to 99.0.0), as dependency-confusion attacks publish; CalVer years are not jumps. |
+| `ait.pkg.provenance-dropped` | medium | 0.00 % (n=317) | The release in use is under 30 days old and unsigned, though the release before it was signed (a PEP 740 attestation on PyPI; trusted publishing or --provenance on npm): it may have been uploaded with a stolen token, outside the project's CI. |
+| `ait.pkg.publisher-change` | medium | 0.63 % (n=317) | The release in use is under 30 days old and came from someone new: on npm a publisher who was neither a maintainer nor the publisher of the release before; on PyPI an attestation from another repository. |
 | `ait.pkg.secdb.<verdict>` | varies | not measured | SecDB's verdict for the package (logged in only). |
 
 ## Vulnerabilities

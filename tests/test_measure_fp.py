@@ -135,6 +135,13 @@ class NameCorpusTest(unittest.TestCase):
         self.assertEqual(m["chances"]["ait.pkg.dormant-release"], 2)
         self.assertEqual(m["flagged_rule"], {"ait.pkg.dormant-release": 1})
         self.assertEqual(m["chances"]["ait.pkg.version-jump"], 2)
+        # a recent release with an earlier one gives the publisher rules a chance; none was attested here
+        self.assertEqual((m["chances"]["ait.pkg.provenance-dropped"], m["chances"]["ait.pkg.publisher-change"]),
+                         (2, 2))
+
+    def test_publisher_rules_are_name_families(self):
+        self.assertIn("ait.pkg.provenance-dropped", measure_fp.NAME_FAMILIES)
+        self.assertIn("ait.pkg.publisher-change", measure_fp.FAMILIES)
 
 
 if __name__ == "__main__":

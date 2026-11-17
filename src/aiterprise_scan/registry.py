@@ -13,7 +13,10 @@ Online, each *direct* PyPI/npm dependency is looked up on its public registry:
 - the release in use (the pinned one, or the newest when nothing is pinned) is under 30 days old and
   came after two years without a release → `ait.pkg.dormant-release` (medium), or its major version
   is 10 or more above every earlier release → `ait.pkg.version-jump` (medium). Both need publish
-  times: every PyPI package has them; on npm only packages with at most 5 versions are read in full.
+  times: every PyPI package has them; on npm only packages with at most 5 versions are read in full;
+- that recent release is unsigned though the release before it was signed → `ait.pkg.provenance-dropped`
+  (medium), or it came from someone new → `ait.pkg.publisher-change` (medium) (design doc 13 C17; see
+  `publisher_findings`). These fetch the two releases' manifests (npm) or attestations (PyPI).
 
 Offline and online, `ait.pkg.typosquat` (medium) compares names with widely used and AI packages
 (design doc 13 C16) and names the kind of slip: separators, lookalike letters (`rn` for `m`), a
@@ -38,7 +41,7 @@ from urllib.parse import quote
 from . import data, net, sources, taxonomy
 from .cache import Cache
 from .model import OWASP_SUPPLY_CHAIN, Component, Evidence, Finding, ScanResult, normalize_name
-from .versions import versions_equal
+from .versions import pep440_parse, semver_parse, versions_equal
 
 NEW_PACKAGE_HOURS = 72
 NPM_FULL_DOC_MAX_VERSIONS = 5  # only young packages need the (large) full document for publish times
@@ -85,6 +88,15 @@ class RegistryClient:
         accept = "application/json" if full else "application/vnd.npm.install-v1+json"
         return self._get("npm-full" if full else "npm-abbrev", url, {"Accept": accept})
 
+    def npm_version(self, name: str, version: str) -> dict | None:
+        """One version's manifest: who published it (`_npmUser`) and the maintainers at the time."""
+        url = NPM_REGISTRY.format(quote(name, safe="@")) + "/" + quote(version, safe="")
+        return self._get("npm-version", url, {"Accept": "application/json"})
+
+    def pypi_provenance(self, url: str) -> dict | None:
+        """A PEP 740 provenance document (the URL comes from the simple index)."""
+        return self._get("pypi-provenance", url, {"Accept": "application/json"})
+
 
 # --------------------------------------------------------------------------------------------
 # Registry facts
@@ -98,6 +110,9 @@ class Facts:
     version_times: dict[str, dt.datetime] = field(default_factory=dict)
     security_holder: bool = False
     url: str = ""
+    attested: dict[str, str] = field(default_factory=dict)  # PyPI: version -> a PEP 740 provenance URL
+    latest: str | None = None                                # npm: dist-tags.latest
+    modified: dt.datetime | None = None                      # npm: when the package document last changed
 
 
 def _ts(value: Any) -> dt.datetime | None:
@@ -132,6 +147,7 @@ def _pypi_file_version(filename: str, name: str) -> str | None:
 def pypi_facts(doc: dict, name: str) -> Facts:
     files = doc.get("files") if isinstance(doc.get("files"), list) else []
     times: dict[str, dt.datetime] = {}
+    attested: dict[str, str] = {}
     first: dt.datetime | None = None
     for f in files:
         if not isinstance(f, dict):
@@ -143,8 +159,11 @@ def pypi_facts(doc: dict, name: str) -> Facts:
         ver = _pypi_file_version(str(f.get("filename", "")), name)
         if ver and (ver not in times or when < times[ver]):
             times[ver] = when
+        if ver and isinstance(f.get("provenance"), str) and f["provenance"].startswith("https://"):
+            attested.setdefault(ver, f["provenance"])
     versions = [str(v) for v in doc.get("versions") or []] or sorted(times)
-    return Facts(True, versions, first, times, url=f"https://pypi.org/project/{normalize_name(name, 'pypi')}/")
+    return Facts(True, versions, first, times, url=f"https://pypi.org/project/{normalize_name(name, 'pypi')}/",
+                 attested=attested)
 
 
 def npm_facts(abbrev: dict, full: dict | None, name: str) -> Facts:
@@ -157,7 +176,10 @@ def npm_facts(abbrev: dict, full: dict | None, name: str) -> Facts:
             if k not in ("created", "modified") and (when := _ts(v)):
                 times[k] = when
     holder = versions == ["0.0.1-security"]
-    return Facts(True, versions, created, times, security_holder=holder, url=f"https://www.npmjs.com/package/{name}")
+    tags = abbrev.get("dist-tags") if isinstance(abbrev.get("dist-tags"), dict) else {}
+    latest = tags.get("latest") if isinstance(tags.get("latest"), str) else None
+    return Facts(True, versions, created, times, security_holder=holder, url=f"https://www.npmjs.com/package/{name}",
+                 latest=latest, modified=_ts(abbrev.get("modified")))
 
 
 # --------------------------------------------------------------------------------------------
@@ -382,23 +404,41 @@ def _major(version: str) -> int | None:
     return int(digits) if digits else None
 
 
-def release_findings(comp: Component, facts: Facts, now: dt.datetime) -> list[Finding]:
-    """A recent release after years of silence, or one whose major version jumps far ahead.
+def _release_in_use(comp: Component, facts: Facts, now: dt.datetime) -> str | None:
+    """The release an install fetches (the pinned one, else the newest) if it came out in the last 30 days.
 
-    Judged for the pinned version, or for the newest release when nothing is pinned (what an install
-    fetches). Needs publish times: every PyPI package, and npm packages whose full document is read."""
+    Needs publish times: every PyPI package, and npm packages whose full document is read. For other npm
+    packages the `latest` tag stands in, counted as recent when the package document changed in the last
+    30 days (npm's abbreviated document has no per-version times)."""
+    eco = comp.ecosystem or ""
+    times = facts.version_times
+    if times:
+        if comp.version:
+            version = next((v for v in times if versions_equal(eco, comp.version, v)), None)
+        else:
+            version = max(times, key=times.__getitem__)
+        when = times.get(version) if version else None
+    else:
+        version = facts.latest
+        if version and comp.version and not versions_equal(eco, comp.version, version):
+            version = None
+        when = facts.modified
+    if version is None or when is None or _hours(now, when) // 24 > RECENT_RELEASE_DAYS:
+        return None
+    return version
+
+
+def release_findings(comp: Component, facts: Facts, now: dt.datetime) -> list[Finding]:
+    """A recent release after years of silence, or one whose major version jumps far ahead."""
     times = facts.version_times
     eco = comp.ecosystem or ""
-    if comp.version:
-        version = next((v for v in times if versions_equal(eco, comp.version, v)), None)
-    else:
-        version = max(times, key=times.__getitem__) if times else None
-    if version is None:
+    version = _release_in_use(comp, facts, now)
+    if version is None or version not in times:
         return []
     when = times[version]
     age = _hours(now, when) // 24
     earlier = {v: t for v, t in times.items() if t < when}
-    if age > RECENT_RELEASE_DAYS or not earlier:
+    if not earlier:
         return []
     reg = REGISTRY_NAMES.get(eco, eco)
     src = "pypi" if eco == "pypi" else "npm-registry"
@@ -425,6 +465,110 @@ def release_findings(comp: Component, facts: Facts, now: dt.datetime) -> list[Fi
             src, facts.url, {"registry": reg, "version": version, "published": when.isoformat(),
                              "previous_major": max(majors), "major": new}))
     return out
+
+
+def _stable_key(eco: str, version: str) -> tuple | None:
+    """A sort key for a final release; None for a pre-release or a version that does not parse."""
+    if eco == "pypi":
+        key = pep440_parse(version)
+        return key if key and key[2] == (10**9,) and key[4] == (10**9,) else None
+    key = semver_parse(version)
+    return key if key and key[3] == (1,) else None
+
+
+def _previous(eco: str, version: str, versions: list[str]) -> str | None:
+    """The greatest final release below `version`: version order, not time, so a backport on an older
+    line is compared with that line, not with the newest release."""
+    parse = pep440_parse if eco == "pypi" else semver_parse
+    mine = parse(version)
+    if mine is None:
+        return None
+    below = [(k, v) for v in versions if (k := _stable_key(eco, v)) is not None and k < mine]
+    return max(below)[1] if below else None
+
+
+def _pypi_publisher(doc: dict | None) -> str | None:
+    """The repository (or account) of a PEP 740 trusted publisher, from a provenance document."""
+    bundles = doc.get("attestation_bundles") if isinstance(doc, dict) else None
+    for bundle in bundles if isinstance(bundles, list) else []:
+        pub = bundle.get("publisher") if isinstance(bundle, dict) else None
+        if isinstance(pub, dict):
+            who = pub.get("repository") or pub.get("email")
+            if isinstance(who, str) and who:
+                return f"{pub.get('kind', '')}:{who}" if pub.get("kind") not in (None, "GitHub") else who
+    return None
+
+
+def _npm_user(manifest: dict) -> tuple[str | None, bool]:
+    """Who published an npm version, and whether it came through trusted publishing."""
+    user = manifest.get("_npmUser") if isinstance(manifest.get("_npmUser"), dict) else {}
+    name = user.get("name") if isinstance(user.get("name"), str) else None
+    return name, bool(user.get("trustedPublisher"))
+
+
+def _npm_signed(manifest: dict) -> bool:
+    dist = manifest.get("dist") if isinstance(manifest.get("dist"), dict) else {}
+    return _npm_user(manifest)[1] or bool(dist.get("attestations"))
+
+
+def publisher_findings(comp: Component, facts: Facts, client: RegistryClient, now: dt.datetime) -> list[Finding]:
+    """Who published the release in use, compared with the release before it (design doc 13 C17).
+
+    `ait.pkg.provenance-dropped`: the previous release was signed (a PEP 740 attestation on PyPI; trusted
+    publishing or `--provenance` on npm) and this one is not — the second ultralytics wave was uploaded
+    with a stolen token, outside the project's trusted publisher. `ait.pkg.publisher-change`: on npm, the
+    publisher was neither a maintainer of the previous release nor its publisher (event-stream); on PyPI,
+    both releases are attested but from different repositories. Fetches one or two small documents, and
+    only for a release from the last 30 days."""
+    version = _release_in_use(comp, facts, now)
+    eco = comp.ecosystem or ""
+    previous = _previous(eco, version, facts.versions or list(facts.version_times)) if version else None
+    if version is None or previous is None:
+        return []
+    reg = REGISTRY_NAMES.get(eco, eco)
+    base = {"registry": reg, "version": version, "previous": previous}
+    hold = f"Stay on {previous} until you have checked who published {version}."
+    if eco == "pypi":
+        cur_url, prev_url = facts.attested.get(version), facts.attested.get(previous)
+        if prev_url and not cur_url:
+            return [_finding(
+                "ait.pkg.provenance-dropped", "medium", "suspicious", 60, comp,
+                f"{comp.name} {version} has no attestation, though {previous} was published with one; it may "
+                "have been uploaded outside the project's trusted publisher (a stolen token)",
+                hold + " A release that skips the project's usual publishing workflow can come from a stolen "
+                "upload token.", "pypi", facts.url, base)]
+        if not (cur_url and prev_url):
+            return []
+        who, before = _pypi_publisher(client.pypi_provenance(cur_url)), _pypi_publisher(client.pypi_provenance(prev_url))
+        if who and before and who.lower() != before.lower():
+            return [_finding(
+                "ait.pkg.publisher-change", "medium", "suspicious", 50, comp,
+                f"{comp.name} {version} was published from {who}, but {previous} from {before}; check that the "
+                "project really moved", hold, "pypi", facts.url,
+                {**base, "publisher": who, "previous_publisher": before})]
+        return []
+    cur, prev = client.npm_version(comp.name, version), client.npm_version(comp.name, previous)
+    if not isinstance(cur, dict) or not isinstance(prev, dict):
+        return []
+    who, trusted = _npm_user(cur)
+    before, _ = _npm_user(prev)
+    if _npm_signed(prev) and not _npm_signed(cur):
+        return [_finding(
+            "ait.pkg.provenance-dropped", "medium", "suspicious", 60, comp,
+            f"{comp.name} {version} was published by {who or 'an unknown account'} without the provenance "
+            f"{previous} had; it may have been uploaded outside the project's CI (a stolen token)",
+            hold + " A release that skips the project's usual publishing workflow can come from a stolen "
+            "token.", "npm-registry", facts.url, {**base, "publisher": who, "previous_publisher": before})]
+    maintainers = prev.get("maintainers") if isinstance(prev.get("maintainers"), list) else []
+    known = {m.get("name") for m in maintainers if isinstance(m, dict)} | {before}
+    if who and not trusted and who not in known:
+        return [_finding(
+            "ait.pkg.publisher-change", "medium", "suspicious", 50, comp,
+            f"{comp.name} {version} was published by {who}, who was not a maintainer of {previous}; a new "
+            "publisher can mean a taken-over or handed-over package", hold, "npm-registry", facts.url,
+            {**base, "publisher": who, "previous_publisher": before,
+             "previous_maintainers": sorted(n for n in known if n)})]
+    return []
 
 
 def _lookup(client: RegistryClient, comp: Component) -> Facts | None:
@@ -478,13 +622,22 @@ def judge(components: list[Component], result: ScanResult, client: RegistryClien
     def one(item):
         key, comps = item
         try:
-            return key, comps, _lookup(client, comps[0]), None
+            facts = _lookup(client, comps[0])
         except net.NetError as err:
-            return key, comps, None, err
+            return key, comps, None, err, [], []
+        published: list[Finding] = []
+        unchecked: list[str] = []
+        for comp in comps if facts is not None else []:
+            try:
+                published += publisher_findings(comp, facts, client, now)
+            except net.NetError as err:
+                unchecked.append(f"{comp.name} ({err})")
+        return key, comps, facts, None, published, unchecked
 
     errors: list[str] = []
+    unverified: list[str] = []
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        for key, comps, facts, err in pool.map(one, sorted(seen.items())):
+        for key, comps, facts, err, published, unchecked in pool.map(one, sorted(seen.items())):
             if err is not None:
                 examined.errors += 1
                 errors.append(f"{key[1]} ({err})")
@@ -495,7 +648,12 @@ def judge(components: list[Component], result: ScanResult, client: RegistryClien
                 findings += facts_findings(comp, facts, now)
                 if id(comp) in short and facts is not None:
                     findings += typosquat_findings(comp, short[id(comp)], facts, now)
+            findings += published
+            unverified += unchecked
     if errors:
         result.notes.append(f"registry: {len(errors)} lookup(s) failed — existence and age UNVERIFIED, not safe: "
                             + "; ".join(errors[:3]) + (" …" if len(errors) > 3 else ""))
+    if unverified:
+        result.notes.append(f"registry: who published {len(unverified)} recent release(s) is UNVERIFIED (lookup "
+                            "failed): " + "; ".join(unverified[:3]) + (" …" if len(unverified) > 3 else ""))
     return findings

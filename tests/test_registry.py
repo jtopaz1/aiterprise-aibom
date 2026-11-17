@@ -20,10 +20,25 @@ def iso(hours_ago):
     return (NOW - dt.timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-def pypi_simple(name, versions):
-    """versions: {version: hours_ago}"""
-    files = [{"filename": f"{name}-{v}.tar.gz", "upload-time": iso(h), "yanked": False} for v, h in versions.items()]
+def pypi_simple(name, versions, attested=()):
+    """versions: {version: hours_ago}; attested: versions whose file has a PEP 740 provenance URL"""
+    files = [{"filename": f"{name}-{v}.tar.gz", "upload-time": iso(h), "yanked": False,
+              "provenance": provenance_url(name, v) if v in attested else None} for v, h in versions.items()]
     return {"meta": {"api-version": "1.1"}, "name": name, "versions": list(versions), "files": files}
+
+
+def provenance_url(name, version):
+    return f"https://pypi.org/integrity/{name}/{version}/{name}-{version}.tar.gz/provenance"
+
+
+def provenance(repository, workflow="release.yml"):
+    return {"version": 1, "attestation_bundles": [
+        {"publisher": {"kind": "GitHub", "repository": repository, "workflow": workflow, "environment": "pypi"},
+         "attestations": []}]}
+
+
+TRUSTED = {"name": "GitHub Actions", "email": "npm-oidc-no-reply@github.com",
+           "trustedPublisher": {"id": "github", "oidcConfigId": "x"}}
 
 
 class FakeFetch:
@@ -239,6 +254,110 @@ class ReleaseSignalTests(unittest.TestCase):
         self.assertEqual(self.findings("lib", {"0.1": 24 * 2}, "0.1"), [])                            # first release
         # measured against the highest earlier major, not the first release
         self.assertEqual(self.findings("lib", {"1.0.0": 24 * 900, "12.0.0": 24 * 300, "15.0.0": 24 * 2}, "15.0.0"), [])
+
+
+PUBLISHER_RULES = ("ait.pkg.provenance-dropped", "ait.pkg.publisher-change")
+
+
+class PypiPublisherTests(unittest.TestCase):
+    """Who published the release in use, from PEP 740 attestations (design doc 13 C17)."""
+
+    def findings(self, versions, pinned, attested, extra=None):
+        c, fetch = client({PYPI.format("tool"): pypi_simple("tool", versions, attested), **(extra or {})})
+        fs = [f for f in registry.judge([lib("tool", pinned)], ScanResult("t", "online"), c)
+              if f.rule_id in PUBLISHER_RULES]
+        return fs, fetch
+
+    def test_a_release_without_the_attestation_earlier_releases_had(self):
+        # the second ultralytics wave: uploaded with a stolen token, not by the trusted publisher
+        fs, _ = self.findings({"1.0": 24 * 100, "1.1": 24 * 50, "1.2": 24 * 3}, "1.2", attested={"1.0", "1.1"})
+        self.assertEqual([(f.rule_id, f.severity, f.verdict) for f in fs],
+                         [("ait.pkg.provenance-dropped", "medium", "suspicious")])
+        self.assertIn("1.1", fs[0].title)
+        self.assertEqual(fs[0].evidence[0].detail["previous"], "1.1")
+
+    def test_attestations_that_are_not_signals(self):
+        self.assertEqual(self.findings({"1.1": 24 * 50, "1.2": 24 * 3}, "1.2", attested={"1.1", "1.2"})[0], [])
+        self.assertEqual(self.findings({"1.1": 24 * 50, "1.2": 24 * 3}, "1.2", attested=())[0], [])        # never
+        self.assertEqual(self.findings({"1.1": 24 * 50, "1.2": 24 * 3}, "1.2", attested={"1.2"})[0], [])   # began
+        self.assertEqual(self.findings({"1.1": 24 * 90, "1.2": 24 * 40}, "1.2", attested={"1.1"})[0], [])  # old
+
+    def test_a_backport_is_compared_with_its_own_line(self):
+        # 2.x moved to trusted publishing; the 1.x line is still uploaded by hand, and 1.9.1 came out last
+        versions = {"1.9": 24 * 400, "2.0": 24 * 100, "2.1": 24 * 50, "1.9.1": 24 * 3}
+        self.assertEqual(self.findings(versions, "1.9.1", attested={"2.0", "2.1"})[0], [])
+
+    def test_an_attestation_from_another_repository(self):
+        extra = {provenance_url("tool", "1.1"): provenance("acme/tool"),
+                 provenance_url("tool", "1.2"): provenance("someone/tool-fork")}
+        fs, _ = self.findings({"1.1": 24 * 50, "1.2": 24 * 3}, "1.2", attested={"1.1", "1.2"}, extra=extra)
+        self.assertEqual([f.rule_id for f in fs], ["ait.pkg.publisher-change"])
+        self.assertEqual((fs[0].evidence[0].detail["publisher"], fs[0].evidence[0].detail["previous_publisher"]),
+                         ("someone/tool-fork", "acme/tool"))
+
+    def test_another_workflow_in_the_same_repository_is_quiet(self):
+        extra = {provenance_url("tool", "1.1"): provenance("acme/tool", "publish.yml"),
+                 provenance_url("tool", "1.2"): provenance("acme/tool", "release.yml")}
+        self.assertEqual(self.findings({"1.1": 24 * 50, "1.2": 24 * 3}, "1.2", {"1.1", "1.2"}, extra)[0], [])
+
+    def test_provenance_is_fetched_only_for_a_recent_release(self):
+        _, fetch = self.findings({"1.1": 24 * 90, "1.2": 24 * 40}, "1.2", attested={"1.1", "1.2"})
+        self.assertFalse([u for u in fetch.urls if "/integrity/" in u])
+
+
+class NpmPublisherTests(unittest.TestCase):
+    """npm records who published each version (`_npmUser`) and the maintainers at the time."""
+
+    VERSIONS = ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "2.0.0", "2.0.1"]  # more than 5: no full document
+
+    def findings(self, current, previous, modified_hours=48, pinned="2.0.1"):
+        abbreviated = {"name": "lib-x", "dist-tags": {"latest": "2.0.1"}, "modified": iso(modified_hours),
+                       "versions": {v: {} for v in self.VERSIONS}}
+        docs = {NPM.format("lib-x"): abbreviated,
+                NPM.format("lib-x") + "/2.0.1#full": {"name": "lib-x", "version": "2.0.1", **current},
+                NPM.format("lib-x") + "/2.0.0#full": {"name": "lib-x", "version": "2.0.0", **previous}}
+        c, fetch = client(docs)
+        fs = [f for f in registry.judge([lib("lib-x", pinned, "npm")], ScanResult("t", "online"), c)
+              if f.rule_id in PUBLISHER_RULES]
+        return sorted((f.rule_id, f.evidence[0].detail.get("publisher")) for f in fs), fetch
+
+    def test_a_publisher_who_was_not_a_maintainer(self):
+        # event-stream: a newcomer was handed the package and published the malicious release
+        got, _ = self.findings({"_npmUser": {"name": "newcomer"}, "maintainers": [{"name": "newcomer"}]},
+                               {"_npmUser": {"name": "alice"}, "maintainers": [{"name": "alice"}]})
+        self.assertEqual(got, [("ait.pkg.publisher-change", "newcomer")])
+
+    def test_a_human_upload_after_trusted_publishing(self):
+        got, _ = self.findings({"_npmUser": {"name": "alice"}, "maintainers": [{"name": "alice"}]},
+                               {"_npmUser": TRUSTED, "maintainers": [{"name": "alice"}]})
+        self.assertEqual(got, [("ait.pkg.provenance-dropped", "alice")])
+
+    def test_a_release_without_the_provenance_the_previous_one_had(self):
+        # `npm publish --provenance` from CI signs a release even without trusted publishing
+        signed = {"attestations": {"url": "https://registry.npmjs.org/-/npm/v1/attestations/lib-x@2.0.0",
+                                   "provenance": {"predicateType": "https://slsa.dev/provenance/v1"}}}
+        got, _ = self.findings({"_npmUser": {"name": "alice"}, "dist": {"shasum": "x"}},
+                               {"_npmUser": {"name": "alice"}, "maintainers": [{"name": "alice"}], "dist": signed})
+        self.assertEqual(got, [("ait.pkg.provenance-dropped", "alice")])
+
+    def test_publishers_that_are_not_signals(self):
+        alice_and_bob = [{"name": "alice"}, {"name": "bob"}]
+        quiet = [
+            ({"_npmUser": {"name": "bob"}}, {"_npmUser": {"name": "alice"}, "maintainers": alice_and_bob}),
+            ({"_npmUser": {"name": "alice"}}, {"_npmUser": {"name": "alice"}, "maintainers": []}),
+            ({"_npmUser": TRUSTED}, {"_npmUser": {"name": "alice"}, "maintainers": [{"name": "alice"}]}),  # moved up
+            ({"_npmUser": TRUSTED}, {"_npmUser": TRUSTED, "maintainers": [{"name": "alice"}]}),
+        ]
+        for current, previous in quiet:
+            with self.subTest(current=current, previous=previous):
+                self.assertEqual(self.findings(current, previous)[0], [])
+
+    def test_only_a_recent_latest_release_is_looked_up(self):
+        stranger = ({"_npmUser": {"name": "x"}}, {"_npmUser": {"name": "alice"}, "maintainers": [{"name": "alice"}]})
+        got, fetch = self.findings(*stranger, modified_hours=24 * 60)
+        self.assertEqual((got, [u for u in fetch.urls if u.endswith(("/2.0.1", "/2.0.0"))]), ([], []))
+        got, fetch = self.findings(*stranger, pinned="1.3.0")  # an older pin: no publish time to judge it by
+        self.assertEqual((got, [u for u in fetch.urls if u.endswith(("/2.0.1", "/2.0.0", "/1.3.0"))]), ([], []))
 
 
 if __name__ == "__main__":
