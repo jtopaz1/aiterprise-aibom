@@ -19,6 +19,8 @@ FORMATS = ("table", "json", "sarif", "cyclonedx", "html", "markdown", "compact",
 _OUT_NAMES = {"table": "report.txt", "json": "report.json", "sarif": "report.sarif", "cyclonedx": "aibom.cdx.json",
               "html": "report.html", "markdown": "report.md", "compact": "report.compact.txt",
               "codequality": "codequality.json"}
+# with one format, `--out` ending in one of these is the report file itself, not a directory
+_REPORT_SUFFIXES = {".json", ".sarif", ".html", ".htm", ".md", ".txt"}
 
 
 def defs_line() -> str:
@@ -53,7 +55,9 @@ def _use_defs(args: argparse.Namespace) -> str | None:
 
 def _add_output_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--format", action="append", choices=FORMATS, help="report format (repeatable; default table)")
-    p.add_argument("--out", type=Path, help="write reports into this directory instead of stdout")
+    p.add_argument("--out", type=Path,
+                   help="write reports into this directory instead of stdout; with one --format, a path "
+                        "ending in .json, .sarif, .html, .htm, .md or .txt is the report file itself")
     p.add_argument("--emit-bom", type=Path, metavar="FILE", help="also write the CycloneDX AI-BOM to FILE")
     p.add_argument("--cdx-version", choices=bom.SUPPORTED_SPEC_VERSIONS, default="1.7")
     p.add_argument("--inventory", action="store_true", help="list every discovered component in the table")
@@ -175,14 +179,28 @@ def _die(msg: str) -> int:
     return 2
 
 
+def _out_file(args: argparse.Namespace) -> Path | None:
+    """The report file `--out` names, or None when it names a directory of reports: it is a file
+    when one format is asked, the path ends like a report and is not a directory already."""
+    out = args.out
+    if out is None or len(args.format or ["table"]) != 1 or out.is_dir():
+        return None
+    return out if out.suffix.lower() in _REPORT_SUFFIXES else None
+
+
 def _emit(result: ScanResult, args: argparse.Namespace) -> None:
     formats = args.format or ["table"]
-    if args.out:
-        args.out.mkdir(parents=True, exist_ok=True)
+    out_file = _out_file(args)
+    out_dir = None if out_file else args.out
+    if out_file:
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+    elif out_dir:
+        out_dir.mkdir(parents=True, exist_ok=True)
     for fmt in formats:
+        dest = out_file or (out_dir / _OUT_NAMES[fmt] if out_dir else None)
         if fmt == "table":
-            if args.out:
-                with open(args.out / _OUT_NAMES[fmt], "w", encoding="utf-8") as fh:
+            if dest:
+                with open(dest, "w", encoding="utf-8") as fh:
                     report.render_table(result, fh, args.inventory, args.show_suppressed, defs_line())
             else:
                 report.render_table(result, sys.stdout, args.inventory, args.show_suppressed, defs_line())
@@ -196,12 +214,14 @@ def _emit(result: ScanResult, args: argparse.Namespace) -> None:
             "compact": lambda: report.render_compact(result),
             "codequality": lambda: report.dumps_codequality(result),
         }[fmt]()
-        if args.out:
-            (args.out / _OUT_NAMES[fmt]).write_text(text, encoding="utf-8")
+        if dest:
+            dest.write_text(text, encoding="utf-8")
         else:
             sys.stdout.write(text)
-    if args.out:
-        print(f"reports written to {args.out}", file=sys.stderr)
+    if out_file:
+        print(f"report written to {out_file}", file=sys.stderr)
+    elif out_dir:
+        print(f"reports written to {out_dir}", file=sys.stderr)
     if args.emit_bom:
         args.emit_bom.parent.mkdir(parents=True, exist_ok=True)
         args.emit_bom.write_text(bom.dumps(result, args.cdx_version), encoding="utf-8")
