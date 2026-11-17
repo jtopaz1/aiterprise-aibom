@@ -302,3 +302,51 @@ def render_markdown(result: ScanResult, defs_line: str = "", max_rows: int = 50)
     tail = f"{TOOL_NAME} {__version__}" + (f" · {_safe(defs_line)}" if defs_line else "") + f" · exit {result.exit_code}"
     out += ["", f"<sub>{tail}</sub>", ""]
     return "\n".join(out)
+
+
+# --------------------------------------------------------------------------------------------
+# Compact: one line per new finding, for editor problem matchers and quickfix lists (C45)
+# --------------------------------------------------------------------------------------------
+
+_COMPACT_LEVEL = {"critical": "error", "high": "error", "medium": "warning", "low": "info", "info": "info"}
+
+
+def _one_line(text: Any) -> str:
+    return " ".join(_safe(text).split())
+
+
+def render_compact(result: ScanResult) -> str:
+    """`path:line: error|warning|info: title [severity rule]` for every new finding. A finding with
+    no line points at line 1; one with no file at the project (`.`)."""
+    out = []
+    for f in sort_findings(result.findings):
+        if f.status != "new":
+            continue
+        path = _one_line(f.location.path) if f.location else "."
+        line = f.location.line if f.location and f.location.line else 1
+        out.append(f"{path}:{line}: {_COMPACT_LEVEL[f.severity]}: {_one_line(f.title)} [{f.severity} {f.rule_id}]\n")
+    return "".join(out)
+
+
+# --------------------------------------------------------------------------------------------
+# GitLab Code Quality: the merge-request widget (S3 GitLab CI template)
+# --------------------------------------------------------------------------------------------
+
+_CODEQUALITY_SEVERITY = {"critical": "blocker", "high": "critical", "medium": "major", "low": "minor", "info": "info"}
+
+
+def dumps_codequality(result: ScanResult) -> str:
+    """The new findings as a GitLab Code Quality report (a Code Climate issue list)."""
+    issues = []
+    for f in sort_findings(result.findings):
+        if f.status != "new":
+            continue
+        issues.append({
+            "description": f.title,
+            "check_name": f.rule_id,
+            "fingerprint": f.fingerprint,
+            "severity": _CODEQUALITY_SEVERITY[f.severity],
+            "location": {"path": f.location.path if f.location else ".",
+                         "lines": {"begin": f.location.line if f.location and f.location.line else 1}},
+        })
+    return json.dumps(issues, indent=2, ensure_ascii=False) + "\n"

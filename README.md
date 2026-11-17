@@ -144,6 +144,9 @@ pre-commit:
   hooks: [{ id: aiterprise-scan }]
 ```
 
+GitLab CI (findings in the merge request's Code Quality widget) and VS Code / Cursor tasks (findings in the
+Problems panel): templates in [`templates/`](templates/), described in [Editors and CI](docs/integrations.md).
+
 Docker (published with the first tagged release): `docker run --rm -v "$PWD:/src" ghcr.io/jtopaz1/aiterprise-scan:latest`
 
 MCP: `aiterprise-scan mcp serve` exposes `scan_ai_supply_chain` to any MCP client over stdio

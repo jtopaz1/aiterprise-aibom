@@ -1,0 +1,64 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "AIBOM: scan the workspace",
+      "detail": "New findings go to the Problems panel; the task fails when one is at least as severe as the policy's fail_on (default high).",
+      "type": "shell",
+      "command": "aiterprise-scan",
+      "args": ["scan", "${workspaceFolder}", "--format", "compact"],
+      "group": "test",
+      "presentation": {"reveal": "silent", "panel": "dedicated", "clear": true},
+      "problemMatcher": {
+        "owner": "aiterprise-scan",
+        "source": "aiterprise-scan",
+        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+): (error|warning|info): (.*)$",
+          "file": 1,
+          "line": 2,
+          "severity": 3,
+          "message": 4
+        }
+      }
+    },
+    {
+      "label": "AIBOM: full report with inventory",
+      "detail": "The table report, every discovered AI component listed.",
+      "type": "shell",
+      "command": "aiterprise-scan",
+      "args": ["scan", "${workspaceFolder}", "--inventory"],
+      "presentation": {"reveal": "always", "panel": "dedicated", "clear": true},
+      "problemMatcher": []
+    },
+    {
+      "label": "AIBOM: this machine's MCP servers and skills",
+      "detail": "Claude, Cursor, VS Code, Codex, Windsurf, Gemini and OpenClaw configs and the skills folders of this machine.",
+      "type": "shell",
+      "command": "aiterprise-scan",
+      "args": ["mcp", "--agent-configs", "--format", "compact"],
+      "presentation": {"reveal": "silent", "panel": "dedicated", "clear": true},
+      "problemMatcher": {
+        "owner": "aiterprise-scan-machine",
+        "source": "aiterprise-scan",
+        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?):(\\d+): (error|warning|info): (.*)$",
+          "file": 1,
+          "line": 2,
+          "severity": 3,
+          "message": 4
+        }
+      }
+    },
+    {
+      "label": "AIBOM: open the local dashboard",
+      "detail": "Scan history, findings and suppressions in the browser, on this machine only.",
+      "type": "shell",
+      "command": "aiterprise-scan",
+      "args": ["ui"],
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}

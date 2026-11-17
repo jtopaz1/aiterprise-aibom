@@ -1,0 +1,40 @@
+# AIterprise AIBOM scan for GitLab CI.
+#
+# Include it from .gitlab-ci.yml, or copy the job:
+#
+#   include:
+#     - remote: https://raw.githubusercontent.com/jtopaz1/aiterprise-aibom/main/templates/gitlab/aiterprise-scan.gitlab-ci.yml
+#
+# A merge request shows the new findings in its Code Quality widget, the job log shows the full
+# table, and the AI-BOM is kept as a CycloneDX report. The job fails when a new finding is at least
+# AIBOM_FAIL_ON severe; aibom.policy.yaml in the project decides the rest, as it does locally.
+#
+# Variables:
+#   AIBOM_INSTALL  what pip installs (until the first PyPI release: a wheel URL or git+https://…)
+#   AIBOM_PATH     what to scan; keep "." so the widget's paths match the repository's
+#   AIBOM_FAIL_ON  critical, high, medium, low, info or none
+#   AIBOM_ARGS     extra arguments, e.g. --offline
+# A SecDB key, if you have one, goes in a masked CI/CD variable named AITERPRISE_API_KEY.
+
+aiterprise-scan:
+  stage: test
+  image: python:3.12-slim
+  variables:
+    AIBOM_INSTALL: "aiterprise-scan"
+    AIBOM_PATH: "."
+    AIBOM_FAIL_ON: "high"
+    AIBOM_ARGS: ""
+  script:
+    - python -m pip install --quiet "$AIBOM_INSTALL"
+    - 'code=0; aiterprise-scan scan "$AIBOM_PATH" --format table --format codequality --format markdown --out aiterprise-report --emit-bom aiterprise-report/aibom.cdx.json --cdx-version 1.6 --fail-on "$AIBOM_FAIL_ON" $AIBOM_ARGS || code=$?; cat aiterprise-report/report.txt || true; exit $code'
+  artifacts:
+    when: always
+    expire_in: 30 days
+    paths:
+      - aiterprise-report/
+    reports:
+      codequality: aiterprise-report/codequality.json
+      cyclonedx: aiterprise-report/aibom.cdx.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
