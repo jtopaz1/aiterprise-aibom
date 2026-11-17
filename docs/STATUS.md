@@ -45,6 +45,7 @@ so this table restates Appendix H.1 against what exists in this repository today
 | Model-file speed (§5.5): `tools/bench_models.py` writes a 2 GiB `.safetensors`, a 1 GiB PyTorch zip and a 1 GiB raw pickle of random bytes and times an offline scan of each by the CLI, each in a new process; CI fails when a scan takes longer than the design's budget (2.5 s per GiB for safetensors, 30 s per GiB for the two pickle formats), exits non-zero, misreads the format or misses the pickle finding. A model file's SHA-256 and SHA-1 are computed in two threads over 4 MiB reads | `tools/bench_models.py`, `modelfiles.py`, CI job `benchmark` | working — in CI (GitHub's Ubuntu runner, Python 3.12, run of 2026-11-17) the 2 GiB safetensors takes 4.5 s of its 5.0 s budget, the zip pickle 3.3 s of 30 s and the raw pickle 3.6 s of 30 s, at 240 MB peak memory. The safetensors budget is the tight one: a slower runner may fail it. Not run at full size on the development machine, which lacks the free disk |
 | CI: test matrix, wheel and sdist, self-scan, killer demo, scan and model-file benchmarks, licence check, minisign interop, docs, container, binaries, the GitHub Action, the GitLab template, the pre-commit hook | `.github/workflows/ci.yml` | working — green on `main` |
 | Scheduled definition refresh (MAL + KEV + advisory subset) | `.github/workflows/refresh-defs.yml` | working — weekly. The first scheduled run (2026-11-16) rebuilt the data, passed the full tests and the killer demo on it, and opened the refresh pull request itself (the repository lets Actions create pull requests); it was merged the same day. CI on such a pull request starts only when it is closed and reopened |
+| Per-record licence check of the redistributed OSV records (H.3) | `tools/osv_terms.py`, both builders, `tests/test_record_terms.py` | working — only `MAL`, `GHSA` and `PYSEC` records ship; every shipped id is checked by a test that the refresh runs before proposing new data (see *Record licences*) |
 | Documentation site (MkDocs, strict build); generated rules reference | `mkdocs.yml`, `docs/`, `tools/gen_rules_doc.py` | working — builds locally with `--strict` |
 | VS Code / Cursor tasks (C45): scan the workspace into the Problems panel, the machine's MCP servers and skills, the full report, the dashboard; GitLab CI job (S3): Code Quality widget, table in the log, CycloneDX 1.6 AI-BOM report | `templates/vscode/tasks.json`, `templates/gitlab/aiterprise-scan.gitlab-ci.yml`, `--format compact`, `--format codequality`, `docs/integrations.md` | working in tests — every task's and the job's command line is accepted by the CLI parser, and the tasks' problem matcher reads every line of a real scan. **Not run in VS Code or on GitLab**: the Code Quality and CycloneDX reports follow GitLab's documentation only |
 | GitHub Action (with optional `api-key`), pre-commit hook; the Action's pull-request comment and job summary (C42): one comment per pull request, found again by its marker and its author and updated in place, scanned text shown as code; a read-only token (a fork's pull request) warns and the gate still decides | `action/`, `action/pr_comment.py`, `--format markdown`, `.pre-commit-hooks.yaml` | working — CI uses the action on the killer-demo repository (the gate fails, `exit-code` 1, report, SARIF and AI-BOM written) and on a clean fixture (`exit-code` 0), then checks that the pull request carries exactly one comment and that it shows the clean scan; `pre-commit try-repo` runs the hook on both. Not exercised: the SARIF upload to code scanning (not available to a private repository) and the `api-key` input |
@@ -80,7 +81,6 @@ already listed above; the cloud's are in its row under *Built*.
 | False-positive corpus of at least 200 AI repositories and 500 real model files; automatic demotion of a noisy rule | §5.5 | not built — the corpora are local site-packages projects and installed skills; a critical rule with a measured FP rate above zero still reports critical |
 | Process-pool parallelism | §5.5 | not built — one process does all the work; the cold-scan and re-scan targets are met without it (see *Scan speed*) |
 | `security.txt`; function-parity matrix | §10.6 #7 / §8.4 | not built — `security.txt` needs a contact the project has not chosen (GitHub's private vulnerability reporting is not available while the repository is private); the parity matrix would make claims about other products that are not verified |
-| Per-record licence check of the redistributed OSV records | H.3 | not built — the builder writes a note; nothing checks a record's terms |
 | Device-code login | J.3 | blocked on the platform Console — login is a pasted key or an install token |
 | `watch` command | S6 | not built |
 
@@ -89,7 +89,7 @@ already listed above; the cloud's are in its row under *Built*.
 | Asset | Content | Input (provenance) | Size |
 |---|---|---|---|
 | `malicious-versions.json.gz` (schema `ait-malicious-versions/2`) | 235,492 active `MAL-` records over 235,491 packages; 214,803 mark every version, the rest list 65,677 exact versions; 363 withdrawn records kept apart | OSV bulk exports `PyPI/all.zip` and `npm/all.zip`, 2026-11-16 — SHA-256 of each input recorded in the file and shown by `defs status` | 3.06 MB |
-| `vuln-subset.json.gz` (schema `ait-vuln-subset/1`) | 2,921 advisories for 65 of the 164 AI-taxonomy packages | Same OSV exports; per-record licences (GHSA, PYSEC: CC-BY 4.0) | 0.24 MB |
+| `vuln-subset.json.gz` (schema `ait-vuln-subset/1`) | 2,921 advisories for 65 of the 164 AI-taxonomy packages | Same OSV exports; GHSA and PYSEC records only, both CC-BY 4.0 (see *Record licences* below) | 0.24 MB |
 | `kev.json` | 1,781 CVEs | CISA KEV catalog 2026.11.13 (CC0) | 0.3 MB |
 | `known-bad-hashes.json` | 11 files: 7 with SHA-256, 7 with SHA-1 (3 have both) | Rapid7, "From .pth to p0wned" (2025-07-01); ReversingLabs, nullifAI (2025-02-06, SHA-1 only); Pluto Security, "Load/Mine" (2026-10-29). Hashes copied verbatim; each entry carries its report's URL | 6 KB |
 | `rule-quality.json` | measured FP rates; a command rule or poison pattern that never fired on a measured corpus is written at 0 | `tools/measure_fp.py` over 210 local site-packages projects (secrets) and 275 installed agent skills (skills) | 31 KB |
@@ -103,6 +103,19 @@ reported as `withdrawn`, exit 0); popular packages carry exact-version records o
 0.30.4/1.14.1, chalk 5.6.1, debug 4.4.2, litellm 1.82.7/1.82.8/1.107.0, …), pinned by a unit test;
 two real npm lockfiles (877 packages) scanned offline with zero malicious findings (that scan was
 made on the 2026-11-14 build).
+
+Record licences (design doc 13, H.3): an OSV record's id prefix names the database it comes from,
+and each database has its own licence. `tools/osv_terms.py` lists the databases the wheel may
+carry — `MAL` (OpenSSF Malicious Packages, Apache-2.0), `GHSA` (GitHub Advisory Database,
+CC-BY 4.0) and `PYSEC` (PyPI Advisory Database, CC-BY 4.0), each checked against osv.dev's list of
+data sources on 2026-11-17. Both builders drop every other record and write `terms` (each database,
+its licence and URL, and a record count) and `excluded` (the count left out per prefix) into the
+file; NOTICE carries the attribution. Prefixes not listed are left out until someone reads their
+terms; Chainguard's `CGA-` (CC-BY-NC-ND 4.0) and Ubuntu's (CC-BY-SA 4.0) are known and left out on
+purpose. `tests/test_record_terms.py` checks every record id in the shipped files, so a refresh that
+would ship any other record fails before its pull request is opened. The files built before this
+check (2026-11-16) carry only `MAL`, `GHSA` and `PYSEC` records; their `terms` field appears at the
+next refresh.
 
 Refresh by hand (the `refresh-defs` workflow runs the same steps every Monday and proposes the result as a pull request):
 

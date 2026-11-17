@@ -3,13 +3,17 @@ Copyright 2026 AIterprise
 
 This product includes data derived from third-party sources, each under its own terms:
 
-- OSV / OpenSSF malicious-packages records (data/ait/malicious-versions.json.gz) —
-  https://osv.dev and https://github.com/ossf/malicious-packages. Each record carries
-  its own terms. They are to be checked per record before redistribution; this build does not
-  check them yet (docs/STATUS.md).
-- OSV vulnerability records for AI packages (data/ait/vuln-subset.json.gz) — https://osv.dev.
-  Each record keeps the licence of the database it came from (for example the GitHub Advisory
-  Database and the PyPA Advisory Database, both CC-BY 4.0); the record ids identify the source.
+- OSV records, obtained through https://osv.dev and trimmed to the fields the scanner reads
+  (most text is removed). Each record keeps the licence of the database it came from, and its
+  id prefix names that database:
+  - data/ait/malicious-versions.json.gz: MAL- records from OpenSSF Malicious Packages,
+    https://github.com/ossf/malicious-packages, Apache-2.0.
+  - data/ait/vuln-subset.json.gz: GHSA- records from the GitHub Advisory Database,
+    https://github.com/github/advisory-database, CC-BY 4.0; and PYSEC- records from the
+    PyPI Advisory Database, https://github.com/pypa/advisory-database, CC-BY 4.0.
+  The builders keep only records from these databases (tools/osv_terms.py) and write the list,
+  with a record count for each, into the file's "terms" field; records from any other database
+  are left out. A unit test checks every record id shipped in both files.
 - CISA Known Exploited Vulnerabilities catalog (data/ait/kev.json) — public domain (CC0).
 - Known-bad model-file hashes (data/ait/known-bad-hashes.json) — SHA-256 and SHA-1 values of
   malicious files as published in incident reports by Rapid7, ReversingLabs and Pluto Security.
