@@ -11,6 +11,9 @@ This product includes data derived from third-party sources, each under its own 
   Each record keeps the licence of the database it came from (for example the GitHub Advisory
   Database and the PyPA Advisory Database, both CC-BY 4.0); the record ids identify the source.
 - CISA Known Exploited Vulnerabilities catalog (data/ait/kev.json) — public domain (CC0).
+- Known-bad model-file hashes (data/ait/known-bad-hashes.json) — SHA-256 and SHA-1 values of
+  malicious files as published in incident reports by Rapid7, ReversingLabs and Pluto Security.
+  Each entry links the report it was copied from; the descriptions are AIterprise's own words.
 - Model and dataset licence verdicts (data/ait/licence-verdicts.json) are AIterprise
   summaries of the cited licence texts. They are advisory and are not legal advice.
 

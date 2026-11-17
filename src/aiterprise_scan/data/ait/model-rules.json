@@ -1,6 +1,6 @@
 {
   "schema": "ait-model-rules/1",
-  "version": "2026.11.14",
+  "version": "2026.11.17",
   "description": "Model-file analyzer rules (design doc 13 §5.3 `modelfiles`): rule metadata, pickle callable deny/allow lists, GGUF chat-template injection markers, ONNX operator domains, Keras Lambda bytecode tokens, format sniffers and analysis limits. First-party, curated. Lists are matched on the callable a pickle imports (GLOBAL / INST / STACK_GLOBAL): `module` matches exactly (or as a package prefix when `submodules` is true) and `names` are fnmatch patterns over the attribute name. Deny is checked first, including attribute traversal through dotted names (protocol 4+), so an allow entry can never hide a denied callable. Anything on neither list is reported as unknown (medium). An allow entry with `classes_only` accepts only undotted names that start with an upper-case letter (classes), never functions.",
   "quality_note": "No rule here has a measured false-positive rate yet. `fp_rate_measured` stays null until the rules are evaluated against a labelled corpus; do not quote these rules as measured.",
   "rules": {
@@ -61,6 +61,16 @@
       "description": "Part or all of the file could not be analysed (LZ4 compression, encrypted or unsupported ZIP members, size/opcode caps reached, unrecognised content). This is not a clean result: the unanalysed part may contain anything.",
       "remediation": "Analyse the file with a tool that supports the format, or obtain the model in a non-executable format.",
       "maps_to": ["LLM03:2025 Supply Chain"],
+      "references": [],
+      "quality": {"fp_rate_measured": null, "corpus": null, "evaluated_at": null}
+    },
+    "ait.model.known-bad-hash": {
+      "severity": "high",
+      "verdict": "malicious",
+      "confidence": 95,
+      "description": "The file's SHA-256 or SHA-1 is one a public incident report names as malicious (`known-bad-hashes.json`, offline). Checked on the bytes before the format is, so a payload that is no valid model, such as an ELF named `.bin`, is still reported. The evidence links the report.",
+      "remediation": "Do not load the file. Delete it, find out where it came from, and treat any machine that loaded it as compromised.",
+      "maps_to": ["LLM03:2025 Supply Chain", "LLM04:2025 Data and Model Poisoning"],
       "references": [],
       "quality": {"fp_rate_measured": null, "corpus": null, "evaluated_at": null}
     },

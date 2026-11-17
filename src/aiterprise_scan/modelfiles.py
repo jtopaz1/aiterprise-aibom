@@ -45,7 +45,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from . import data, sources
+from . import data, knownhashes, sources
 from .model import Component, Evidence, Finding, Location
 from .walk import rel_posix
 
@@ -189,14 +189,16 @@ def analyze_model_file(path: Path, root: Path) -> tuple[Component | None, list[F
 
     ctx = _Ctx(rel, _compiled_rules(), size)
     digest = None
+    known: knownhashes.Match | None = None
     info: dict[str, Any] | None
     try:
         with open(path, "rb") as fh:
-            digest = hashlib.file_digest(fh, "sha256").hexdigest()
+            digest, sha1 = _digests(fh)
+            known = knownhashes.lookup(digest, sha1)
             try:
                 info = _analyze(ctx, fh, size, path.name, ext, 0, "")
             except Exception as exc:  # last line of defence: hostile bytes never crash a scan
-                if ctx.sniffed is None and ext in _GENERIC_EXTENSIONS:
+                if ctx.sniffed is None and ext in _GENERIC_EXTENSIONS and known is None:
                     return None, []
                 ctx.malformed("analysis-error", "Analysis aborted on unexpected content", {"error": _err(exc)}, {})
                 info = {
@@ -209,7 +211,12 @@ def analyze_model_file(path: Path, root: Path) -> tuple[Component | None, list[F
         ctx.incomplete("unreadable", "Model file could not be read", {"error": _err(exc)}, {})
         info = {"format": _EXT_FORMAT.get(ext, "unknown"), "format_confidence": "extension-only"}
     if info is None:
-        return None, []
+        if known is None:
+            return None, []
+        # Not a model format, but the exact bytes an incident report names: report it anyway.
+        info = {"format": ctx.sniffed or _EXT_FORMAT.get(ext, "unknown"), "format_confidence": "extension-only"}
+    if known is not None:
+        _known_bad_finding(ctx, path.name, known)
 
     licence = info.pop("_licence", None)
     props: dict[str, Any] = {"path": rel, "format": info.pop("format"), "size": size}
@@ -232,6 +239,27 @@ def analyze_model_file(path: Path, root: Path) -> tuple[Component | None, list[F
     )
     _pickle_findings(ctx)
     return component, [_to_finding(ctx, component, raw) for raw in ctx.findings()]
+
+
+def _digests(fh) -> tuple[str, str]:
+    """SHA-256 and SHA-1 of the whole file in one read. SHA-1 only matches the reports that
+    publish nothing else; it is no integrity check (`usedforsecurity=False` keeps FIPS builds working)."""
+    sha256, sha1 = hashlib.sha256(), hashlib.sha1(usedforsecurity=False)
+    buf = bytearray(1 << 20)
+    view = memoryview(buf)
+    while n := fh.readinto(buf):
+        sha256.update(view[:n])
+        sha1.update(view[:n])
+    return sha256.hexdigest(), sha1.hexdigest()
+
+
+def _known_bad_finding(ctx: _Ctx, name: str, known: knownhashes.Match) -> None:
+    e = known.entry
+    detail = {known.algorithm: known.digest, "list_version": known.version}
+    detail.update({k: e[k] for k in ("file", "kind", "repository", "incident", "source", "reported") if e.get(k)})
+    title = f"{name} is a known-malicious file: {e.get('incident', 'named in an incident report')}"
+    ctx.add("ait.model.known-bad-hash", f"{title} ({e.get('source', 'report')}, {e.get('reported', 'undated')})",
+            [detail], url=e.get("url"))
 
 
 # --------------------------------------------------------------------------------------------
@@ -437,7 +465,7 @@ def _to_finding(ctx: _Ctx, component: Component, raw: dict[str, Any]) -> Finding
     meta = ctx.rules.meta[raw["rule_id"]]
     over = raw["override"]
     refs = meta.get("references") or []
-    url = refs[0] if refs else None
+    url = over.get("url") or (refs[0] if refs else None)
     details = raw["details"] or [{}]
     evidence = [
         Evidence(source="ait-rules", record=raw["rule_id"], url=url, detail=_jsonable({k: v for k, v in d.items() if v is not None}))
