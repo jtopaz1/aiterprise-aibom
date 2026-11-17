@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from . import textrules
 from .model import Component, Finding, Location
 
 
@@ -43,8 +44,6 @@ def _texts(doc: dict) -> list[tuple[str, str]]:
 
 def analyze_manifest(doc: dict, location: str, bundle: str) -> tuple[Component, list[Finding]]:
     """`bundle`: mcpb | dxt | manifest (an unpacked bundle directory)."""
-    from . import mcp
-
     server = doc.get("server") or {}
     cfg = server.get("mcp_config") if isinstance(server.get("mcp_config"), dict) else {}
     command = cfg.get("command") if isinstance(cfg.get("command"), str) else None
@@ -73,11 +72,8 @@ def analyze_manifest(doc: dict, location: str, bundle: str) -> tuple[Component, 
         properties={k: v for k, v in props.items() if v not in (None, [], "")},
     )
     loc = Location(location)
-    findings: list[Finding] = []
     line = " ".join([command or "", *args]).strip()
-    for hit in mcp.check_command(line):
-        findings.append(mcp._finding_from_command(hit, loc, comp, "ait.mcp"))
+    findings = textrules.command_findings(line, "ait.mcp", comp, loc)
     for field, text in _texts(doc):
-        for hit in mcp.check_text(text):
-            findings.append(mcp._finding_from_poison(hit, loc, comp, field, "ait.mcp"))
+        findings += textrules.poison_findings(text, "ait.mcp", comp, loc, field)
     return comp, findings

@@ -12,8 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from . import miniyaml, sources
-from .mcp import _finding_from_command, _finding_from_poison, check_command, check_text
+from . import miniyaml, sources, textrules
 from .model import SEVERITY_RANK, Component, Finding, Location, not_analysable
 from .textio import TooLarge, loads_jsonc, read_text
 from .walk import walk, rel_posix
@@ -135,21 +134,7 @@ def _scan_scripts(skill_dir: Path, root: Path, comp: Component) -> list[Finding]
                       else f"unreadable: {type(err).__name__}")
             findings.append(not_analysable("skill", rel, f"Bundled script {script.name}", reason, comp))
             continue
-        for lineno, line in enumerate(text.splitlines(), 1):
-            if not line.strip():
-                continue
-            for hit in check_command(line):
-                loc = Location(rel, lineno)
-                finding = _finding_from_command(hit, loc, comp, "ait.skill")
-                finding.discriminator = f"{hit['id']}:{rel}:{lineno}"
-                findings.append(finding)
-    return findings
-
-
-def _scan_body(text: str, location: Location, comp: Component) -> list[Finding]:
-    findings: list[Finding] = []
-    for hit in check_text(text):
-        findings.append(_finding_from_poison(hit, location, comp, "body", "ait.skill"))
+        findings += textrules.command_findings_by_line(text, "ait.skill", comp, rel)
     return findings
 
 
@@ -178,12 +163,11 @@ def _analyze_skill_dir(skill_dir: Path, root: Path) -> tuple[Component, list[Fin
             "path": rel_posix(skill_dir, root),
         },
     )
-    findings = _scan_body(body, Location(rel, 1), comp)
+    findings = textrules.poison_findings(body, "ait.skill", comp, Location(rel, 1), "body")
     if unread:
         findings.append(not_analysable("skill", rel, "SKILL.md", f"unreadable: {unread}", comp))
     if isinstance(fm.get("description"), str):
-        findings += [_finding_from_poison(h, Location(rel, 1), comp, "description", "ait.skill")
-                     for h in check_text(fm["description"])]
+        findings += textrules.poison_findings(fm["description"], "ait.skill", comp, Location(rel, 1), "description")
     findings += _scan_scripts(skill_dir, root, comp)
     return _finalize(comp, findings)
 
@@ -210,12 +194,10 @@ def _analyze_plugin_dir(plugin_dir: Path, root: Path) -> tuple[Component, list[F
     )
     findings: list[Finding] = []
     if isinstance(meta.get("description"), str):
-        findings += [_finding_from_poison(h, Location(rel, 1), comp, "description", "ait.skill")
-                     for h in check_text(meta["description"])]
+        findings += textrules.poison_findings(meta["description"], "ait.skill", comp, Location(rel, 1), "description")
     # plugin.json hooks run shell commands
     for cmd in _plugin_hook_commands(meta):
-        for hit in check_command(cmd):
-            findings.append(_finding_from_command(hit, Location(rel, 1), comp, "ait.skill"))
+        findings += textrules.command_findings(cmd, "ait.skill", comp, Location(rel, 1))
     findings += _scan_scripts(plugin_dir, root, comp)
     return _finalize(comp, findings)
 
@@ -255,16 +237,9 @@ def _analyze_command_file(md: Path, root: Path) -> tuple[Component, list[Finding
             "path": rel,
         },
     )
-    findings = _scan_body(body, Location(rel, 1), comp)
+    findings = textrules.poison_findings(body, "ait.skill", comp, Location(rel, 1), "body")
     # command/prompt files may embed shell via `!`...`` or fenced blocks
-    for lineno, line in enumerate(body.splitlines(), 1):
-        if not line.strip():
-            continue
-        for hit in check_command(line):
-            loc = Location(rel, lineno)
-            finding = _finding_from_command(hit, loc, comp, "ait.skill")
-            finding.discriminator = f"{hit['id']}:{rel}:{lineno}"
-            findings.append(finding)
+    findings += textrules.command_findings_by_line(body, "ait.skill", comp, rel)
     return _finalize(comp, findings)
 
 
