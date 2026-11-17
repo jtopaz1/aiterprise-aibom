@@ -98,14 +98,14 @@ class SelfCountingTests(unittest.TestCase):
         other = Component("urllib3", ecosystem="pypi", version="2.2.0")
         denying = policy.parse_policy({"deny_packages": ["pkg:pypi/requests@2.32.3"]})
         result = new_result()
-        findings = policy.denied_package_findings([requests, other], denying, result)
+        findings = policy.package_policy_findings([requests, other], denying, result)
         self.assertEqual(len(findings), 1)
         self.assertEqual(coverage(result, sources.POLICY), (2, 1))
 
     def test_no_deny_list_is_not_a_consulted_source(self):
         result = new_result()
-        self.assertEqual(policy.denied_package_findings([Component("requests", ecosystem="pypi")],
-                                                        policy.Policy(), result), [])
+        self.assertEqual(policy.package_policy_findings([Component("requests", ecosystem="pypi")],
+                                                         policy.Policy(), result), [])
         self.assertNotIn(sources.POLICY.name, result.examined)
 
     def test_model_files(self):

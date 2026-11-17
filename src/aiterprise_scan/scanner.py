@@ -285,7 +285,7 @@ def _run_scan(opts: ScanOptions) -> ScanResult:
                 ),
                 [],
             )
-        findings += policy_mod.denied_package_findings(merged, opts.policy, result)
+        findings += policy_mod.package_policy_findings(merged, opts.policy, result)
         if opts.providers:
             # last, so our own findings decide which files the lookup budget goes to; `--offline`
             # is handled inside (no call, and the report says so)

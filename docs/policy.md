@@ -14,6 +14,8 @@ allow_packages: ["pkg:pypi/openai@>=1.40"]
 deny_packages: ["pkg:pypi/litellm@1.82.7"]
 allow_model_licences: [apache-2.0, mit]
 deny_model_licences: [cc-by-nc-4.0]
+allow_package_licences: [mit, apache-2.0, bsd-*, isc]
+deny_package_licences: [agpl-3.0, sspl-1.0]
 suppressions:                    # expiry is mandatory
   - finding: 1a2b3c4d5e6f7a8b    # fingerprint, advisory id or rule id
     until: 2027-06-30
@@ -29,8 +31,38 @@ baseline: .aiterprise/baseline.json
 | `ignore` | drop a rule, optionally only under some paths |
 | `allow_packages` / `deny_packages` | purl patterns with version ranges; a denied package is an `ait.policy.denied-package` finding |
 | `allow_model_licences` / `deny_model_licences` | licence ids for models and datasets |
+| `allow_package_licences` / `deny_package_licences` | SPDX licence ids for packages, as globs, case ignored; see [Package licences](#package-licences) |
 | `suppressions` | accept a specific finding until a date, with a reason |
 | `baseline` | findings recorded here do not fail the gate |
+
+## Package licences
+
+A package's licence comes from its lockfile or, online, from deps.dev (see
+[Package licences](cli.md#package-licences)). It is an SPDX expression, read the way SPDX means
+it:
+
+- `OR` is a choice. `MIT OR AGPL-3.0-only` is denied only if both are denied, and allowed if
+  either is allowed.
+- `AND` needs every part. `MIT AND GPL-3.0-only` is denied if either part is denied, and allowed
+  only if both are allowed.
+- `WITH` keeps the licence it is attached to. `GPL-2.0-only WITH Classpath-exception-2.0` is denied
+  by `gpl-2.0`. It is allowed by `gpl-2.0`, or by the whole phrase.
+
+An entry is a glob (`gpl-*`, `bsd-*`). A bare family such as `gpl-3.0` covers `GPL-3.0-only`,
+`GPL-3.0-or-later` and `GPL-3.0+`. `gpl-3.0-only` also covers the deprecated bare `GPL-3.0`, but
+not `-or-later`.
+
+A licence that is not an SPDX expression (`SEE LICENSE IN LICENSE.md`, `UNLICENSED`) matches only
+an entry that names it.
+
+| Result | Finding |
+|---|---|
+| denied (a deny entry wins over the allow list) | `ait.policy.denied-licence`, high |
+| an allow list is set and the licence cannot be met from it | `ait.policy.licence-not-allowed`, medium |
+| no known licence | no finding; with an allow list, a note in the report names the packages |
+
+Models and datasets are judged by `allow_model_licences` / `deny_model_licences` and the licence
+verdicts, never by these lists.
 
 ## Where the gate looks
 

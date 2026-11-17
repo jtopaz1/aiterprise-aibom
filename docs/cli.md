@@ -93,8 +93,9 @@ A licence deps.dev cannot map to an SPDX id comes back as `non-standard`: the BO
 empty and a note in the report names them. The report's coverage has a `deps.dev` entry with the
 number of versions looked up and how many had a licence; a failed lookup is counted there and
 makes the scan exit 2, like any source that did not answer. `--offline` and `--no-registry` turn
-the lookups off; `bom` never goes online, so its BOM has the lockfile licences only. No verdict is drawn from a package's licence; model and dataset licences are
-judged (see [Policy](policy.md)).
+the lookups off; `bom` never goes online, so its BOM has the lockfile licences only. A package's
+licence is judged only against the policy's `allow_package_licences` and `deny_package_licences`
+(see [Package licences in the policy](policy.md#package-licences)).
 
 ## Re-scans
 
