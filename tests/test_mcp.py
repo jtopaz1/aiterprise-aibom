@@ -1,9 +1,11 @@
 """Tests for the MCP config analyzer (C26/C29/C31). The rule sets are tested in test_textrules.py."""
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from aiterprise_scan import mcp
 from aiterprise_scan.walk import walk
@@ -242,6 +244,138 @@ class AnalyzeMcpTests(_ConfigFixture):
         comps, finds = mcp.analyze_mcp(self.root, walk(self.root, all_files=True))
         self.assertGreaterEqual(sum(1 for c in comps if c.ctype == "mcp-config"), 2)
         self.assertTrue(any(f.severity == "critical" for f in finds))
+
+
+KEY = "sk-ant-api03-" + POOL[:50]
+
+OPENCLAW = """// ~/.openclaw/openclaw.json (JSON5)
+{
+  mcp: {
+    servers: {
+      fetch: { command: "uvx", args: ["mcp-server-fetch==2025.4.7"] },
+      remote: {
+        url: "http://mcp.example.com/mcp",
+        transport: "streamable-http",
+        headers: { Authorization: "Bearer ${MCP_REMOTE_TOKEN}" },
+      },
+      leaky: { url: 'https://mcp.example.com/x', headers: { Authorization: 'Bearer %s' } },
+    },
+  },
+  skills: { load: { extraDirs: ["~/agent-scripts/skills"] } },
+}
+""" % KEY
+
+DSH = """# ~/.dsh/profiles/web/cordis.patch.yml
+- insert:
+    - id: mcp-github
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: github
+        transport: stdio
+        command: npx
+        args: ['-y', '@modelcontextprotocol/server-github@2025.4.8']
+        env:
+          GITHUB_TOKEN: !!js process.env.GITHUB_TOKEN
+    - id: mcp-composio
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: composio
+        transport: streamable-http
+        url: https://connect.composio.dev/mcp
+        headers:
+          x-consumer-api-key: %s
+    - id: theme
+      name: '@deepseek-ai/dsh-theme'
+      config:
+        command: not-a-server
+""" % KEY
+
+
+class OtherAgentConfigTests(_ConfigFixture):
+    """OpenClaw (JSON5) and DeepSeek Harness (YAML profile patches): design doc 13 §4.1, C29."""
+
+    def servers(self, comps):
+        return {c.name: c for c in comps if c.ctype == "mcp-server"}
+
+    def test_openclaw(self):
+        comps, finds = self.analyze(self.write(".openclaw/openclaw.json", OPENCLAW))
+        config = next(c for c in comps if c.ctype == "mcp-config")
+        self.assertEqual(config.properties["agent"], "openclaw")
+        servers = self.servers(comps)
+        self.assertEqual(sorted(servers), ["fetch", "leaky", "remote"])
+        self.assertEqual(servers["fetch"].properties["transport"], "stdio")
+        self.assertEqual(servers["remote"].properties["transport"], "streamable-http")
+        lib = next(c for c in comps if c.ctype == "library")
+        self.assertEqual((lib.ecosystem, lib.name, lib.version), ("pypi", "mcp-server-fetch", "2025.4.7"))
+        rules = sorted((f.rule_id, f.component.name) for f in finds)
+        self.assertIn(("ait.mcp.net.plain-http", "remote"), rules)
+        self.assertEqual([n for r, n in rules if r.startswith("ait.secret.")], ["leaky"])  # ${...} is a reference
+
+    def test_deepseek_harness_profile_patch(self):
+        comps, finds = self.analyze(self.write(".dsh/profiles/web/cordis.patch.yml", DSH))
+        self.assertEqual(next(c for c in comps if c.ctype == "mcp-config").properties["agent"], "dsh")
+        servers = self.servers(comps)
+        self.assertEqual(sorted(servers), ["composio", "github"])  # another plugin is not an MCP server
+        self.assertEqual(servers["github"].properties["resolved_package"], "@modelcontextprotocol/server-github@2025.4.8")
+        self.assertEqual(servers["composio"].properties["url"], "https://connect.composio.dev/mcp")
+        secret = [(f.component.name, f.evidence[0].detail["field"]) for f in finds if f.rule_id.startswith("ait.secret.")]
+        self.assertEqual(secret, [("composio", "headers.x-consumer-api-key")])  # !!js process.env is a reference
+        self.assertNotIn(KEY, json.dumps([c.to_dict() for c in comps]))
+
+    def test_configs_these_readers_cannot_read_are_not_analysable(self):
+        for rel, text in ((".openclaw/openclaw.json", "{mcp: {servers: {a: {command: 'x' }}"),
+                          (".dsh/profiles/web/cordis.patch.yml", "- insert:\n\t- id: mcp-x\n")):
+            with self.subTest(rel=rel):
+                comps, finds = self.analyze(self.write(rel, text))
+                self.assertEqual([f.rule_id for f in finds], ["ait.mcp.not-analysable"])
+                self.assertNotIn("mcp-server", [c.ctype for c in comps])
+
+    def test_found_in_a_scanned_directory(self):
+        self.write(".openclaw/openclaw.json", "{}")
+        self.write(".dsh/profiles/web/cordis.patch.yml", "[]")
+        self.write(".dsh/profiles/web/cordis.yml", "[]")
+        self.write("koishi/cordis.yml", "plugins: {}")  # a cordis app that is not a DSH profile
+        found = sorted(str(p.relative_to(self.root)).replace("\\", "/")
+                       for p in mcp.find_agent_configs(self.root, walk(self.root, all_files=True)))
+        self.assertEqual(found, [".dsh/profiles/web/cordis.patch.yml", ".dsh/profiles/web/cordis.yml",
+                                 ".openclaw/openclaw.json"])
+
+
+class MachineConfigTests(_ConfigFixture):
+    """`mcp --agent-configs` with a stand-in home directory."""
+
+    def machine(self, env=None):
+        clean = {k: v for k, v in os.environ.items()
+                 if k not in ("APPDATA", "XDG_CONFIG_HOME", "OPENCLAW_STATE_DIR", "DSH_HOME")}
+        clean.update(env or {})
+        with mock.patch.object(Path, "home", return_value=self.root), mock.patch.dict(os.environ, clean, clear=True):
+            return mcp.machine_agent_config_paths(), mcp.analyze_machine_configs()
+
+    def test_every_agent_of_the_machine(self):
+        self.write(".codex/config.toml", '[mcp_servers.docs]\ncommand = "npx"\nargs = ["-y", "docs-mcp"]\n')
+        self.write(".openclaw/openclaw.json", OPENCLAW)
+        self.write(".dsh/profiles/web/cordis.patch.yml", DSH)
+        self.write(".dsh/profiles/work/cordis.patch.yml", "[]")
+        paths, (comps, _) = self.machine()
+        self.assertEqual(sorted(p.relative_to(self.root).as_posix() for p in paths), [
+            ".codex/config.toml", ".dsh/profiles/web/cordis.patch.yml", ".dsh/profiles/work/cordis.patch.yml",
+            ".openclaw/openclaw.json"])
+        agents = {c.properties["path"]: c.properties["agent"] for c in comps if c.ctype == "mcp-config"}
+        self.assertEqual(agents, {"~/.codex/config.toml": "codex", "~/.openclaw/openclaw.json": "openclaw",
+                                  "~/.dsh/profiles/web/cordis.patch.yml": "dsh",
+                                  "~/.dsh/profiles/work/cordis.patch.yml": "dsh"})
+        servers = sorted(c.name for c in comps if c.ctype == "mcp-server")
+        self.assertEqual(servers, ["composio", "docs", "fetch", "github", "leaky", "remote"])  # Codex's too
+        docs = next(c for c in comps if c.name == "docs" and c.ctype == "mcp-server")
+        self.assertEqual(str(docs.locations[0]), "~/.codex/config.toml:1")
+
+    def test_state_directories_moved_by_the_environment(self):
+        self.write("oc/openclaw.json", OPENCLAW)
+        self.write("dsh/profiles/web/cordis.patch.yml", DSH)
+        self.write(".openclaw/openclaw.json", "{}")  # the default places are not read then
+        paths, _ = self.machine({"OPENCLAW_STATE_DIR": str(self.root / "oc"), "DSH_HOME": str(self.root / "dsh")})
+        self.assertEqual(sorted(p.relative_to(self.root).as_posix() for p in paths),
+                         ["dsh/profiles/web/cordis.patch.yml", "oc/openclaw.json"])
 
 
 if __name__ == "__main__":

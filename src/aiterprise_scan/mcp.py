@@ -14,7 +14,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from . import secrets, sources, textrules
+from . import miniyaml, secrets, sources, textrules
 from .model import (
     OWASP_EXCESSIVE_AGENCY,
     OWASP_SENSITIVE_INFO,
@@ -25,7 +25,7 @@ from .model import (
     Location,
     not_analysable,
 )
-from .textio import TooLarge, line_of, loads_jsonc, read_text
+from .textio import TooLarge, line_of, loads_json5, loads_jsonc, read_text
 from .walk import rel_posix
 
 # ---------------------------------------------------------------------------
@@ -45,13 +45,20 @@ def _config_kind(path: Path, root: Path) -> str | None:
     A generic ``mcp.json`` is accepted only when its text contains ``mcpServers``
     (checked by the caller); here it is reported as kind ``generic``.
     """
-    rel = rel_posix(path, root)
+    return _kind_of(rel_posix(path, root))
+
+
+def _kind_of(rel: str) -> str | None:
     parts = rel.split("/")
     name = parts[-1]
     parent = parts[-2] if len(parts) >= 2 else ""
 
     if name in _JSON_MCPSERVERS:
         return _JSON_MCPSERVERS[name]
+    if name == "openclaw.json":
+        return "openclaw"
+    if name == "cordis.patch.yml" or (name == "cordis.yml" and len(parts) >= 3 and parts[-3] == "profiles"):
+        return "dsh"  # a DeepSeek Harness profile: $DSH_HOME/profiles/<name>/
     if parent == ".cursor" and name == "mcp.json":
         return "cursor"
     if parent == ".vscode" and name == "mcp.json":
@@ -92,6 +99,22 @@ def find_agent_configs(root: Path, files: list[Path]) -> list[Path]:
     return out
 
 
+_MAX_DSH_PROFILES = 50
+
+
+def openclaw_state_dir() -> Path:
+    """OpenClaw keeps its config and its own skills here (`OPENCLAW_STATE_DIR`, else ~/.openclaw)."""
+    return Path(os.environ.get("OPENCLAW_STATE_DIR") or Path.home() / ".openclaw")
+
+
+def machine_label(path: Path) -> str:
+    """How a file of this machine is named in a report: `~/…` under the home directory."""
+    try:
+        return "~/" + path.relative_to(Path.home()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def machine_agent_config_paths() -> list[Path]:
     """Existing per-OS, user-level agent configs (nothing is read here)."""
     home = Path.home()
@@ -121,7 +144,14 @@ def machine_agent_config_paths() -> list[Path]:
         home / ".codex" / "config.toml",
         home / ".codeium" / "windsurf" / "mcp_config.json",
         home / ".gemini" / "settings.json",
+        openclaw_state_dir() / "openclaw.json",
     ]
+    profiles = Path(os.environ.get("DSH_HOME") or home / ".dsh") / "profiles"
+    try:
+        for profile in sorted(p for p in profiles.iterdir() if p.is_dir())[:_MAX_DSH_PROFILES]:
+            candidates += [profile / "cordis.yml", profile / "cordis.patch.yml"]
+    except OSError:
+        pass
     out: list[Path] = []
     seen: set[str] = set()
     for p in candidates:
@@ -344,12 +374,41 @@ def _parse_config(path: Path, kind: str) -> tuple[Any, str]:
     text = read_text(path)
     if kind == "codex" or path.suffix.lower() == ".toml":
         return tomllib.loads(text), text
+    if kind == "openclaw":
+        return loads_json5(text), text
+    if kind == "dsh" or path.suffix.lower() in (".yml", ".yaml"):
+        return miniyaml.load(text), text
     return loads_jsonc(text), text
+
+
+_DSH_MCP_CLIENT = "@deepseek-ai/dsh-mcp-client"
+
+
+def _dsh_servers(doc: Any) -> dict[str, dict]:
+    """Every instance of DSH's MCP client plugin in a profile, wherever the patch puts it
+    (`- insert:` lists, plugin maps): {server name: its config}."""
+    servers: dict[str, dict] = {}
+    stack = [doc]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, list):
+            stack.extend(reversed(node))
+        elif isinstance(node, dict):
+            name, cfg = node.get("name"), node.get("config")
+            if isinstance(name, str) and name.split(":", 1)[0] == _DSH_MCP_CLIENT and isinstance(cfg, dict):
+                # a `!!js process.env.NAME` value stays text: no secret pattern matches it
+                server = str(cfg.get("serverName") or node.get("id") or name)
+                servers.setdefault(server, cfg)
+                continue
+            stack.extend(reversed(list(node.values())))
+    return servers
 
 
 def _servers_from(data_obj: Any, kind: str) -> dict[str, dict]:
     """Extract the {name: server-config} mapping for a parsed config."""
     servers: dict[str, dict] = {}
+    if kind == "dsh":
+        return _dsh_servers(data_obj)
     if not isinstance(data_obj, dict):
         return servers
     if kind == "codex":
@@ -359,6 +418,9 @@ def _servers_from(data_obj: Any, kind: str) -> dict[str, dict]:
                 if isinstance(cfg, dict):
                     servers[str(n)] = cfg
         return servers
+    if kind == "openclaw":
+        ms = data_obj.get("mcp", {}).get("servers") if isinstance(data_obj.get("mcp"), dict) else None
+        return {str(n): cfg for n, cfg in ms.items() if isinstance(cfg, dict)} if isinstance(ms, dict) else servers
     if kind == "vscode":
         ms = data_obj.get("servers") or data_obj.get("mcpServers")
         if isinstance(ms, dict):
@@ -405,10 +467,11 @@ def _hook_commands(data_obj: Any) -> list[str]:
     return cmds
 
 
-def analyze_mcp_config(path: Path, root: Path) -> tuple[list[Component], list[Finding]]:
-    """Analyze a single agent config file."""
-    rel = rel_posix(path, root)
-    kind = _config_kind(path, root) or "generic"
+def analyze_mcp_config(path: Path, root: Path, label: str | None = None) -> tuple[list[Component], list[Finding]]:
+    """Analyze a single agent config file, named in the report by `label` (default: its path
+    under `root`)."""
+    rel = label or rel_posix(path, root)
+    kind = _kind_of(rel) or "generic"
     components: list[Component] = []
     findings: list[Finding] = []
 
@@ -604,7 +667,7 @@ def analyze_mcp(root: Path, files: list[Path], include_machine: bool = False,
             if key in seen:
                 continue
             seen.add(key)
-            c, f = analyze_mcp_config(p, root)
+            c, f = analyze_mcp_config(p, root, machine_label(p))
             components.extend(c)
             findings.extend(f)
 
@@ -618,7 +681,7 @@ def analyze_machine_configs(result=None) -> tuple[list[Component], list[Finding]
     components: list[Component] = []
     findings: list[Finding] = []
     for path in machine_agent_config_paths():
-        c, f = analyze_mcp_config(path, path.parent)
+        c, f = analyze_mcp_config(path, path.parent, machine_label(path))
         components += c
         findings += f
     _count(result, components, findings)

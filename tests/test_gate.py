@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from aiterprise_scan import credentials, gate, mcp, net, policy, secdb
+from aiterprise_scan import credentials, gate, mcp, net, policy, secdb, skills
 from aiterprise_scan.cache import Cache
 from aiterprise_scan.scanner import ScanOptions
 
@@ -144,7 +144,8 @@ class GatedScanTests(unittest.TestCase):
     def test_a_scan_of_this_machine_only_looks_up_no_policy(self):
         self.write_policy("version: 1\nfail_on: [critical]\n")
         with (working_directory(self.root),
-              mock.patch.object(mcp, "machine_agent_config_paths", return_value=[self.root / ".mcp.json"])):
+              mock.patch.object(mcp, "machine_agent_config_paths", return_value=[self.root / ".mcp.json"]),
+              mock.patch.object(skills, "machine_skill_roots", return_value=[])):  # not this machine's own
             result = self.scan(target=None, agent_configs=True, mcp_only=True)
         self.assertEqual((result.exit_code, result.policy_path), (1, None))
 
