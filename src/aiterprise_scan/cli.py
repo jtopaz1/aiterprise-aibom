@@ -61,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--all-files", action="store_true", help="do not honour .gitignore")
     scan.add_argument("--exclude", action="append", default=[], metavar="GLOB",
                       help="skip paths matching GLOB (relative to the target; repeatable), e.g. 'tests/**'")
-    scan.add_argument("--agent-configs", action="store_true", help="also read this machine's agent/MCP configs")
+    scan.add_argument("--agent-configs", action="store_true", help="also read this machine's agent/MCP configs and skills folders")
     scan.add_argument("--no-imports", action="store_true", help="skip manifest-free import discovery")
     scan.add_argument("--no-secrets", action="store_true", help="skip the secret scan")
     scan.add_argument("--max-vulns", type=int, help="at most N advisory findings per component")
@@ -87,7 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
     mcp.add_argument("action", nargs="?", choices=["serve"],
                      help="serve: expose scan_ai_supply_chain as a local stdio MCP server")
     mcp.add_argument("--path", type=Path, help="directory to search for project-level configs")
-    mcp.add_argument("--agent-configs", action="store_true", help="read this machine's agent/MCP configs")
+    mcp.add_argument("--agent-configs", action="store_true", help="read this machine's agent/MCP configs and skills folders")
     mcp.add_argument("--offline", action="store_true")
     _add_output_args(mcp)
     _add_gate_args(mcp)

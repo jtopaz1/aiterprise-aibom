@@ -14,7 +14,8 @@ from typing import Any
 
 from . import miniyaml, sources, textrules
 from .model import SEVERITY_RANK, Component, Finding, Location, not_analysable
-from .textio import TooLarge, loads_jsonc, read_text
+from .mcp import openclaw_state_dir
+from .textio import TooLarge, loads_json5, loads_jsonc, read_text
 from .walk import walk, rel_posix
 
 SCRIPT_EXTS = {".sh", ".bash", ".ps1", ".py", ".js", ".ts", ".bat", ".cmd"}
@@ -117,7 +118,7 @@ def _risk(findings: list[Finding]) -> tuple[int, str]:
     return score, rec
 
 
-def _scan_scripts(skill_dir: Path, root: Path, comp: Component) -> list[Finding]:
+def _scan_scripts(skill_dir: Path, root: Path, comp: Component, prefix: str = "") -> list[Finding]:
     findings: list[Finding] = []
     try:
         members = walk(skill_dir, all_files=True)
@@ -126,7 +127,7 @@ def _scan_scripts(skill_dir: Path, root: Path, comp: Component) -> list[Finding]
     for script in members:
         if script.suffix.lower() not in SCRIPT_EXTS:
             continue
-        rel = rel_posix(script, root)
+        rel = prefix + rel_posix(script, root)
         try:
             text = read_text(script, max_bytes=_MAX_SCRIPT_BYTES)
         except (OSError, TooLarge) as err:
@@ -143,9 +144,9 @@ def _scan_scripts(skill_dir: Path, root: Path, comp: Component) -> list[Finding]
 # ---------------------------------------------------------------------------
 
 
-def _analyze_skill_dir(skill_dir: Path, root: Path) -> tuple[Component, list[Finding]]:
+def _analyze_skill_dir(skill_dir: Path, root: Path, prefix: str = "") -> tuple[Component, list[Finding]]:
     skill_md = skill_dir / "SKILL.md"
-    rel = rel_posix(skill_md, root)
+    rel = prefix + rel_posix(skill_md, root)
     unread = None
     try:
         text = read_text(skill_md)
@@ -160,7 +161,7 @@ def _analyze_skill_dir(skill_dir: Path, root: Path) -> tuple[Component, list[Fin
             "kind": "skill",
             "description": fm.get("description"),
             "allowed-tools": as_list(fm.get("allowed-tools") or fm.get("allowed_tools")),
-            "path": rel_posix(skill_dir, root),
+            "path": prefix + rel_posix(skill_dir, root),
         },
     )
     findings = textrules.poison_findings(body, "ait.skill", comp, Location(rel, 1), "body")
@@ -168,13 +169,13 @@ def _analyze_skill_dir(skill_dir: Path, root: Path) -> tuple[Component, list[Fin
         findings.append(not_analysable("skill", rel, "SKILL.md", f"unreadable: {unread}", comp))
     if isinstance(fm.get("description"), str):
         findings += textrules.poison_findings(fm["description"], "ait.skill", comp, Location(rel, 1), "description")
-    findings += _scan_scripts(skill_dir, root, comp)
+    findings += _scan_scripts(skill_dir, root, comp, prefix)
     return _finalize(comp, findings)
 
 
-def _analyze_plugin_dir(plugin_dir: Path, root: Path) -> tuple[Component, list[Finding]]:
+def _analyze_plugin_dir(plugin_dir: Path, root: Path, prefix: str = "") -> tuple[Component, list[Finding]]:
     manifest = plugin_dir / ".claude-plugin" / "plugin.json"
-    rel = rel_posix(manifest, root)
+    rel = prefix + rel_posix(manifest, root)
     meta: dict[str, Any] = {}
     try:
         parsed = loads_jsonc(read_text(manifest))
@@ -189,7 +190,7 @@ def _analyze_plugin_dir(plugin_dir: Path, root: Path) -> tuple[Component, list[F
         properties={
             "kind": "plugin",
             "description": meta.get("description"),
-            "path": rel_posix(plugin_dir, root),
+            "path": prefix + rel_posix(plugin_dir, root),
         },
     )
     findings: list[Finding] = []
@@ -198,7 +199,7 @@ def _analyze_plugin_dir(plugin_dir: Path, root: Path) -> tuple[Component, list[F
     # plugin.json hooks run shell commands
     for cmd in _plugin_hook_commands(meta):
         findings += textrules.command_findings(cmd, "ait.skill", comp, Location(rel, 1))
-    findings += _scan_scripts(plugin_dir, root, comp)
+    findings += _scan_scripts(plugin_dir, root, comp, prefix)
     return _finalize(comp, findings)
 
 
@@ -219,8 +220,8 @@ def _plugin_hook_commands(meta: dict) -> list[str]:
     return cmds
 
 
-def _analyze_command_file(md: Path, root: Path) -> tuple[Component, list[Finding]]:
-    rel = rel_posix(md, root)
+def _analyze_command_file(md: Path, root: Path, prefix: str = "") -> tuple[Component, list[Finding]]:
+    rel = prefix + rel_posix(md, root)
     try:
         text = read_text(md)
     except (OSError, TooLarge):
@@ -262,20 +263,90 @@ def _finalize(comp: Component, findings: list[Finding]) -> tuple[Component, list
 # ---------------------------------------------------------------------------
 
 
-def analyze_skills(root: Path, files: list[Path], result=None) -> tuple[list[Component], list[Finding]]:
-    """Every skill, plugin and command file under `root`. Given a `result`, records the coverage."""
+_MAX_EXTRA_DIRS = 20
+
+
+def machine_skill_roots() -> list[Path]:
+    """The folders of this machine that agents load skills and commands from, those that exist:
+    Claude Code (~/.claude/skills, ~/.claude/commands), Codex (~/.codex/skills), the shared
+    ~/.agents/skills, and OpenClaw's managed and workspace skills and its `skills.load.extraDirs`.
+    Claude Code's plugin folder is not one of them: it holds whole marketplaces, mostly plugins
+    nobody installed."""
+    home = Path.home()
+    state = openclaw_state_dir()
+    candidates = [home / ".claude" / "skills", home / ".claude" / "commands", home / ".codex" / "skills",
+                  home / ".agents" / "skills", state / "skills", state / "workspace" / "skills"]
+    candidates += _openclaw_extra_dirs(state / "openclaw.json", home)
+    out: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        try:
+            if not path.is_dir():
+                continue
+            key = str(path.resolve()).lower()
+        except OSError:
+            continue
+        if key not in seen:
+            seen.add(key)
+            out.append(path)
+    return out
+
+
+def _openclaw_extra_dirs(config: Path, home: Path) -> list[Path]:
+    try:
+        doc = loads_json5(read_text(config))
+    except (OSError, TooLarge, ValueError):
+        return []  # a config that cannot be read is reported by the MCP analyzer
+    node: Any = doc
+    for key in ("skills", "load", "extraDirs"):
+        node = node.get(key) if isinstance(node, dict) else None
+    out: list[Path] = []
+    for entry in node[:_MAX_EXTRA_DIRS] if isinstance(node, list) else []:
+        if not isinstance(entry, str):
+            continue
+        path = home / entry[2:] if entry == "~" or entry.startswith(("~/", "~\\")) else Path(entry)
+        if path.is_absolute():
+            out.append(path)  # a relative entry depends on where OpenClaw runs: not guessed
+    return out
+
+
+def analyze_machine_skills(result=None) -> tuple[list[Component], list[Finding]]:
+    """Every skill and command in the skills folders of this machine, named `~/…`. Folders whose
+    name starts with a dot (a `.trash` of deleted skills) are not loaded by agents and are not read."""
+    components: list[Component] = []
+    findings: list[Finding] = []
+    home = Path.home()
+    for root in machine_skill_roots():
+        files = [f for f in walk(root, all_files=True)
+                 if not any(part.startswith(".") for part in f.relative_to(root).parts[:-1])]
+        try:
+            root.relative_to(home)
+            base, prefix = home, "~/"
+        except ValueError:
+            base = Path(root.anchor)
+            prefix = base.as_posix().rstrip("/") + "/"
+        c, f = analyze_skills(base, files, result, prefix)
+        components += c
+        findings += f
+    sources.count(result, sources.SKILLS, [], [])  # examined, even when the machine has no skills
+    return components, findings
+
+
+def analyze_skills(root: Path, files: list[Path], result=None, prefix: str = "") -> tuple[list[Component], list[Finding]]:
+    """Every skill, plugin and command file under `root`, named in the report as `prefix` + its path
+    under `root`. Given a `result`, records the coverage."""
     components: list[Component] = []
     findings: list[Finding] = []
     for unit in find_skill_dirs(root, files):
         if unit.is_dir():
             if (unit / "SKILL.md").is_file():
-                comp, fs = _analyze_skill_dir(unit, root)
+                comp, fs = _analyze_skill_dir(unit, root, prefix)
             elif (unit / ".claude-plugin" / "plugin.json").is_file():
-                comp, fs = _analyze_plugin_dir(unit, root)
+                comp, fs = _analyze_plugin_dir(unit, root, prefix)
             else:
                 continue
         elif unit.is_file():
-            comp, fs = _analyze_command_file(unit, root)
+            comp, fs = _analyze_command_file(unit, root, prefix)
         else:
             continue
         components.append(comp)

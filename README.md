@@ -27,8 +27,8 @@ Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ 
 | Vulnerabilities | OSV advisories per exact version, alias-deduplicated, fix versions; CISA KEV upgrades to critical; a bundled AI-package advisory subset keeps this working offline and during OSV outages | `ait.vuln.*` |
 | Model files | Pickle opcodes (raw and zip-wrapped, protocol 0–5) with dangerous callables, safetensors/GGUF/ONNX/HDF5/Keras/TFLite inventory, Keras `Lambda`, ONNX custom ops, GGUF chat-template injection, malformed containers; SecDB known-bad hashes when logged in | `ait.model.*` |
 | Package archives | Wheels, sdists, tarballs, eggs: `.pth` start-up payloads, `setup.py` and npm lifecycle commands, path traversal, model files inside | `ait.archive.*` |
-| MCP servers | Every agent's config (Claude Desktop/Code, Cursor, VS Code, Codex, Windsurf, Gemini) and MCPB/DXT bundles: dangerous commands, poisoned descriptions, literal secrets, scope — **without launching anything**; SecDB reputation when logged in | `ait.mcp.*` |
-| Agent skills | `SKILL.md` trees, Claude Code plugins/commands: instruction poisoning, install-script commands, risk score | `ait.skill.*` |
+| MCP servers | Every agent's config (Claude Desktop/Code, Cursor, VS Code, Codex, Windsurf, Gemini, OpenClaw, DeepSeek Harness) and MCPB/DXT bundles: dangerous commands, poisoned descriptions, literal secrets, scope — **without launching anything**; SecDB reputation when logged in | `ait.mcp.*` |
+| Agent skills | `SKILL.md` trees, Claude Code plugins/commands: instruction poisoning, install-script commands, risk score — in a project, and with `--agent-configs` in the skills folders of the machine (Claude Code, Codex, OpenClaw, `~/.agents/skills`) | `ait.skill.*` |
 | Licences | Model and dataset licence verdicts (Llama, Gemma, OpenRAIL, Mistral, Qwen, DBRX, DeepSeek, Falcon, CC-BY-NC, …) against your `use_context` — advisory, not legal advice; written into the AI-BOM's `licenses[]` | `ait.licence.*` |
 | Secrets | AI-provider keys in configs and code, reported redacted | `ait.secret.*` |
 | Prompts, endpoints, vector stores | Listed in the AI-BOM, not judged: agent instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, Copilot and Cursor rules, …), sub-agents and their tool grants, prompt templates and hub prompts; the AI APIs the code calls (provider URLs, `OPENAI_BASE_URL` and other endpoint variables, a client's `base_url`); vector stores (Chroma, Qdrant, Milvus, Weaviate, pgvector, LanceDB, FAISS, Pinecone). The text of a prompt is never copied, and credentials are cut from URLs | — |
@@ -50,7 +50,7 @@ aiterprise-scan scan dist/mypkg-1.0-py3-none-any.whl  # judge a package before y
 aiterprise-scan . --format sarif --out reports/     # report.sarif for GitHub code scanning
 aiterprise-scan . --emit-bom aibom.cdx.json         # CycloneDX 1.7 AI-BOM: findings, licence verdicts, modelCard
 aiterprise-scan . --save                            # keep the scan in the local history (`ui`)
-aiterprise-scan mcp --agent-configs                 # this machine's MCP servers
+aiterprise-scan mcp --agent-configs                 # this machine's MCP servers and skills
 aiterprise-scan bom . --out aibom.cdx.json          # inventory only (fast compliance mode)
 aiterprise-scan . --write-baseline .aiterprise/baseline.json   # adopt gating without fixing everything
 aiterprise-scan ui                                  # local web UI on 127.0.0.1

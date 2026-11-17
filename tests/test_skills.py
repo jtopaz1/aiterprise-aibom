@@ -136,5 +136,93 @@ class SkillAnalysisTests(_Repo):
         self.assertEqual(skill.properties["allowed-tools"], ["Read"])
 
 
+class MachineSkillTests(_Repo):
+    """`mcp --agent-configs` also reads the skills folders of the machine (design doc 13 §4.1), with a
+    stand-in home directory."""
+
+    def machine(self, env=None, result=None):
+        import os
+        from unittest import mock
+
+        clean = {k: v for k, v in os.environ.items() if k != "OPENCLAW_STATE_DIR"}
+        clean.update(env or {})
+        with mock.patch.object(Path, "home", return_value=self.root), mock.patch.dict(os.environ, clean, clear=True):
+            return skills.machine_skill_roots(), skills.analyze_machine_skills(result)
+
+    def skill(self, rel, name):
+        self.write(rel, BENIGN_SKILL_MD.replace("good-skill", name))
+
+    def test_every_agent_s_skills_folder(self):
+        self.skill(".claude/skills/review/SKILL.md", "review")
+        self.write(".claude/commands/deploy.md", COMMAND_MD)
+        self.skill(".codex/skills/fmt/SKILL.md", "fmt")
+        self.skill(".agents/skills/shared/SKILL.md", "shared")
+        self.skill(".openclaw/skills/managed/SKILL.md", "managed")
+        self.skill(".openclaw/workspace/skills/ws/SKILL.md", "ws")
+        self.write(".openclaw/openclaw.json", '{skills: {load: {extraDirs: ["~/agent-scripts/skills"]}}}')
+        self.skill("agent-scripts/skills/extra/SKILL.md", "extra")
+        self.write(".codex/skills/evil/SKILL.md", MALICIOUS_SKILL_MD)
+        # not loaded by any agent: deleted skills, and plugins a marketplace offers but nobody installed
+        self.write(".claude/skills/.trash/1793168503859/SKILL.md", MALICIOUS_SKILL_MD.replace("evil-skill", "trashed"))
+        self.skill(".claude/plugins/marketplaces/acme/skills/offered/SKILL.md", "offered")
+        roots, (comps, finds) = self.machine()
+        self.assertEqual([r.relative_to(self.root).as_posix() for r in roots], [
+            ".claude/skills", ".claude/commands", ".codex/skills", ".agents/skills", ".openclaw/skills",
+            ".openclaw/workspace/skills", "agent-scripts/skills"])
+        where = {c.name: str(c.locations[0]) for c in comps}
+        self.assertEqual(where, {
+            "review": "~/.claude/skills/review/SKILL.md:1", "deploy": "~/.claude/commands/deploy.md:1",
+            "fmt": "~/.codex/skills/fmt/SKILL.md:1", "evil-skill": "~/.codex/skills/evil/SKILL.md:1",
+            "shared": "~/.agents/skills/shared/SKILL.md:1", "managed": "~/.openclaw/skills/managed/SKILL.md:1",
+            "ws": "~/.openclaw/workspace/skills/ws/SKILL.md:1", "extra": "~/agent-scripts/skills/extra/SKILL.md:1"})
+        self.assertEqual(next(c for c in comps if c.name == "fmt").properties["path"], "~/.codex/skills/fmt")
+        flagged = {f.component.name for f in finds}
+        self.assertEqual(flagged, {"evil-skill", "deploy"})
+
+    def test_a_moved_openclaw_state_directory(self):
+        self.skill("oc/skills/moved/SKILL.md", "moved")
+        self.skill(".openclaw/skills/default/SKILL.md", "default")
+        roots, (comps, _) = self.machine({"OPENCLAW_STATE_DIR": str(self.root / "oc")})
+        self.assertEqual([c.name for c in comps], ["moved"])
+
+    def test_a_relative_extra_dir_is_not_guessed(self):
+        import os
+
+        # OpenClaw's docs do not say what a relative extraDirs entry is relative to, so it is not read,
+        # even where it would resolve against the current directory
+        self.write(".openclaw/openclaw.json", '{skills: {load: {extraDirs: ["relative/x"]}}}')
+        self.skill("relative/x/here/SKILL.md", "here")
+        cwd = os.getcwd()
+        os.chdir(self.root)
+        try:
+            roots, (comps, _) = self.machine()
+        finally:
+            os.chdir(cwd)
+        self.assertEqual((roots, comps), ([], []))
+
+    def test_a_machine_without_skills(self):
+        from aiterprise_scan.model import ScanResult
+
+        result = ScanResult(target="agent-configs", mode="offline", started_at="")
+        roots, (comps, finds) = self.machine(result=result)
+        self.assertEqual((roots, comps, finds), ([], [], []))
+        self.assertEqual(result.examined["skills"].checked, 0)  # looked and found none: not "never checked"
+
+    def test_a_scan_of_the_machine_lists_them(self):
+        import os
+        from unittest import mock
+
+        from aiterprise_scan.scanner import ScanOptions, run_scan
+
+        self.skill(".claude/skills/review/SKILL.md", "review")
+        with mock.patch.object(Path, "home", return_value=self.root), \
+                mock.patch.dict(os.environ, {k: v for k, v in os.environ.items()
+                                             if k not in ("APPDATA", "XDG_CONFIG_HOME", "OPENCLAW_STATE_DIR",
+                                                          "DSH_HOME")}, clear=True):
+            result = run_scan(ScanOptions(target=None, offline=True, agent_configs=True, mcp_only=True))
+        self.assertEqual([(c.ctype, c.name) for c in result.components], [("agent-skill", "review")])
+        self.assertEqual(result.examined["skills"].checked, 1)
+
+
 if __name__ == "__main__":
     unittest.main()

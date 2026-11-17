@@ -223,10 +223,14 @@ def run_scan(opts: ScanOptions) -> ScanResult:
             mc_, mf_ = run.step(sources.MCP.name, lambda: mcp.analyze_machine_configs(result), ([], []))
         components += mc_
         findings += mf_
-        if opts.mcp_only and root is not None:
-            from . import skills
+        from . import skills
 
+        if opts.mcp_only and root is not None:
             sc, sf = run.step(sources.SKILLS.name, lambda: skills.analyze_skills(root, files, result), ([], []))
+            components += sc
+            findings += sf
+        if opts.agent_configs:  # the skills folders of the machine, beside its agent configs
+            sc, sf = run.step(sources.SKILLS.name, lambda: skills.analyze_machine_skills(result), ([], []))
             components += sc
             findings += sf
 

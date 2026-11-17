@@ -134,3 +134,167 @@ def strip_json_comments(text: str) -> str:
 
 def loads_jsonc(text: str) -> Any:
     return json.loads(strip_json_comments(text.lstrip("﻿")))
+
+
+# --------------------------------------------------------------------------------------------
+# JSON5 (OpenClaw's config): comments, trailing commas, unquoted keys, single quotes, hex numbers
+# --------------------------------------------------------------------------------------------
+
+_JSON5_MAX_DEPTH = 64
+_JSON5_IDENT = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*")
+_JSON5_NUMBER = re.compile(r"[+-]?(?:0[xX][0-9A-Fa-f]+|Infinity|NaN|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)")
+_JSON5_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "v": "\v", "0": "\0"}
+
+
+def loads_json5(text: str) -> Any:
+    """Parse JSON5. Anything else, a nesting deeper than 64 included, raises ValueError."""
+    parser = _Json5(text.lstrip("﻿"))
+    value = parser.value(0)
+    parser.space()
+    if parser.i != len(parser.s):
+        raise ValueError(f"JSON5: unexpected text at offset {parser.i}")
+    return value
+
+
+class _Json5:
+    def __init__(self, s: str) -> None:
+        self.s, self.i = s, 0
+
+    def fail(self, what: str) -> ValueError:
+        return ValueError(f"JSON5: {what} at offset {self.i}")
+
+    def space(self) -> None:
+        s, n = self.s, len(self.s)
+        while self.i < n:
+            if s[self.i] in " \t\r\n\f\v\u00a0\ufeff\u2028\u2029":
+                self.i += 1
+            elif s.startswith("//", self.i):
+                j = s.find("\n", self.i)
+                self.i = n if j < 0 else j
+            elif s.startswith("/*", self.i):
+                j = s.find("*/", self.i + 2)
+                if j < 0:
+                    raise self.fail("unterminated comment")
+                self.i = j + 2
+            else:
+                return
+
+    def value(self, depth: int) -> Any:
+        if depth > _JSON5_MAX_DEPTH:
+            raise self.fail("nesting too deep")
+        self.space()
+        if self.i >= len(self.s):
+            raise self.fail("missing value")
+        c = self.s[self.i]
+        if c == "{":
+            return self.obj(depth)
+        if c == "[":
+            return self.arr(depth)
+        if c in "\"'":
+            return self.string()
+        for word, val in (("true", True), ("false", False), ("null", None)):
+            if self.s.startswith(word, self.i) and not _JSON5_IDENT.match(self.s, self.i + len(word)):
+                self.i += len(word)
+                return val
+        m = _JSON5_NUMBER.match(self.s, self.i)
+        if not m or _JSON5_IDENT.match(self.s, m.end()):
+            raise self.fail("not a value")
+        self.i = m.end()
+        tok = m.group(0)
+        body = tok.lstrip("+-")
+        sign = -1 if tok.startswith("-") else 1
+        if body[:2].lower() == "0x":
+            return sign * int(body, 16)
+        if body in ("Infinity", "NaN") or any(ch in body for ch in ".eE"):
+            return float(tok)
+        return int(tok)
+
+    def obj(self, depth: int) -> dict:
+        self.i += 1
+        out: dict[str, Any] = {}
+        self.space()
+        if self.s[self.i:self.i + 1] == "}":
+            self.i += 1
+            return out
+        while True:
+            self.space()
+            if self.s[self.i:self.i + 1] in ("\"", "'"):
+                key = self.string()
+            else:
+                m = _JSON5_IDENT.match(self.s, self.i)
+                if not m:
+                    raise self.fail("not a key")
+                key, self.i = m.group(0), m.end()
+            self.space()
+            if self.s[self.i:self.i + 1] != ":":
+                raise self.fail("missing ':'")
+            self.i += 1
+            out[key] = self.value(depth + 1)
+            if self.end_of_item("}"):
+                return out
+
+    def arr(self, depth: int) -> list:
+        self.i += 1
+        out: list[Any] = []
+        self.space()
+        if self.s[self.i:self.i + 1] == "]":
+            self.i += 1
+            return out
+        while True:
+            out.append(self.value(depth + 1))
+            if self.end_of_item("]"):
+                return out
+
+    def end_of_item(self, close: str) -> bool:
+        """After an item: True at the closing bracket (a trailing comma allowed), False after a comma."""
+        self.space()
+        c = self.s[self.i:self.i + 1]
+        if c == close:
+            self.i += 1
+            return True
+        if c != ",":
+            raise self.fail(f"missing ',' or '{close}'")
+        self.i += 1
+        self.space()
+        if self.s[self.i:self.i + 1] == close:
+            self.i += 1
+            return True
+        return False
+
+    def string(self) -> str:
+        quote, s, n = self.s[self.i], self.s, len(self.s)
+        self.i += 1
+        out: list[str] = []
+        while True:
+            if self.i >= n:
+                raise self.fail("unterminated string")
+            c = s[self.i]
+            if c == quote:
+                self.i += 1
+                return "".join(out)
+            if c in "\r\n":
+                raise self.fail("newline in a string")
+            if c != "\\":
+                out.append(c)
+                self.i += 1
+                continue
+            e = s[self.i + 1:self.i + 2]
+            self.i += 2
+            if e in _JSON5_ESCAPES:
+                out.append(_JSON5_ESCAPES[e])
+            elif e in ("u", "x"):
+                width = 4 if e == "u" else 2
+                digits = s[self.i:self.i + width]
+                if len(digits) != width or not all(ch in "0123456789abcdefABCDEF" for ch in digits):
+                    raise self.fail("bad escape")
+                out.append(chr(int(digits, 16)))
+                self.i += width
+            elif e == "\r":
+                if s[self.i:self.i + 1] == "\n":
+                    self.i += 1  # a line continuation adds nothing
+            elif e in ("\n", "\u2028", "\u2029"):
+                pass
+            elif e:
+                out.append(e)  # \\ \' \" \/ and any other character stand for themselves
+            else:
+                raise self.fail("unterminated string")

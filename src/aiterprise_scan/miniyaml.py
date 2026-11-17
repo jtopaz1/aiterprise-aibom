@@ -3,7 +3,9 @@
 Supported: block mappings and sequences, flow `[...]` / `{...}` collections, single/double quoted
 scalars, `|` / `>` block scalars, comments, a leading `---`. Not supported (by design): tags,
 anchors/aliases, complex `?` keys, multiple documents (only the first is read). Nothing is ever
-constructed from tags, so hostile input cannot execute code.
+constructed from tags, so hostile input cannot execute code: a tagged value such as
+`!!js process.env.X` is read as that text. A document nested deeper than MAX_DEPTH levels raises
+YAMLError like any other malformed one.
 
 Scalars: `null`/`~`/empty → None, `true`/`false` → bool, plain integers → int when `typed=True`.
 Anything with a dot stays a string, so versions like `1.10` are never turned into floats.
@@ -21,6 +23,7 @@ class YAMLError(ValueError):
     pass
 
 
+MAX_DEPTH = 64
 _INT = re.compile(r"^[-+]?(0|[1-9][0-9]*)$")
 _BLOCK_INDICATOR = re.compile(r"^[|>][-+]?[1-9]?$|^[|>][1-9][-+]?$")
 
@@ -98,6 +101,7 @@ def _unescape_double(s: str) -> str:
 class _Parser:
     def __init__(self, text: str, typed: bool) -> None:
         self.typed = typed
+        self.depth = 0
         self.raw = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
         self.lines: list[tuple[int, int, str]] = []  # (raw index, indent, content)
         seen_content = False
@@ -138,12 +142,23 @@ class _Parser:
             raise YAMLError(f"line {raw_idx + 1}: unexpected content")
         return value
 
+    def _enter(self) -> None:
+        """One level deeper. Scanned files are untrusted (design doc 13 §5.6): a document nested
+        deeper than MAX_DEPTH is malformed YAML, not a reason to exhaust the interpreter's stack."""
+        self.depth += 1
+        if self.depth > MAX_DEPTH:
+            raise YAMLError(f"nested deeper than {MAX_DEPTH} levels")
+
     # -- blocks ------------------------------------------------------------------------------
     def _block(self, indent: int) -> Any:
         _, _, content = self.lines[self.pos]
-        if _is_seq_item(content):
-            return self._seq(indent)
-        return self._map(indent)
+        self._enter()
+        try:
+            if _is_seq_item(content):
+                return self._seq(indent)
+            return self._map(indent)
+        finally:
+            self.depth -= 1
 
     def _seq(self, indent: int) -> list[Any]:
         items: list[Any] = []
@@ -307,6 +322,16 @@ class _Parser:
             i += 1
         if i >= n:
             return None, i
+        if s[i] in "[{":
+            self._enter()
+            try:
+                return self._flow_collection(s, i)
+            finally:
+                self.depth -= 1
+        return self._flow_scalar(s, i, key_mode=False)
+
+    def _flow_collection(self, s: str, i: int) -> tuple[Any, int]:
+        n = len(s)
         ch = s[i]
         if ch == "[":
             items: list[Any] = []
@@ -347,7 +372,7 @@ class _Parser:
                     i += 1
                 if i < n and s[i] == ",":
                     i += 1
-        return self._flow_scalar(s, i, key_mode=False)
+        raise AssertionError("unreachable: a flow collection starts with [ or {")
 
     def _flow_scalar(self, s: str, i: int, key_mode: bool) -> tuple[Any, int]:
         n = len(s)

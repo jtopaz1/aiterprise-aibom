@@ -118,6 +118,18 @@ class MiniYamlTests(unittest.TestCase):
         with self.assertRaises(miniyaml.YAMLError):
             miniyaml.load("a: 1\n   b: 2\n")
 
+    def test_deep_nesting_is_a_yaml_error_not_a_crash(self):
+        # scanned files are untrusted (design doc 13 §5.6): a front matter or lockfile nested a few
+        # thousand levels deep must fail like any malformed YAML, not exhaust the interpreter's stack
+        block = "".join(" " * i + "k:\n" for i in range(3000))
+        for text in ("[" * 5000, "a: " + "{b: " * 5000, block, "- " * 3000 + "x"):
+            with self.subTest(text=text[:12]), self.assertRaises(miniyaml.YAMLError):
+                miniyaml.load(text)
+        nested: list = []
+        for _ in range(19):
+            nested = [nested]
+        self.assertEqual(miniyaml.load("a: " + "[" * 20 + "]" * 20), {"a": nested})  # ordinary depths still read
+
 
 class TextIOTests(unittest.TestCase):
     def test_utf16_bom(self):

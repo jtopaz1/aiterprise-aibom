@@ -50,7 +50,7 @@ aiterprise-scan . --save && aiterprise-scan ui    # keep it in the local history
 aiterprise-scan scan --bom cdxgen-aibom.json            # judge someone else's AI-BOM
 aiterprise-scan scan dist/mypkg-1.0-py3-none-any.whl    # a package before you publish or install it
 aiterprise-scan scan models/model.pt                    # one model file
-aiterprise-scan mcp --agent-configs                     # this machine's MCP servers
+aiterprise-scan mcp --agent-configs                     # this machine's MCP servers and skills
 ```
 
 ## CI

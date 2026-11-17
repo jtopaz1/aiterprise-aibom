@@ -24,7 +24,7 @@
 | `--offline` | bundled definitions and cache only; no network |
 | `--all-files` | do not honour `.gitignore` (only the one at the root of the target is read). Dependency and cache directories such as `node_modules`, `.venv` and `site-packages` are skipped either way, and a walk stops at 200,000 files with a note in the report |
 | `--exclude GLOB` | skip paths matching GLOB, relative to the target (repeatable), e.g. `'tests/**'` |
-| `--agent-configs` | also read this machine's agent and MCP configs |
+| `--agent-configs` | also read this machine's agent and MCP configs and its skills folders |
 | `--no-imports` | skip manifest-free import discovery |
 | `--no-secrets` | skip the secret scan |
 | `--max-vulns N` | at most N advisory findings per component |
