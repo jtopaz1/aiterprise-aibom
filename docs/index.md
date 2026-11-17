@@ -30,7 +30,7 @@ the table report.*
 | Vulnerabilities | OSV advisories per exact version, CISA KEV upgrades to critical, a bundled AI-package subset for offline use |
 | Model files | pickle opcodes with dangerous callables (never unpickled), Keras `Lambda`, ONNX custom ops and external-data paths, GGUF chat-template injection, malformed containers |
 | Package archives | `.pth` start-up payloads, `setup.py` and npm lifecycle commands, path traversal |
-| MCP servers | every agent's config, dangerous commands, poisoned descriptions, literal secrets, scope — nothing is launched |
+| MCP servers | every agent's config, and the servers the project builds (tool descriptions read from the source); dangerous commands, poisoned descriptions, literal secrets, scope — nothing is launched |
 | Agent skills | `SKILL.md` trees and Claude Code plugins: instruction poisoning, install-script commands — also the machine's skills folders with `--agent-configs` |
 | Licences | model and dataset licences against your `use_context` (advisory, not legal advice) |
 | Secrets | AI-provider keys, always redacted |

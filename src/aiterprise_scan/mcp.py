@@ -658,6 +658,12 @@ def analyze_mcp(root: Path, files: list[Path], include_machine: bool = False,
         components.extend(c)
         findings.extend(f)
 
+    from . import mcpcode  # servers the project defines in its own source
+
+    c, f = mcpcode.analyze(root, files)
+    components.extend(c)
+    findings.extend(f)
+
     if include_machine:
         for p in machine_agent_config_paths():
             try:

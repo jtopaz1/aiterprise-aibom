@@ -36,6 +36,7 @@ package names.
 |---|---|---|---|
 | Agent skills installed on one developer machine (Claude Code skills and plugins, Cursor, Gemini), one per skill name, assumed benign | 275 skills | `ait.skill.*`, with a per-rule entry for each command rule and poison pattern | family 11.64 % (32 of 275); e.g. `desc.hidden.conceal` 4.00 %, poison patterns 9–20 at 0 |
 | Site-packages of two local Python environments, one project per package | 210 packages (205 gave secrets a chance) | `ait.secret.*` | family 3.41 % (7 of 205), all from the PEM private-key rule; Anthropic, OpenAI and Slack keys 0.49 % each |
+| MCP servers whose source is public: the 7 reference servers of `modelcontextprotocol/servers` and the 53 servers in the Python SDK's examples (2026-11-17), plus the 2 servers of one installed agent, read by `mcpcode.py`, assumed benign | 62 servers, 171 tools | `ait.mcp.desc.*` on tool, prompt, resource and parameter descriptions | 0 of 62 after two fixes: `secret.read-exfil` fired on the git server's `git_remote` ("fetch and push URLs … Credentials embedded in a URL are shown as <redacted>") and `shadow.cross-tool` on sequential thinking's heading "When to use this tool:". Measured by hand once; `tools/measure_fp.py` does not run this corpus |
 | Names of the packages installed on one developer machine | 1,017 names | `ait.pkg.typosquat`; with `--online`, the release signals | typosquat 0.20 % (2 of 1,017); `publisher-change` 0.63 % (2 of 317); `provenance-dropped` 0 of 317; `dormant-release` and `version-jump` 0 of 131 |
 
 The skill rate is high because the description-poisoning patterns were written for short tool
@@ -58,8 +59,8 @@ measurement found and fixed.
   random sample of what exists.
 - "Assumed benign" is an assumption. A finding on a corpus project counts as a false positive even
   if the project really does what the rule describes, so a rate can overstate the noise.
-- The skill corpus measures rules on skill bodies only; the same patterns on MCP tool descriptions
-  are not measured.
+- The skill corpus measures rules on skill bodies only. On MCP tool descriptions the same patterns
+  were measured once, by hand, on the 62 servers above, all from well-maintained repositories.
 
 ## Reproduce
 
