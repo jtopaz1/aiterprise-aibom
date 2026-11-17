@@ -20,7 +20,9 @@ VERDICTS = ("malicious", "suspicious", "benign", "unknown")
 
 # Component types. `library` covers every package; `ai` on the component says whether it is in
 # the AI taxonomy. `model` / `dataset` are referenced artefacts (e.g. a Hugging Face id),
-# `model-file` is a file on disk.
+# `model-file` is a file on disk. `prompt` is text an agent or app follows (an AGENTS.md, a
+# sub-agent, a template, a hub prompt), `ai-endpoint` where prompts are sent, `vector-store`
+# where embeddings are kept (design doc 13 §4.2).
 CTYPES = (
     "library",
     "model-file",
@@ -29,7 +31,9 @@ CTYPES = (
     "mcp-server",
     "mcp-config",
     "agent-skill",
+    "prompt",
     "ai-endpoint",
+    "vector-store",
 )
 
 FINDING_STATES = ("new", "acknowledged", "suppressed", "resolved", "withdrawn")

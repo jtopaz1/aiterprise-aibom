@@ -180,7 +180,7 @@ def run_scan(opts: ScanOptions) -> ScanResult:
         result.files_walked = len(files)
 
     if root is not None and not opts.mcp_only:
-        from . import discover, licences, modelfiles, secrets, skills
+        from . import discover, licences, modelfiles, prompts, secrets, services, skills
 
         manifest_gaps: list[Finding] = []
         components += run.step(sources.DISCOVER.name,
@@ -192,6 +192,8 @@ def run_scan(opts: ScanOptions) -> ScanResult:
         components += mc
         findings += mf
         components += run.step(sources.MODEL_REFS.name, lambda: licences.discover_model_refs(root, files), [])
+        components += run.step(sources.PROMPTS.name, lambda: prompts.discover_prompts(root, files), [])
+        components += run.step(sources.AI_SERVICES.name, lambda: services.discover_services(root, files), [])
         sc, sf = run.step(sources.SKILLS.name, lambda: skills.analyze_skills(root, files, result), ([], []))
         components += sc
         findings += sf

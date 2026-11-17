@@ -61,7 +61,7 @@ def find_skill_dirs(root: Path, files: list[Path]) -> list[Path]:
 # ---------------------------------------------------------------------------
 
 
-def _front_matter(text: str) -> tuple[dict[str, Any], str]:
+def front_matter(text: str) -> tuple[dict[str, Any], str]:
     """Split YAML front matter from a markdown body. Returns ({}, text) if none."""
     t = text.lstrip("﻿")
     lines = t.splitlines(keepends=True)
@@ -86,7 +86,7 @@ def _front_matter(text: str) -> tuple[dict[str, Any], str]:
     return fm, "".join(lines[body_start:])
 
 
-def _as_list(value: Any) -> list[str]:
+def as_list(value: Any) -> list[str]:
     if value is None:
         return []
     if isinstance(value, list):
@@ -151,7 +151,7 @@ def _analyze_skill_dir(skill_dir: Path, root: Path) -> tuple[Component, list[Fin
         text = read_text(skill_md)
     except (OSError, TooLarge) as err:
         text, unread = "", f"{type(err).__name__}"
-    fm, body = _front_matter(text)
+    fm, body = front_matter(text)
     name = str(fm.get("name") or skill_dir.name)
     comp = Component(
         name=name, ctype="agent-skill", source="config",
@@ -159,7 +159,7 @@ def _analyze_skill_dir(skill_dir: Path, root: Path) -> tuple[Component, list[Fin
         properties={
             "kind": "skill",
             "description": fm.get("description"),
-            "allowed-tools": _as_list(fm.get("allowed-tools") or fm.get("allowed_tools")),
+            "allowed-tools": as_list(fm.get("allowed-tools") or fm.get("allowed_tools")),
             "path": rel_posix(skill_dir, root),
         },
     )
@@ -225,7 +225,7 @@ def _analyze_command_file(md: Path, root: Path) -> tuple[Component, list[Finding
         text = read_text(md)
     except (OSError, TooLarge):
         text = ""
-    fm, body = _front_matter(text)
+    fm, body = front_matter(text)
     name = str(fm.get("name") or md.stem)
     comp = Component(
         name=name, ctype="agent-skill", source="config",
@@ -233,7 +233,7 @@ def _analyze_command_file(md: Path, root: Path) -> tuple[Component, list[Finding
         properties={
             "kind": "command",
             "description": fm.get("description"),
-            "allowed-tools": _as_list(fm.get("allowed-tools") or fm.get("allowed_tools")),
+            "allowed-tools": as_list(fm.get("allowed-tools") or fm.get("allowed_tools")),
             "path": rel,
         },
     )

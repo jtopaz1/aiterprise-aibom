@@ -201,12 +201,13 @@ _TEXT_EXT = {
     ".env", ".py", ".pyi", ".js", ".cjs", ".mjs", ".ts", ".tsx", ".jsx", ".json", ".jsonc",
     ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".properties", ".sh", ".bash", ".zsh",
     ".fish", ".ps1", ".psm1", ".bat", ".cmd", ".md", ".markdown", ".mdx", ".txt", ".rst",
-    ".xml", ".html", ".tpl", ".tmpl", ".prompt", ".j2", ".tf", ".tfvars", ".dockerfile",
+    ".xml", ".html", ".tpl", ".tmpl", ".prompt", ".prompty", ".mdc", ".j2", ".tf", ".tfvars", ".dockerfile",
     ".gradle", ".groovy", ".rb", ".go", ".rs", ".java", ".kt", ".php", ".cs", ".sql",
 }
 _TEXT_NAMES = {
     "dockerfile", ".npmrc", ".pypirc", ".netrc", ".dockercfg", ".flaskenv", "config",
     "credentials", ".git-credentials", "pip.conf",
+    ".cursorrules", ".windsurfrules", ".clinerules", ".goosehints",  # agent instruction files (prompts)
 }
 
 

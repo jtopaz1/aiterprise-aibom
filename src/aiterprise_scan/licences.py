@@ -24,6 +24,10 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from . import data, miniyaml, sources
+from .callargs import KWARG_RE as _KWARG_RE
+from .callargs import call_args as _call_args
+from .callargs import line_at as _line_at
+from .callargs import literal as _literal
 from .model import OWASP_SUPPLY_CHAIN, Component, Evidence, Finding, Location
 from .textio import TooLarge, read_text
 from .walk import rel_posix
@@ -275,8 +279,6 @@ _CALLS: dict[str, tuple[str, tuple[str, ...], int]] = {
     "load_dataset": ("dataset", ("path",), 0),
 }
 _CALL_RE = re.compile(r"\b(" + "|".join(_CALLS) + r")\s*\(")
-_KWARG_RE = re.compile(r"^([A-Za-z_]\w*)\s*=(?!=)\s*(.*)$", re.S)
-_LITERAL_RE = re.compile(r"^([rRuU]?)(['\"])(.*)\2$", re.S)
 _SEGMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _HF_URL_RE = re.compile(r"https?://(?:www\.)?(?:huggingface\.co|hf\.co)/([A-Za-z0-9][\w.\-/@]*)")
 _HF_PROTO_RE = re.compile(r"(?<![\w/])hf://([A-Za-z0-9][\w.\-/@]*)")
@@ -365,74 +367,6 @@ def _valid_id(value: str, root: Path | None, *, allow_single: bool, dataset: boo
         except OSError:
             pass
     return True
-
-
-def _line_at(text: str, offset: int) -> int:
-    return text.count("\n", 0, offset) + 1
-
-
-def _skip_string(text: str, i: int) -> int:
-    """`text[i]` is a quote; return the index just past the closing quote."""
-    q = text[i]
-    triple = text.startswith(q * 3, i)
-    if triple:
-        end = text.find(q * 3, i + 3)
-        return len(text) if end < 0 else end + 3
-    j = i + 1
-    n = len(text)
-    while j < n:
-        c = text[j]
-        if c == "\\":
-            j += 2
-            continue
-        if c == q or c == "\n":
-            return j + 1
-        j += 1
-    return n
-
-
-def _call_args(text: str, start: int, limit: int = 4000) -> list[tuple[str, int]]:
-    """Top-level arguments of a call whose `(` ends just before `start`: [(arg_text, offset)]."""
-    args: list[tuple[str, int]] = []
-    depth = 0
-    i = start
-    seg_start = start
-    end = min(len(text), start + limit)
-    while i < end:
-        c = text[i]
-        if c in "'\"`":
-            i = _skip_string(text, i)
-            continue
-        if c == "#" and (i == start or text[i - 1] in " \t\n"):
-            nl = text.find("\n", i)
-            i = end if nl < 0 else nl
-            continue
-        if c in "([{":
-            depth += 1
-        elif c in ")]}":
-            if depth == 0:
-                args.append((text[seg_start:i], seg_start))
-                return [(a, o) for a, o in args if a.strip()]
-            depth -= 1
-        elif c == "," and depth == 0:
-            args.append((text[seg_start:i], seg_start))
-            seg_start = i + 1
-        i += 1
-    return []  # unbalanced or too long: not a call we can read safely
-
-
-def _literal(arg: str, offset: int) -> tuple[str, int] | None:
-    """(value, absolute offset of the value) when `arg` is a plain string literal."""
-    lead = len(arg) - len(arg.lstrip())
-    s = arg.strip()
-    m = _LITERAL_RE.match(s)
-    if not m:
-        return None
-    body = m.group(3)
-    quote = m.group(2)
-    if quote in body or "\\" in body or "\n" in body or s.startswith(quote * 3):
-        return None
-    return body, offset + lead + len(m.group(1)) + 1
 
 
 def _scan_calls(text: str, root: Path | None, *, python: bool) -> list[_Ref]:

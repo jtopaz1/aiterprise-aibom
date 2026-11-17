@@ -26,7 +26,9 @@ _CTYPE_TO_CDX = {
     "mcp-server": "application",
     "mcp-config": "file",
     "agent-skill": "application",
+    "prompt": "data",
     "ai-endpoint": "data",
+    "vector-store": "data",
 }
 _HASH_TO_CDX = {"sha1": "SHA-1", "sha256": "SHA-256", "sha384": "SHA-384", "sha512": "SHA-512", "md5": "MD5"}
 

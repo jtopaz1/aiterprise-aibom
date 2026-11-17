@@ -45,11 +45,13 @@ BOM_INGEST = Source("bom-ingest")
 DISCOVER = Source("discover")
 IMPORTS = Source("imports")
 MODEL_REFS = Source("model-refs")
+PROMPTS = Source("prompts")
+AI_SERVICES = Source("ai-services")  # AI endpoints and vector stores
 PROVIDERS = Source("providers")  # the step that runs the third-party providers
 
 ALL: tuple[Source, ...] = (
     AIT_MALICIOUS, OSV, OSV_SUBSET, KEV, REGISTRY, MODEL_FILES, MCP, SKILLS, LICENCES, SECRETS, ARCHIVES, SECDB,
-    POLICY, BOM_INGEST, DISCOVER, IMPORTS, MODEL_REFS, PROVIDERS,
+    POLICY, BOM_INGEST, DISCOVER, IMPORTS, MODEL_REFS, PROMPTS, AI_SERVICES, PROVIDERS,
 )
 
 

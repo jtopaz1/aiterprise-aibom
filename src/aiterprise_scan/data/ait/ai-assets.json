@@ -1,0 +1,143 @@
+{
+  "schema": "ait-ai-assets/1",
+  "version": "2026.11.17",
+  "description": "Prompts, AI endpoints and vector stores as components (design doc 13 §4.2, C02): the files agents read as instructions, where prompts are sent, where embeddings are kept. First-party, curated.",
+  "prompts": {
+    "names": {
+      "AGENTS.md": ["agent-instructions", "AGENTS.md agents (Codex, Cursor, Copilot, Jules and others)"],
+      "AGENT.md": ["agent-instructions", "Amp"],
+      "CLAUDE.md": ["agent-instructions", "Claude Code"],
+      "CLAUDE.local.md": ["agent-instructions", "Claude Code"],
+      "GEMINI.md": ["agent-instructions", "Gemini CLI"],
+      ".cursorrules": ["agent-instructions", "Cursor"],
+      ".windsurfrules": ["agent-instructions", "Windsurf"],
+      ".clinerules": ["agent-instructions", "Cline"],
+      ".goosehints": ["agent-instructions", "Goose"]
+    },
+    "paths": {
+      ".github/copilot-instructions.md": ["agent-instructions", "GitHub Copilot"],
+      ".junie/guidelines.md": ["agent-instructions", "Junie"]
+    },
+    "dirs": [
+      {"dir": ".cursor/rules", "suffixes": [".mdc", ".md"], "kind": "agent-instructions", "read_by": "Cursor"},
+      {"dir": ".windsurf/rules", "suffixes": [".md"], "kind": "agent-instructions", "read_by": "Windsurf"},
+      {"dir": ".clinerules", "suffixes": [".md"], "kind": "agent-instructions", "read_by": "Cline"},
+      {"dir": ".roo/rules", "suffixes": [".md"], "kind": "agent-instructions", "read_by": "Roo Code"},
+      {"dir": ".kiro/steering", "suffixes": [".md"], "kind": "agent-instructions", "read_by": "Kiro"},
+      {"dir": ".amazonq/rules", "suffixes": [".md"], "kind": "agent-instructions", "read_by": "Amazon Q Developer"},
+      {"dir": ".continue/rules", "suffixes": [".md"], "kind": "agent-instructions", "read_by": "Continue"},
+      {"dir": ".github/instructions", "suffixes": [".instructions.md"], "kind": "agent-instructions", "read_by": "GitHub Copilot"},
+      {"dir": ".claude/agents", "suffixes": [".md"], "kind": "sub-agent", "read_by": "Claude Code", "omitted_tools": "all"},
+      {"dir": ".github/agents", "suffixes": [".agent.md"], "kind": "sub-agent", "read_by": "GitHub Copilot"},
+      {"dir": ".github/chatmodes", "suffixes": [".chatmode.md"], "kind": "sub-agent", "read_by": "GitHub Copilot"},
+      {"dir": ".github/prompts", "suffixes": [".prompt.md"], "kind": "command", "read_by": "GitHub Copilot"},
+      {"dir": ".gemini/commands", "suffixes": [".toml"], "kind": "command", "read_by": "Gemini CLI"},
+      {"dir": ".cursor/commands", "suffixes": [".md"], "kind": "command", "read_by": "Cursor"},
+      {"dir": ".continue/prompts", "suffixes": [".prompt"], "kind": "command", "read_by": "Continue"}
+    ],
+    "suffixes": [
+      [".prompty", "template", "Prompty"],
+      [".prompt.yml", "template", "GitHub Models"],
+      [".prompt.yaml", "template", "GitHub Models"],
+      [".prompt", "template", null]
+    ],
+    "hub_calls": ["hub.pull", "pull_prompt"]
+  },
+  "ai_endpoints": {
+    "hosts": {
+      "api.openai.com": "OpenAI",
+      "models.inference.ai.azure.com": "GitHub Models",
+      "models.github.ai": "GitHub Models",
+      "*.openai.azure.com": "Azure OpenAI",
+      "*.services.ai.azure.com": "Azure AI Foundry",
+      "*.inference.ai.azure.com": "Azure AI",
+      "*.cognitiveservices.azure.com": "Azure AI",
+      "api.anthropic.com": "Anthropic",
+      "generativelanguage.googleapis.com": "Google Gemini",
+      "aiplatform.googleapis.com": "Google Vertex AI",
+      "*-aiplatform.googleapis.com": "Google Vertex AI",
+      "bedrock-runtime.*.amazonaws.com": "Amazon Bedrock",
+      "bedrock-agent-runtime.*.amazonaws.com": "Amazon Bedrock",
+      "api.mistral.ai": "Mistral",
+      "api.cohere.com": "Cohere",
+      "api.cohere.ai": "Cohere",
+      "api.groq.com": "Groq",
+      "openrouter.ai": "OpenRouter",
+      "api.together.xyz": "Together AI",
+      "api.together.ai": "Together AI",
+      "api.deepseek.com": "DeepSeek",
+      "api.x.ai": "xAI",
+      "api.perplexity.ai": "Perplexity",
+      "api.fireworks.ai": "Fireworks AI",
+      "api.replicate.com": "Replicate",
+      "api-inference.huggingface.co": "Hugging Face",
+      "router.huggingface.co": "Hugging Face",
+      "*.endpoints.huggingface.cloud": "Hugging Face Inference Endpoints",
+      "api.voyageai.com": "Voyage AI",
+      "api.jina.ai": "Jina AI",
+      "api.cerebras.ai": "Cerebras",
+      "api.sambanova.ai": "SambaNova",
+      "api.deepinfra.com": "DeepInfra",
+      "api.ai21.com": "AI21 Labs",
+      "integrate.api.nvidia.com": "NVIDIA NIM",
+      "dashscope.aliyuncs.com": "Alibaba Cloud Model Studio",
+      "dashscope-intl.aliyuncs.com": "Alibaba Cloud Model Studio",
+      "api.moonshot.cn": "Moonshot AI",
+      "api.moonshot.ai": "Moonshot AI",
+      "open.bigmodel.cn": "Zhipu AI",
+      "qianfan.baidubce.com": "Baidu Qianfan",
+      "ark.*.volces.com": "Volcano Engine Ark",
+      "gateway.ai.cloudflare.com": "Cloudflare AI Gateway",
+      "api.portkey.ai": "Portkey",
+      "oai.helicone.ai": "Helicone"
+    },
+    "ports": {"11434": "Ollama"},
+    "env": {
+      "OPENAI_BASE_URL": "OpenAI-compatible",
+      "OPENAI_API_BASE": "OpenAI-compatible",
+      "ANTHROPIC_BASE_URL": "Anthropic-compatible",
+      "AZURE_OPENAI_ENDPOINT": "Azure OpenAI",
+      "OLLAMA_HOST": "Ollama",
+      "OLLAMA_BASE_URL": "Ollama",
+      "OLLAMA_API_BASE": "Ollama",
+      "HF_ENDPOINT": "Hugging Face",
+      "HF_INFERENCE_ENDPOINT": "Hugging Face",
+      "GOOGLE_GEMINI_BASE_URL": "Gemini-compatible",
+      "LITELLM_PROXY_API_BASE": "LiteLLM proxy",
+      "LITELLM_BASE_URL": "LiteLLM proxy"
+    },
+    "client_kwargs": {
+      "python": ["base_url", "api_base", "openai_api_base", "azure_endpoint"],
+      "javascript": ["baseURL", "baseUrl", "base_url", "apiBase"]
+    },
+    "client_categories": ["llm-client", "agent-framework", "llm-gateway"]
+  },
+  "vector_stores": {
+    "images": {
+      "qdrant/qdrant": "qdrant",
+      "chromadb/chroma": "chroma",
+      "chroma-core/chroma": "chroma",
+      "milvusdb/milvus": "milvus",
+      "semitechnologies/weaviate": "weaviate",
+      "pgvector/pgvector": "pgvector",
+      "ankane/pgvector": "pgvector",
+      "vespaengine/vespa": "vespa",
+      "marqoai/marqo": "marqo"
+    },
+    "files": {"chroma.sqlite3": "chroma", "index.faiss": "faiss"},
+    "calls": [
+      {"call": "\\bPersistentClient", "engine": "chroma", "args": ["path"], "position": 0, "uses": "chromadb"},
+      {"call": "\\bHttpClient", "engine": "chroma", "args": ["host"], "position": 0, "uses": "chromadb"},
+      {"call": "\\bChromaClient", "engine": "chroma", "args": ["path"], "uses": "chromadb"},
+      {"call": "\\bChroma", "engine": "chroma", "args": ["persist_directory", "persistDirectory"], "uses": "chroma"},
+      {"call": "\\bQdrantClient", "engine": "qdrant", "args": ["url", "path", "location", "host"], "position": 0, "uses": "qdrant"},
+      {"call": "\\bMilvusClient", "engine": "milvus", "args": ["uri"], "position": 0, "uses": "milvus"},
+      {"call": "\\blancedb\\.connect", "engine": "lancedb", "args": ["uri"], "position": 0, "uses": "lancedb"},
+      {"call": "\\bread_index", "engine": "faiss", "args": ["fname"], "position": 0, "uses": "faiss"},
+      {"call": "\\bload_local", "engine": "faiss", "args": ["folder_path"], "position": 0, "uses": "faiss"},
+      {"call": "\\.[Ii]ndex", "engine": "pinecone", "args": ["name"], "position": 0, "uses": "pinecone"},
+      {"call": "\\bconnect_to_weaviate_cloud", "engine": "weaviate", "args": ["cluster_url"], "position": 0, "uses": "weaviate"},
+      {"call": "\\bweaviate\\.Client", "engine": "weaviate", "args": ["url"], "position": 0, "uses": "weaviate"}
+    ]
+  }
+}
