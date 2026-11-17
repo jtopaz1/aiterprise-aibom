@@ -1,10 +1,10 @@
 {
   "schema": "ait-popular-packages/1",
-  "version": "2026.11.14",
+  "version": "2026.11.17",
   "description": "Typosquat reference names (design doc 13 §5.3): widely used packages whose names attackers imitate. The AI taxonomy (taxonomy.json) is added to these at load time. First-party, curated; a name here is a lookalike target, not an endorsement.",
   "legit_near": {
-    "pypi": ["pyaml", "jinja", "pytest-cov", "boto", "request", "mock", "tensorboard", "torchx", "keras-nlp", "kerastuner", "anthropic-bedrock", "openapi", "cohere-aws", "tensorflow-io", "numba"],
-    "npm": ["react-is", "vue-loader", "next-auth", "chalk-template", "debug-log", "ws-wrapper", "openapi", "axios-retry", "uuid4"]
+    "pypi": ["pyaml", "jinja", "pytest-cov", "boto", "request", "mock", "tensorboard", "torchx", "keras-nlp", "kerastuner", "anthropic-bedrock", "openapi", "cohere-aws", "tensorflow-io", "numba", "psycopg", "psycopg-binary", "pycryptodomex"],
+    "npm": ["react-is", "vue-loader", "next-auth", "chalk-template", "debug-log", "ws-wrapper", "openapi", "axios-retry", "uuid4", "safer-buffer"]
   },
   "packages": {
     "pypi": [

@@ -5,6 +5,8 @@
         --packages /path/to/site-packages [--packages ...] [--project DIR ...] [--write]
     python tools/measure_fp.py --corpus-name "installed agent skills" \
         --projects-from skills.txt --family ait.skill. --merge --write
+    python tools/measure_fp.py --corpus-name "installed package names" \
+        --names-from names.json [--online] --merge --write
 
 Each package directory (or `--project`, or line of a `--projects-from` file; a project may be one
 file, such as an MCP config) is scanned offline as one clean project. A rule's rate is
@@ -15,6 +17,12 @@ file, such as an MCP config) is scanned offline as one clean project. A rule's r
 `ait.mcp.*`, a model file for `ait.model.*`, text for `ait.secret.*`, …), read from the scan's
 `examined` counts. A family is written only when at least `--min-samples` projects gave it a chance;
 below that the rule stays `fp_rate_measured: null` — unmeasured, never an invented number.
+
+Package-name rules are measured on a list of real package names instead (`--names-from`, a JSON
+object {"pypi": [...], "npm": [...]}): every name is a chance for `ait.pkg.typosquat` (except
+4-letter lookalikes, which only the registry judges). With `--online` the registry is asked, and a
+package whose newest release is under 30 days old and has earlier releases is a chance for the
+release signals (`ait.pkg.dormant-release`, `ait.pkg.version-jump`).
 
 Only heuristic families are measured. Advisory, licence, registry and policy findings are facts
 about a package, not guesses, so a "clean corpus" says nothing about them.
@@ -47,7 +55,10 @@ FAMILIES = {  # rule prefix -> examined sources that give it a chance
     "ait.model.pickle.": ("model-files", "archives"),
     "ait.archive.": ("archives",),
     "ait.pkg.typosquat": ("registry",),
+    "ait.pkg.dormant-release": ("registry",),
+    "ait.pkg.version-jump": ("registry",),
 }
+NAME_FAMILIES = ("ait.pkg.typosquat", "ait.pkg.dormant-release", "ait.pkg.version-jump")
 SKIP_DIRS = {"__pycache__", "bin", "Scripts", "include"}
 METHOD = ("fp_rate_measured = clean projects where the rule fired / clean projects whose scan examined something "
           "that rule family judges; written only with at least min-samples such projects (tools/measure_fp.py)")
@@ -122,6 +133,46 @@ def measure(dirs: list[Path], progress=None) -> dict:
             "flagged_rule": dict(flagged_rule), "rule_family": rule_family, "examples": dict(examples)}
 
 
+def measure_names(names: dict[str, list[str]], client=None) -> dict:
+    """The package-name rules over real names; release signals only when a registry `client` is given."""
+    from aiterprise_scan import net, registry
+    from aiterprise_scan.model import Component, Location
+
+    chances: Counter = Counter()
+    flagged: Counter = Counter()
+    total = 0
+    for eco, pkgs in sorted(names.items()):
+        for name in pkgs:
+            total += 1
+            hit = registry.lookalike(name, eco)
+            if hit is None or not hit.short:  # a 4-letter lookalike is judged only with registry facts
+                chances["ait.pkg.typosquat"] += 1
+                flagged["ait.pkg.typosquat"] += hit is not None
+            if client is None:
+                continue
+            comp = Component(name, ecosystem=eco, locations=[Location("names", 1)], source="manifest",
+                             properties={"direct": True})
+            try:
+                facts = registry._lookup(client, comp)
+            except net.NetError:
+                continue
+            times = facts.version_times if facts else {}
+            if not times:
+                continue
+            now = client.now()
+            newest = max(times, key=times.__getitem__)
+            if (now - times[newest]).days > registry.RECENT_RELEASE_DAYS \
+                    or not any(t < times[newest] for t in times.values()):
+                continue
+            chances["ait.pkg.dormant-release"] += 1
+            chances["ait.pkg.version-jump"] += 1
+            for f in registry.release_findings(comp, facts, now):
+                flagged[f.rule_id] += 1
+    hits = {rule: n for rule, n in flagged.items() if n}
+    return {"projects": total, "unit": "package names", "chances": dict(chances), "flagged_family": hits,
+            "flagged_rule": hits, "rule_family": {rule: rule for rule in hits}, "examples": {}}
+
+
 def to_quality(m: dict, corpus: str, min_samples: int, today: str, families: list[str] | None = None) -> dict:
     rules: dict[str, dict] = {}
     for fam, n in sorted(m["chances"].items()):
@@ -144,6 +195,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--project", type=Path, action="append", default=[], help="one clean project (directory or file)")
     ap.add_argument("--projects-from", type=Path, action="append", default=[],
                     help="a text file naming one clean project per line")
+    ap.add_argument("--names-from", type=Path,
+                    help='a JSON file {"pypi": [...], "npm": [...]} of real package names (package-name rules)')
+    ap.add_argument("--online", action="store_true",
+                    help="with --names-from: ask the registries, to measure the release signals")
     ap.add_argument("--corpus-name", required=True)
     ap.add_argument("--family", action="append", default=[],
                     help=f"measure only this rule family (repeatable); one of: {', '.join(FAMILIES)}")
@@ -153,21 +208,28 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--write", action="store_true", help=f"write {OUT.name}")
     ap.add_argument("--out", type=Path, default=OUT, help="the quality file to write (and to merge into)")
     args = ap.parse_args(argv)
-    families = args.family or list(FAMILIES)
+    families = args.family or list(NAME_FAMILIES if args.names_from else FAMILIES)
     unknown = [f for f in families if f not in FAMILIES]
     if unknown:
         ap.error(f"unknown family {unknown[0]!r}; choose from: {', '.join(FAMILIES)}")
     dirs = projects(args.packages, args.project) + [p for f in args.projects_from for p in read_project_list(f)]
-    if not dirs:
+    if not dirs and not args.names_from:
         ap.error("no projects to scan")
 
     def progress(i, n, name, rules):
         if rules or i % 25 == 0 or i == n:
             print(f"[{i}/{n}] {name}" + (f": {', '.join(rules)}" if rules else ""), file=sys.stderr)
 
-    m = measure(dirs, progress)
+    if args.names_from:
+        from aiterprise_scan import registry
+
+        names = json.loads(args.names_from.read_text(encoding="utf-8"))
+        m = measure_names(names, registry.RegistryClient(cache=Cache()) if args.online else None)
+    else:
+        m = measure(dirs, progress)
     today = dt.date.today().isoformat()
-    q = to_quality(m, f"{args.corpus_name} ({m['projects']} projects)", args.min_samples, today, families)
+    q = to_quality(m, f"{args.corpus_name} ({m['projects']} {m.get('unit', 'projects')})", args.min_samples, today,
+                   families)
     print(json.dumps({"chances": m["chances"], "flagged_family": m["flagged_family"],
                       "flagged_rule": m["flagged_rule"]}, indent=2))
     measured = [fam for fam in families if m["chances"].get(fam, 0) >= args.min_samples]

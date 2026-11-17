@@ -104,5 +104,38 @@ class MainTest(unittest.TestCase):
             self.run_on_one_clean_skill(tmp, "--family", "ait.nonsense.")
 
 
+class NameCorpusTest(unittest.TestCase):
+    """Package-name rules are measured on a list of real package names, not on scanned projects."""
+
+    def test_typosquat_rate_over_real_names(self):
+        names = {"pypi": ["requests", "flask", "psycopg", "httpx2", "httpcore2", "lxmk"], "npm": ["react", "blob"]}
+        m = measure_fp.measure_names(names)
+        # the 4-letter lookalikes (lxmk, blob) need the registry, so offline they are no chance at all
+        self.assertEqual(m["chances"]["ait.pkg.typosquat"], 6)
+        self.assertEqual(m["flagged_rule"]["ait.pkg.typosquat"], 2)  # httpx2, httpcore2
+        q = measure_fp.to_quality(m, "names", 1, "2026-11-17", ["ait.pkg.typosquat"])
+        self.assertEqual(q["rules"]["ait.pkg.typosquat"]["fp_rate_measured"], round(2 / 6, 4))
+
+    def test_release_signals_count_only_recent_releases_as_chances(self):
+        import datetime as dt
+        from aiterprise_scan import registry
+        from aiterprise_scan.cache import Cache
+
+        now = dt.datetime(2026, 11, 17, tzinfo=dt.timezone.utc)
+
+        def simple(name, days_ago):
+            return {"name": name, "versions": [v for v in days_ago],
+                    "files": [{"filename": f"{name}-{v}.tar.gz",
+                               "upload-time": (now - dt.timedelta(days=d)).isoformat()} for v, d in days_ago.items()]}
+        docs = {"https://pypi.org/simple/fresh/": simple("fresh", {"1.0": 900, "1.1": 3}),   # a chance, flagged
+                "https://pypi.org/simple/steady/": simple("steady", {"2.0": 40, "2.1": 10}),  # a chance, quiet
+                "https://pypi.org/simple/old/": simple("old", {"1.0": 800, "1.1": 400})}      # no chance
+        client = registry.RegistryClient(cache=Cache(enabled=False), fetch=lambda url, h: docs[url], now=lambda: now)
+        m = measure_fp.measure_names({"pypi": ["fresh", "steady", "old"]}, client)
+        self.assertEqual(m["chances"]["ait.pkg.dormant-release"], 2)
+        self.assertEqual(m["flagged_rule"], {"ait.pkg.dormant-release": 1})
+        self.assertEqual(m["chances"]["ait.pkg.version-jump"], 2)
+
+
 if __name__ == "__main__":
     unittest.main()
