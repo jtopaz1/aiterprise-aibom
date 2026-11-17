@@ -1,5 +1,5 @@
 name: AIterprise AIBOM Scanner
-description: Scan a repository for AI supply-chain risks, upload SARIF to code scanning, then gate the build.
+description: Scan a repository for AI supply-chain risks, comment the findings on the pull request, upload SARIF, then gate the build.
 branding:
   icon: shield
   color: blue
@@ -23,13 +23,22 @@ inputs:
   api-key:
     description: "Optional SecDB API key (pass a secret). Adds SecDB judgements; never printed."
     default: ""
+  comment:
+    description: "true = post the new findings as one pull-request comment, updated on every run (needs pull-requests: write; with a read-only token, as a fork's pull request gets, it warns and goes on)."
+    default: "true"
+  job-summary:
+    description: "true = write the new findings to the job summary."
+    default: "true"
+  github-token:
+    description: Token for the pull-request comment.
+    default: ${{ github.token }}
 
 outputs:
   exit-code:
     description: "0 clean, 1 policy failure, 2 error"
     value: ${{ steps.scan.outputs.exit-code }}
   report-dir:
-    description: Directory holding report.txt, report.sarif and aibom.cdx.json.
+    description: Directory holding report.txt, report.md, report.sarif and aibom.cdx.json.
     value: aiterprise-report
 
 runs:
@@ -57,12 +66,25 @@ runs:
         offline_flag=""
         if [ "$OFFLINE" = "true" ]; then offline_flag="--offline"; fi
         # shellcheck disable=SC2086 # EXTRA_ARGS is intentionally word-split
-        aiterprise-scan scan "$SCAN_PATH" --format table --format sarif --out aiterprise-report \
+        aiterprise-scan scan "$SCAN_PATH" --format table --format sarif --format markdown --out aiterprise-report \
           --emit-bom aiterprise-report/aibom.cdx.json --fail-on "$FAIL_ON" $offline_flag $EXTRA_ARGS
         code=$?
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"
         if [ -f aiterprise-report/report.txt ]; then cat aiterprise-report/report.txt; fi
         exit 0
+
+    - name: Job summary
+      if: inputs.job-summary == 'true' && hashFiles('aiterprise-report/report.md') != ''
+      shell: bash
+      run: cat aiterprise-report/report.md >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Pull-request comment
+      if: inputs.comment == 'true' && github.event.pull_request.number
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: python "${GITHUB_ACTION_PATH}/pr_comment.py" aiterprise-report/report.md
 
     - name: Upload SARIF
       if: inputs.upload-sarif == 'true' && hashFiles('aiterprise-report/report.sarif') != ''
