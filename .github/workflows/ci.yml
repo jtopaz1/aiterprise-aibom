@@ -83,8 +83,9 @@ jobs:
         run: python tools/killer_demo.py --online
 
   benchmark:
-    # design doc 13 §5.5: a cold scan of a 10,000-file monorepo in under 60 s; a 2 GB safetensors
-    # inventoried in under 5 s; pickle-based model files at under 30 s per GB
+    # design doc 13 §5.5: a cold scan of a 10,000-file monorepo in under 60 s (120 s with live network
+    # checks); a re-scan in under 10 s; a 2 GB safetensors inventoried in under 5 s; pickle-based model
+    # files at under 30 s per GB
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -93,13 +94,16 @@ jobs:
           python-version: "3.12"
       - name: Cold offline scan of a 10,000-file monorepo in under 60 s, re-scan in under 10 s, all five planted problems found
         run: python tools/bench_scan.py --files 10000 --check 60 --check-warm 10 --json bench.json
+      - name: The same with live OSV and registry checks (no SecDB) in under 120 s, re-scan in under 10 s, and both answered
+        if: always()
+        run: python tools/bench_scan.py --files 10000 --online --check 120 --check-warm 10 --json bench-online.json
       - name: 2 GiB safetensors under 5 s; 1 GiB PyTorch zip and 1 GiB pickle under 30 s each
         if: always()
         run: python tools/bench_models.py --check --json bench-models.json
       - name: Timings in the job summary
         if: always()
         run: |
-          for f in bench.json bench-models.json; do
+          for f in bench.json bench-online.json bench-models.json; do
             [ -f "$f" ] && { echo "$f"; echo '```json'; cat "$f"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           done
           true
