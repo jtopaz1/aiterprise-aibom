@@ -228,6 +228,47 @@ class ImportPrefilterTests(unittest.TestCase):
         src = 'import importlib\nm = importlib.import_module("\\x74orch")\n'
         self.assertEqual([h[1] for h in self.hits(src, self.words)], ["torch"])
 
+    def no_parse(self, src):
+        with mock.patch.object(discover.ast, "parse", side_effect=AssertionError("parsed")):
+            return self.hits(src, self.words)
+
+    def test_prose_that_names_an_ai_package_is_not_parsed(self):
+        src = ('"""Work together with Google and the semantic layer; ctrl-C stops the browser."""\n'
+               "import os\n# results come back from google, together\nx = 'replicate the farm'\n") * 20
+        self.assertEqual(self.no_parse(src), [])
+
+    def test_a_word_inside_another_name_is_not_an_import(self):
+        # `trl` in `ctrlpanel`, `google` in `xgoogle`: an import of those starts with another letter
+        self.assertEqual(self.no_parse("import ctrlpanel, xgoogle\nfrom mytogether import x\n" * 20), [])
+
+    def test_a_non_ascii_file_without_an_ai_import_is_not_parsed(self):
+        src = "# caf\u00e9, na\u00efve r\u00e9sum\u00e9 \u2014 \u4e2d\u6587\nimport os\nname = '\u00fcber'\n" * 20
+        self.assertEqual(self.no_parse(src), [])
+
+    def test_every_form_of_an_ai_import_is_still_found(self):
+        for src in ("import together\n",
+                    "# works together with the API\nimport together\n",  # the first mention is prose
+                    "x = 1; import together\n",
+                    "if True: import together\n",
+                    "try:\n    import sentence_transformers\nexcept ImportError:\n    pass\n",
+                    "if True:\n\timport trl\n",
+                    "from \\\n    together import Together\n",
+                    "import os, \\\n    json, \\\n    together\n",
+                    "import os,\\\r\n together\r\n",
+                    "# see c:\\tmp\\\nimport together\n",  # a comment's backslash continues nothing
+                    '"""doc"""\rimport os\rimport together\r',  # lines ended by CR alone
+                    "import \\\n  google.generativeai as genai\n",
+                    "import os.path as p, together.client as tc\n",
+                    "# caf\u00e9\nfrom google import genai\n",
+                    "import \uff54\uff52\uff4c\n",  # fullwidth: Python reads it as trl
+                    "from fastmcp import FastMCP\n",  # contains the shorter word `mcp`, not at its start
+                    "import fastmcp\n",
+                    'import importlib\nm = importlib.\uff49\uff4d\uff50\uff4f\uff52\uff54_module("\\x74orch")\n'):
+            with self.subTest(src=src):
+                want = [h[1] for h in self.hits(src, None)]
+                self.assertTrue(want, "the sample must import an AI package")
+                self.assertEqual([h[1] for h in self.hits(src, self.words)], want)
+
     def test_same_hits_as_without_the_prefilter_on_real_code(self):
         files = sorted(SRC.rglob("*.py")) + sorted(Path(os.__file__).parent.glob("*.py"))[:150]
         files += sorted((Path(__file__).parent / "golden").rglob("*.py"))
@@ -237,9 +278,13 @@ class ImportPrefilterTests(unittest.TestCase):
                 self.assertEqual(self.hits(src, self.words), self.hits(src, None))
 
     def test_the_word_list_is_short_and_covers_every_package(self):
+        # an import is found by a word at the start of its name, so every name must start with one
         self.assertLess(len(self.words), 120)
-        for name in discover.taxonomy.ai_names("pypi"):
-            self.assertTrue(any(w in name.replace("-", "_") for w in self.words), name)
+        names = {n.replace("-", "_") for n in discover.taxonomy.ai_names("pypi")}
+        names |= {key.split(".")[0].lower() for key, dist in self.imap.items()
+                  if discover.taxonomy.is_ai_package(dist, "pypi")}
+        for name in sorted(names):
+            self.assertTrue(any(name.startswith(w) for w in self.words), name)
 
 
 class _NoScan:

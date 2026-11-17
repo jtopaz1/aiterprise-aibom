@@ -29,6 +29,7 @@ import json
 import os
 import re
 import tomllib
+import unicodedata
 import warnings
 from bisect import bisect_right
 from dataclasses import dataclass
@@ -1674,9 +1675,8 @@ def _python_imports(source: str) -> list[tuple[str, int]]:
     found: list[tuple[str, int]] = []
     # An import is always a statement, so walking statement bodies finds every one; the full walk
     # (every expression too, most of a module's nodes) is needed only for a dynamic import, whose
-    # function name then appears in the text.
-    dynamic = "import_module" in source or "__import__" in source
-    for node in ast.walk(tree) if dynamic else _statements(tree):
+    # function name then appears in the text as Python reads it.
+    for node in ast.walk(tree) if _has_dynamic_import(_as_python_reads(source)) else _statements(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 found.append((alias.name, node.lineno))
@@ -1747,24 +1747,68 @@ def _map_python_import(dotted: str, imap: dict[str, str]) -> tuple[str, str] | N
 def _ai_import_words(imap: dict[str, str]) -> tuple[str, ...]:
     """Lower-case words of which at least one occurs in any Python source that imports an AI
     package: the first part of each AI package name (as an identifier) and of each AI import
-    name. A word that contains a shorter one is dropped, the shorter one already covers it."""
+    name. An import is matched by a word at the start of the imported name, so a word is dropped
+    only when a shorter one starts it (`trl` covers `trlx`; `mcp` does not cover `fastmcp`)."""
     words = {name.split("-")[0] for name in taxonomy.ai_names("pypi")}
     words |= {key.split(".")[0].lower() for key, dist in imap.items() if taxonomy.is_ai_package(dist, "pypi")}
     words.discard("")
-    return tuple(sorted(w for w in words if not any(o != w and o in w for o in words)))
+    return tuple(sorted(w for w in words if not any(o != w and w.startswith(o) for o in words)))
+
+
+_DYNAMIC_IMPORTS = ("import_module", "__import__")
+# `import` or `from` where a statement may start: a physical line's start (after indentation; a
+# backslash ending a comment continues nothing), or after `;` or the `:` of a one-line compound
+# statement (`if x: import y`)
+_STATEMENT_IMPORT_RE = re.compile(r"(?:^|[\n;:])\s*(?:from|import)\b")
+
+
+def _as_python_reads(source: str) -> str:
+    """The source as Python reads it: lines end in `\\n` (`\\r\\n` and a lone `\\r` end a line too),
+    and it is NFKC-normalised as Python normalises identifiers, so a name spelt in fullwidth or
+    other compatibility letters (`ｔｏｒｃｈ`) is that name. Strings and comments are normalised too,
+    which only ever adds matches."""
+    if "\r" in source:
+        source = source.replace("\r\n", "\n").replace("\r", "\n")
+    return source if source.isascii() else unicodedata.normalize("NFKC", source)
+
+
+def _has_dynamic_import(text: str) -> bool:
+    return any(d in text for d in _DYNAMIC_IMPORTS)
+
+
+def _logical_line_before(text: str, i: int) -> str:
+    """From the start of the logical line holding index `i` up to `i` in a text whose lines end
+    in `\\n`: physical lines joined by a backslash at their end are one line."""
+    start = text.rfind("\n", 0, i) + 1
+    while start > 1 and text[start - 2] == "\\":
+        start = text.rfind("\n", 0, start - 1) + 1
+    return text[start:i]
+
+
+def _may_import(low: str, words: tuple[str, ...]) -> bool:
+    """Whether a lower-cased, normalised source may import a module starting with one of `words`:
+    some occurrence starts a name and follows, on its logical line, `import` or `from` where a
+    statement may start (`_STATEMENT_IMPORT_RE`). Every import statement has that shape (a module name cannot be wrapped in
+    brackets onto another line); prose in comments and docstrings mostly does not."""
+    for w in words:
+        i = low.find(w)
+        while i != -1:
+            before = low[i - 1] if i else " "
+            if not (before.isalnum() or before == "_") and _STATEMENT_IMPORT_RE.search(_logical_line_before(low, i)):
+                return True
+            i = low.find(w, i + 1)
+    return False
 
 
 def _python_hits(source: str, imap: dict[str, str],
                  words: tuple[str, ...] | None = None) -> list[tuple[str, str, str, int | None]]:
-    """AI package imports of a Python source. With `words` (see `_ai_import_words`), a source
-    that contains none of them is not parsed: an import's top-level name appears in the text as
-    written, so an AI import there is impossible. That holds for ASCII text without a dynamic
-    import only; Python reads identifiers NFKC-normalised (`torch` in fullwidth letters is `torch`) and
-    a string can spell a module with escapes, so any other source is always parsed."""
-    if words is not None and source.isascii() \
-            and "import_module" not in source and "__import__" not in source:
-        low = source.lower()
-        if not any(w in low for w in words):
+    """AI package imports of a Python source. With `words` (see `_ai_import_words`), a source in
+    which no word can be an imported module (`_may_import`) is not parsed. The check runs on the
+    source as Python reads it (`_as_python_reads`); a source with a dynamic import is always parsed,
+    since a string can spell a module with escapes."""
+    if words is not None:
+        low = _as_python_reads(source).lower()
+        if not _has_dynamic_import(low) and not _may_import(low, words):
             return []
     out = []
     for dotted, line in _python_imports(source):
