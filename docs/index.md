@@ -29,6 +29,7 @@ Apache-2.0 · no runtime dependencies (standard library only) · Python 3.11+
 | Agent skills | `SKILL.md` trees and Claude Code plugins: instruction poisoning, install-script commands |
 | Licences | model and dataset licences against your `use_context` (advisory, not legal advice) |
 | Secrets | AI-provider keys, always redacted |
+| Prompts, endpoints, vector stores | listed in the AI-BOM, not judged: agent instruction files, sub-agents and their tool grants, prompt templates, the AI APIs the code calls, vector stores |
 
 The full list with severities and measured rates: [Rules reference](rules.md).
 

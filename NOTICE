@@ -15,6 +15,7 @@ This product includes data derived from third-party sources, each under its own 
   summaries of the cited licence texts. They are advisory and are not legal advice.
 
 First-party AIterprise data, Apache-2.0 like the code: data/ait/taxonomy.json,
+data/ait/ai-assets.json (prompt file names, AI provider API hosts, vector-store images and calls),
 data/ait/command-rules.json, data/ait/poison-patterns.json, data/ait/model-rules.json,
 data/ait/popular-packages.json (package names only) and data/ait/rule-quality.json
 (false-positive measurements, see tools/measure_fp.py).

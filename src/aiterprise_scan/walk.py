@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -92,6 +93,18 @@ def rel_posix(path: Path, root: Path) -> str:
         return path.relative_to(root).as_posix()
     except ValueError:
         return path.as_posix()
+
+
+_TEST_DIRS = {"test", "tests", "testing", "__tests__", "spec", "specs", "e2e", "testdata", "fixtures",
+              "__fixtures__", "__mocks__"}
+_TEST_FILE_RE = re.compile(r"(?:^test_.*\.py$|^conftest\.py$|_test\.(?:py|go)$|\.(?:test|spec)\.[cm]?[jt]sx?$"
+                           r"|Tests?\.(?:java|kt|cs)$)")
+
+
+def is_test_path(rel: str) -> bool:
+    """Whether a root-relative posix path is test code or test data, not the application itself."""
+    *dirs, name = rel.split("/")
+    return any(d.lower() in _TEST_DIRS for d in dirs) or bool(_TEST_FILE_RE.search(name))
 
 
 def walk(root: Path, all_files: bool = False, max_files: int = DEFAULT_MAX_FILES) -> list[Path]:

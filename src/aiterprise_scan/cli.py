@@ -315,7 +315,7 @@ def cmd_defs(args: argparse.Namespace) -> int:
     from . import data
 
     for name in ("taxonomy.json", "command-rules.json", "poison-patterns.json", "model-rules.json",
-                 "licence-verdicts.json", "popular-packages.json"):
+                 "licence-verdicts.json", "popular-packages.json", "ai-assets.json"):
         if not data.exists(name):
             print(f"{name}: missing")
             continue
