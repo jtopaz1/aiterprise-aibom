@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from . import ingest, intel_malicious, registry, sources, textio, vulns
+from . import bundles, ingest, intel_malicious, registry, sources, textio, vulns
 from . import policy as policy_mod
 from . import walk as walker
 from .cache import Cache
@@ -161,6 +161,12 @@ def _run_scan(opts: ScanOptions) -> ScanResult:
     result = ScanResult(target=target_label, mode="offline" if opts.offline else "online", started_at=started)
     result.policy_path = opts.policy.path
     run = _Runner(result)
+    try:
+        act = bundles.active()
+        result.release_id = act[0] if act else None
+    except bundles.BundleError as err:  # a pin that cannot be honoured; the CLI stops before this
+        result.notes.append(f"definitions: {err}")
+        run.errors.append("definitions")
     components: list[Component] = []
     findings: list[Finding] = []
     examined_archives: list[tuple[str, Path]] = []  # for the BYO providers: looked up by file hash
@@ -285,6 +291,8 @@ def _run_scan(opts: ScanOptions) -> ScanResult:
         if f.component is not None:
             f.component = by_key.get(f.component.key(), f.component)
     result.findings = sort_findings(_dedupe(_drop_shadowed_secrets(findings)))
+    # files of the release that were not used (changed on disk, missing): the wheel's copy stood in
+    result.notes.extend(f"definitions: {w}" for w in dict.fromkeys(bundles.WARNINGS))
     result.duration_s = time.monotonic() - t0
     if run.errors or any(ex.errors for ex in result.examined.values()):
         result.exit_code = 2

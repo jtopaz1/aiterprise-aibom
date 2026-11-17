@@ -596,10 +596,13 @@ class Handler(BaseHTTPRequestHandler):
             if cred.origin != "env":
                 acct += (f'<form method="post" action="/logout" class="bar">{self._csrf_field()}'
                          f'<button class="danger">Log out</button></form>')
-        act = bundles.active()
-        defs = (f'<p>Active bundle <code>{_e(act[0])}</code> · {_e(act[1].get("channel"))} · created '
-                f'{_e(act[1].get("created_at"))}</p>' if act else
-                '<p>No signed bundle installed: the definitions shipped with this version are in use.</p>')
+        try:
+            act = bundles.active()
+            defs = (f'<p>Active bundle <code>{_e(act[0])}</code> · {_e(act[1].get("channel"))} · created '
+                    f'{_e(act[1].get("created_at"))}</p>' if act else
+                    '<p>No signed bundle installed: the definitions shipped with this version are in use.</p>')
+        except bundles.BundleError as err:  # a pin (AITERPRISE_DEFS) that cannot be honoured
+            defs = f'<div class="notice err">{_e(err)}</div>'
         defs += (f'<form method="post" action="/defs/update" class="bar">{self._csrf_field()}'
                  f'<button class="ghost">Check SecDB for a newer bundle</button></form>')
         self._page("Account", f"<h1>Account</h1><h2>SecDB</h2>{acct}<h2>Definitions</h2>{defs}", "account")

@@ -333,6 +333,8 @@ class ScanResult:
     files_walked: int = 0
     policy_path: str | None = None
     exit_code: int = 0
+    # the installed definitions release in use (`rel_…`); None: only the data shipped with this version
+    release_id: str | None = None
     # attribution notices from data sources (SecDB `notices[]`), reproduced in full wherever the
     # data is shown (`14a` §2)
     notices: list[dict[str, Any]] = field(default_factory=list)

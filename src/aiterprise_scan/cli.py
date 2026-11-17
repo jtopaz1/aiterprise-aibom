@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import TOOL_NAME, __version__, account, bom, cloudpolicy, credentials, gate, html_report, intel_malicious, report, reportdoc, vulns
+from . import TOOL_NAME, __version__, account, bom, bundles, cloudpolicy, credentials, gate, html_report, intel_malicious, report, reportdoc, vulns
 from . import policy as policy_mod
 from . import providers
 from .model import ScanResult
@@ -21,11 +21,33 @@ _OUT_NAMES = {"table": "report.txt", "json": "report.json", "sarif": "report.sar
 
 
 def defs_line() -> str:
+    """`defs: bundled (…)` for the data shipped with this version, `defs: rel_…` for an installed release."""
     snap = intel_malicious.load_snapshot()
     kev = vulns.kev_catalog()
     mal = f"malicious {snap.record_count:,} records" + (f" @{snap.generated_at[:10]}" if snap.generated_at else "")
     kev_txt = f"KEV {kev.get('count', 0):,} CVEs" if kev.get("count") else "KEV not built"
-    return f"defs: bundled ({mal} · {kev_txt})"
+    act = bundles.active()
+    if act is None:
+        return f"defs: bundled ({mal} · {kev_txt})"
+    return f"defs: {act[0][:16]}… ({'pinned · ' if bundles.pinned() else ''}{mal} · {kev_txt})"
+
+
+def _add_defs_arg(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--defs-version", metavar="REL_ID",
+                   help="use this installed definitions release (rel_…) or `bundled` (the data shipped with this "
+                        f"version); the scan stops if it cannot (also {bundles.DEFS_ENV})")
+
+
+def _use_defs(args: argparse.Namespace) -> str | None:
+    """Apply --defs-version (before any definition data is loaded: the modules cache what they
+    read). Returns why the chosen definitions cannot be used, or None."""
+    if getattr(args, "defs_version", None) is not None:
+        bundles.select(args.defs_version)
+    try:
+        bundles.active()
+    except bundles.BundleError as err:
+        return str(err)
+    return None
 
 
 def _add_output_args(p: argparse.ArgumentParser) -> None:
@@ -81,6 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
                       help="third-party enrichment with your own key (repeatable; providers: "
                            f"{', '.join(sorted(providers.REGISTRY))}). ENV_VAR is the NAME of an environment "
                            "variable holding the key; the key itself is never given on the command line")
+    _add_defs_arg(scan)
     _add_output_args(scan)
     _add_gate_args(scan)
 
@@ -90,6 +113,7 @@ def build_parser() -> argparse.ArgumentParser:
     mcp.add_argument("--path", type=Path, help="directory to search for project-level configs")
     mcp.add_argument("--agent-configs", action="store_true", help="read this machine's agent/MCP configs and skills folders")
     mcp.add_argument("--offline", action="store_true")
+    _add_defs_arg(mcp)
     _add_output_args(mcp)
     _add_gate_args(mcp)
 
@@ -194,6 +218,9 @@ def cmd_scan(args: argparse.Namespace) -> int:
     for b in args.bom:
         if not b.is_file():
             return _die(f"BOM file does not exist: {b}")
+    problem = _use_defs(args)
+    if problem:
+        return _die(problem)
     opts = ScanOptions(
         target=target,
         boms=list(args.bom),
@@ -242,6 +269,9 @@ def cmd_mcp(args: argparse.Namespace) -> int:
         args.path = Path(".")
     if args.path is not None and not args.path.is_dir():
         return _die(f"not a directory: {args.path}")
+    problem = _use_defs(args)
+    if problem:
+        return _die(problem)
     result = _gated_scan(ScanOptions(target=args.path, offline=args.offline, agent_configs=args.agent_configs,
                                      mcp_only=True), args)
     _emit(result, args)
@@ -289,10 +319,14 @@ def cmd_defs(args: argparse.Namespace) -> int:
     handler = defscli.HANDLERS.get(args.defs_command or "status")
     if handler is not None:
         return handler(args)
-    act = bundles.active()
+    try:
+        act = bundles.active()
+    except bundles.BundleError as err:
+        return _die(str(err))
     if act:
         m = act[1]
-        print(f"installed bundle: {act[0]} · {m.get('channel')} · created {m.get('created_at')}")
+        pin = f" · pinned by {bundles.DEFS_ENV}" if bundles.pinned() else ""
+        print(f"installed bundle: {act[0]} · {m.get('channel')} · created {m.get('created_at')}{pin}")
     else:
         print("installed bundle: none (definitions shipped with this version are in use)")
     snap = intel_malicious.load_snapshot()

@@ -20,6 +20,10 @@ install needs `--root-key FILE` (or `AITERPRISE_ROOT_KEY`), and the wheel's bund
 Installed releases live in `~/.aiterprise/defs/<release_id>/`; `state.json` names the active one
 and is replaced atomically. At load time each file is re-checked against the installed manifest;
 a mismatch falls back to the wheel's copy and is reported in `WARNINGS`.
+
+A scan can be pinned to one installed release (`--defs-version rel_…` or `AITERPRISE_DEFS=rel_…`,
+design doc 13 §4.7: reproducible audits). A pin is all or nothing: the manifest must hash to the
+id and every file must still match it, or `active()` raises and the scan does not run.
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import tarfile
 from dataclasses import dataclass
@@ -40,7 +45,8 @@ from . import credentials, minisign
 DOMAIN = "AIT"
 FORMAT = "ait-bundle"
 ROOT_KEY_ENV = "AITERPRISE_ROOT_KEY"
-DEFS_ENV = "AITERPRISE_DEFS"  # "bundled": ignore installed bundles
+DEFS_ENV = "AITERPRISE_DEFS"  # "bundled": ignore installed bundles; "rel_…": pin that release
+RELEASE_ID_RE = re.compile(r"rel_[0-9a-f]{64}")
 ROOT_PUBLIC_KEY: str | None = None  # pinned at the key ceremony (O-23); not published yet
 MAX_FILES = 1000
 MAX_ARCHIVE = 512 * 1024 * 1024
@@ -365,9 +371,66 @@ class _Cache:
 _active_manifest = _Cache()
 
 
+_selected: str | None = None  # `--defs-version`; takes precedence over AITERPRISE_DEFS
+_pins: dict[tuple[str, str], dict] = {}  # (home, release id) -> its checked manifest
+
+
+def select(value: str | None) -> None:
+    """Choose the definitions for this process: a release id, `bundled` (the data shipped with this
+    version), or None (then AITERPRISE_DEFS decides, else the installed release). Call it before
+    any definition data is loaded: `data.load` and the modules built on it cache what they read."""
+    global _selected
+    _selected = value
+    _pins.clear()
+
+
+def selection() -> str:
+    """The choice in force: `--defs-version`, else AITERPRISE_DEFS; empty means the installed release."""
+    return (_selected if _selected is not None else os.environ.get(DEFS_ENV, "")).strip()
+
+
+def pinned() -> bool:
+    return selection().lower() not in ("", "bundled")
+
+
+def check_release(rid: str) -> dict:
+    """The manifest of installed release `rid`, once the files on disk are shown to be that release:
+    the manifest hashes to the id and every file still has the SHA-256 it lists. Raises BundleError."""
+    if not RELEASE_ID_RE.fullmatch(rid):
+        raise BundleError(f"{rid!r} is neither a release id (rel_ and 64 lowercase hex digits) nor `bundled`")
+    d = defs_dir() / rid
+    if not d.is_dir():
+        have = sorted(p.name for p in defs_dir().glob("rel_*") if p.is_dir()) if defs_dir().is_dir() else []
+        raise BundleError(f"release {rid} is not installed; installed: {', '.join(have) or 'none'}")
+    try:
+        manifest = json.loads((d / "manifest.json").read_bytes().decode("utf-8"))
+    except (OSError, ValueError) as err:
+        raise BundleError(f"release {rid}: manifest.json unreadable ({err})") from None
+    if not isinstance(manifest, dict) or manifest.get("release_id") != rid or release_id(manifest) != rid:
+        raise BundleError(f"release {rid}: the installed manifest.json is not the manifest this id names")
+    for entry in manifest.get("files") or []:
+        path = _safe_member(str(entry.get("path", "")))
+        try:
+            blob = (d / path).read_bytes()
+        except OSError:
+            raise BundleError(f"release {rid}: {path} is missing") from None
+        if hashlib.sha256(blob).hexdigest() != entry.get("sha256"):
+            raise BundleError(f"release {rid}: {path} changed on disk since the release was installed")
+    return manifest
+
+
 def active() -> tuple[str, dict] | None:
-    if os.environ.get(DEFS_ENV, "").lower() == "bundled":
+    """(release id, manifest) of the release definitions come from, or None for the data shipped
+    with this version. A pin that cannot be honoured raises BundleError: a pinned scan never runs
+    on other data."""
+    sel = selection()
+    if sel.lower() == "bundled":
         return None
+    if sel:
+        key = (str(credentials.home()), sel)
+        if key not in _pins:
+            _pins[key] = check_release(sel)
+        return sel, _pins[key]
     return _active_manifest(str(credentials.home()))
 
 
