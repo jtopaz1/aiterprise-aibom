@@ -19,6 +19,7 @@ so this table restates Appendix H.1 against what exists in this repository today
 | Offline advisory subset: OSV advisories for the 164 AI-taxonomy packages, used offline and when OSV is unreachable | `data/ait/vuln-subset.json.gz` | working — 2,921 advisories over 65 packages, built 2026-11-16 |
 | Exploitation priority (C20): CISA KEV upgrades to critical | `vulns.py`, `data/ait/kev.json` | working — 1,781 CVEs, catalog 2026.11.13 |
 | Model files (C21): pickle opcode walk (protocol 0–5, raw, legacy torch, PyTorch zip/TorchScript, `.mar`, `.npz`, `.npy`, joblib), safetensors, GGUF chat-template SSTI, ONNX custom ops / external data, Keras v3 / HDF5 `Lambda`, TFLite/`.pte` inventory; zip-slip; caps — never unpickled | `modelfiles.py`, `data/ait/model-rules.json` | working — verified on hand-built samples only (see limits) |
+| Known-bad model hashes (C23, the MVP seed list): a model file whose SHA-256 or SHA-1 a public incident report names is reported (`ait.model.known-bad-hash`, high, malicious) with the report's link, offline. The bytes are checked before the format, so an ELF named `syscore.bin` is reported though it is no model | `knownhashes.py`, `data/ait/known-bad-hashes.json` | working — 11 files from 3 reports; every hash, file name, repository and size was checked against the saved report page. No listed file was obtained, so no match on a real file was seen; the tests use stand-in entries (see limits) |
 | Package archives: wheels, sdists, tarballs, eggs, MCPB/DXT bundles — `.pth` payloads, `setup.py` / npm lifecycle commands, path traversal, model members | `archives.py`, `mcpb.py` | working |
 | Model / dataset licence verdicts (C25) against `use_context`, base-model inheritance, allow/deny | `licences.py`, `data/ait/licence-verdicts.json` | working (advisory, not legal advice) |
 | MCP configs (C26/C29/C31): Claude Desktop/Code, Cursor, VS Code (JSONC), Codex TOML, Windsurf, Gemini, OpenClaw (`openclaw.json`, JSON5), DeepSeek Harness (`$DSH_HOME/profiles/*/cordis.patch.yml`, YAML; a `!!js process.env.X` value is an environment reference, not a literal); dangerous commands, poisoned descriptions, literal secrets, scope, plain-http — nothing launched (G8) | `mcp.py`; the rule sets, shared with skills, MCP bundles and package archives, in `textrules.py` with `data/ait/command-rules.json` (57), `data/ait/poison-patterns.json` (20) | working — one rule makes the same finding wherever its text was found |
@@ -68,7 +69,6 @@ already listed above; the cloud's are in its row under *Built*.
 |---|---|---|
 | Installed Claude Code plugins of the machine; Hermes Agent configs | §4.1 | not built — the plugin folder mixes installed and offered plugins, and no index of the installed ones was found on the machine checked |
 | Single-maintainer and download-count signals; a change of trusted-publisher repository on npm (the registry shows only that trusted publishing was used); crates.io; GuardDog's metadata rules that need package contents or maintainer e-mail domains | C16 / C17 | not built — registry checks are existence, age, release timing and who published |
-| A bundled list of model hashes seen in incidents | C23 | not built — model hashes are checked at SecDB only, when logged in |
 | Named-MCP assessments used by `scan`; a static tool-list parser | H.5 #1 / K.3 / C26 | the client call exists and is never made; the parser is not built |
 | SkillSpector integration | G3 / C30 | not built — the skill analyzer has its own 0–100 risk score |
 | Opt-in telemetry (rule ids and counts) | §4.8 | not built — there is no telemetry code at all |
@@ -90,6 +90,7 @@ already listed above; the cloud's are in its row under *Built*.
 | `malicious-versions.json.gz` (schema `ait-malicious-versions/2`) | 235,492 active `MAL-` records over 235,491 packages; 214,803 mark every version, the rest list 65,677 exact versions; 363 withdrawn records kept apart | OSV bulk exports `PyPI/all.zip` and `npm/all.zip`, 2026-11-16 — SHA-256 of each input recorded in the file and shown by `defs status` | 3.06 MB |
 | `vuln-subset.json.gz` (schema `ait-vuln-subset/1`) | 2,921 advisories for 65 of the 164 AI-taxonomy packages | Same OSV exports; per-record licences (GHSA, PYSEC: CC-BY 4.0) | 0.24 MB |
 | `kev.json` | 1,781 CVEs | CISA KEV catalog 2026.11.13 (CC0) | 0.3 MB |
+| `known-bad-hashes.json` | 11 files: 7 with SHA-256, 7 with SHA-1 (3 have both) | Rapid7, "From .pth to p0wned" (2025-07-01); ReversingLabs, nullifAI (2025-02-06, SHA-1 only); Pluto Security, "Load/Mine" (2026-10-29). Hashes copied verbatim; each entry carries its report's URL | 6 KB |
 | `rule-quality.json` | measured FP rates; a command rule or poison pattern that never fired on a measured corpus is written at 0 | `tools/measure_fp.py` over 210 local site-packages projects (secrets) and 275 installed agent skills (skills) | 31 KB |
 
 The counts above are the 2026-11-16 build, made by the first scheduled refresh (16 more `MAL-`
@@ -136,6 +137,13 @@ python tools/gen_rules_doc.py
   model formats (so that rule is medium, not high), two skills telling the agent to use
   `--dangerously-skip-permissions`, and two real Latin/Cyrillic mixes (a jailbreak demo and a typo).
   That second corpus is not in `rule-quality.json`: a package doc is not text an agent is told to follow.
+- **Known-bad hashes** (2026-11-17) match exact bytes only: a re-saved or re-compressed copy of a
+  listed file does not match, and the pickle and format rules have to catch it. Only files with a
+  model-file extension are hashed, so the same reports' loader scripts (`modeling_*.py`,
+  `configuration_*.py`), `e.sh` and `sysd-kit.tgz` are left out of the list. JFrog's and NSFOCUS's
+  reports publish no hashes, and Rapid7 gives none for `8TX8.pth`. ReversingLabs names its two
+  files of each repository "PyTorch file" and "Pickle file" only; the pickle is the member inside the
+  7z archive, so it matches only when someone has extracted it as a file.
 - **Licences:** verdicts are advisory, not legal advice.
 - **KEV severity (decided 2026-11-14):** a CVE listed in CISA KEV is upgraded to **critical**
   (`ait.vuln.kev`), whatever the advisory's own CVSS severity — known exploitation outranks the

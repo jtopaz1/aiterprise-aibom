@@ -315,14 +315,18 @@ def cmd_defs(args: argparse.Namespace) -> int:
     from . import data
 
     for name in ("taxonomy.json", "command-rules.json", "poison-patterns.json", "model-rules.json",
-                 "licence-verdicts.json", "popular-packages.json", "ai-assets.json"):
+                 "known-bad-hashes.json", "licence-verdicts.json", "popular-packages.json", "ai-assets.json"):
         if not data.exists(name):
             print(f"{name}: missing")
             continue
         doc = data.load(name)
         version = doc.get("version") if isinstance(doc, dict) else None
-        rules = doc.get("rules") if isinstance(doc, dict) else None
-        count = f", {len(rules)} rules" if isinstance(rules, list) else ""
+        count = ""
+        for key in ("rules", "entries"):
+            items = doc.get(key) if isinstance(doc, dict) else None
+            if isinstance(items, list):
+                count = f", {len(items)} {key}"
+                break
         print(f"{name}: present" + (f", version {version}" if version else "") + count + f" ({data.source(name)})")
     for w in bundles.WARNINGS:
         print(f"warning: {w}")

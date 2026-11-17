@@ -1,0 +1,116 @@
+{
+  "schema": "aiterprise/known-bad-hashes/v1",
+  "version": "2026.11.17",
+  "description": "Model-repository files that public incident reports name as malicious, by exact SHA-256 or SHA-1 (design doc 13 C23, the MVP seed list). Every hash is copied verbatim from the report at `url`. Only files the scanner hashes are listed: files with a model-file extension. The loader scripts, shell scripts and archives the same reports name are not.",
+  "quality_note": "An exact hash match has no false positive of its own; the risk is a wrong entry. Each entry cites the report it was copied from, so a match can be checked by hand.",
+  "entries": [
+    {
+      "sha256": "6cb644fb1e1739b6907a86bddff7452bd965a08f21c3b70f13410e22d11b219b",
+      "sha1": "4cc45d1ae409b58794e84d06161ef8d779e62de2",
+      "file": "ws.pth",
+      "size": 495,
+      "kind": "pickle",
+      "incident": "PyTorch .pth pickles that download and run a VShell remote-access trojan",
+      "source": "Rapid7",
+      "reported": "2025-07-01",
+      "url": "https://www.rapid7.com/blog/post/from-pth-to-p0wned-abuse-of-pickle-files-in-ai-model-supply-chains/"
+    },
+    {
+      "sha256": "06b4c8c7032dc5619f18e6f0ebeae71ce06ea96b10214ca9b693cfb589c4bb6d",
+      "sha1": "6927b8ebe37da19e3996f0c5dc657c95fbf00b0a",
+      "file": "wsc.pth",
+      "size": 1583,
+      "kind": "pickle",
+      "incident": "PyTorch .pth pickles that download and run a VShell remote-access trojan",
+      "source": "Rapid7",
+      "reported": "2025-07-01",
+      "url": "https://www.rapid7.com/blog/post/from-pth-to-p0wned-abuse-of-pickle-files-in-ai-model-supply-chains/"
+    },
+    {
+      "sha256": "d0055d902fcb3a34e33a2d44a0b10f83d12b76fe5616c102613a36b44311d1b8",
+      "sha1": "7276a9a5fe41ead88a328cb952c790e3b7d3414f",
+      "file": "kcp.pth",
+      "size": 495,
+      "kind": "pickle",
+      "incident": "PyTorch .pth pickles that download and run a VShell remote-access trojan",
+      "source": "Rapid7",
+      "reported": "2025-07-01",
+      "url": "https://www.rapid7.com/blog/post/from-pth-to-p0wned-abuse-of-pickle-files-in-ai-model-supply-chains/"
+    },
+    {
+      "sha1": "1733506c584dd6801accf7f58dc92a4a1285db1f",
+      "kind": "pytorch-7z",
+      "repository": "glockr1/ballr7",
+      "incident": "nullifAI: 7z-compressed PyTorch models whose pickle opens a reverse shell, missed by Picklescan",
+      "source": "ReversingLabs",
+      "reported": "2025-02-06",
+      "url": "https://www.reversinglabs.com/blog/rl-identifies-malware-ml-model-hosted-on-hugging-face"
+    },
+    {
+      "sha1": "79601f536b1b351c695507bf37236139f42201b0",
+      "kind": "pickle",
+      "repository": "glockr1/ballr7",
+      "incident": "nullifAI: 7z-compressed PyTorch models whose pickle opens a reverse shell, missed by Picklescan",
+      "source": "ReversingLabs",
+      "reported": "2025-02-06",
+      "url": "https://www.reversinglabs.com/blog/rl-identifies-malware-ml-model-hosted-on-hugging-face"
+    },
+    {
+      "sha1": "0dcc38fc90eca38810805bb03b9f6bb44945bbc0",
+      "kind": "pytorch-7z",
+      "repository": "who-r-u0000/0000000000000000000000000000000000000",
+      "incident": "nullifAI: 7z-compressed PyTorch models whose pickle opens a reverse shell, missed by Picklescan",
+      "source": "ReversingLabs",
+      "reported": "2025-02-06",
+      "url": "https://www.reversinglabs.com/blog/rl-identifies-malware-ml-model-hosted-on-hugging-face"
+    },
+    {
+      "sha1": "85c898c5db096635a21a9e8b5be0a58648205b47",
+      "kind": "pickle",
+      "repository": "who-r-u0000/0000000000000000000000000000000000000",
+      "incident": "nullifAI: 7z-compressed PyTorch models whose pickle opens a reverse shell, missed by Picklescan",
+      "source": "ReversingLabs",
+      "reported": "2025-02-06",
+      "url": "https://www.reversinglabs.com/blog/rl-identifies-malware-ml-model-hosted-on-hugging-face"
+    },
+    {
+      "sha256": "88f4b95a1c3d0a0d9638dc6e69f5bbc9ce0e1b92d069a0e404f60fa5397ee020",
+      "file": "syscore.bin",
+      "size": 40625780,
+      "kind": "miner-payload",
+      "incident": "Load/Mine: Hugging Face model repositories whose remote code fetches a UPX-packed miner (wave 2)",
+      "source": "Pluto Security",
+      "reported": "2026-10-29",
+      "url": "https://pluto.security/blog/hugging-face-malware-campaign-load-mine/"
+    },
+    {
+      "sha256": "587e3c3be3c75eb6586d69b25adb4c4208c1cf7d39157946da543dd823117adc",
+      "file": "syscore.bin",
+      "kind": "miner-payload",
+      "incident": "Load/Mine: Hugging Face model repositories whose remote code fetches a miner (wave 1)",
+      "source": "Pluto Security",
+      "reported": "2026-10-29",
+      "url": "https://pluto.security/blog/hugging-face-malware-campaign-load-mine/"
+    },
+    {
+      "sha256": "b0e1ae6d73d656b203514f498b59cbcf29f067edf6fbd3803a3de7d21960848d",
+      "file": "sysx.bin",
+      "kind": "binary-payload",
+      "incident": "Load/Mine: Hugging Face model repositories whose remote code fetches a miner (wave 1)",
+      "source": "Pluto Security",
+      "reported": "2026-10-29",
+      "url": "https://pluto.security/blog/hugging-face-malware-campaign-load-mine/"
+    },
+    {
+      "sha256": "5dc4b927fb91442a66a2e02c1636f629d4042a03a5c1523cd841d6ece66e0beb",
+      "file": "m2.bin",
+      "size": 35702840,
+      "kind": "miner-payload",
+      "repository": "wjsbg/zh-assets",
+      "incident": "Load/Mine: Hugging Face model repositories whose remote code fetches a miner",
+      "source": "Pluto Security",
+      "reported": "2026-10-29",
+      "url": "https://pluto.security/blog/hugging-face-malware-campaign-load-mine/"
+    }
+  ]
+}

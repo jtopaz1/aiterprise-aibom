@@ -221,6 +221,8 @@ class CliTests(unittest.TestCase):
         code, out, _ = self.run_cli(["defs", "status"])
         self.assertIn("installed bundle: rel_", out)
         self.assertIn("taxonomy.json: present, version bundle-test (bundle rel_", out)
+        self.assertRegex(out, r"known-bad-hashes\.json: present, version [0-9.]+, [0-9]+ entries \(wheel\)")
+        self.assertRegex(out, r"poison-patterns\.json: present, version [0-9.]+, [0-9]+ rules \(wheel\)")
         code, out, _ = self.run_cli(["defs", "rollback"])
         self.assertEqual(code, 0)
         self.assertIn("wheel", out)
