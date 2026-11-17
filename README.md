@@ -62,6 +62,7 @@ aiterprise-scan ui                                  # local web UI on 127.0.0.1
 aiterprise-scan policy lint aibom.policy.yaml
 aiterprise-scan policy pull --cloud https://aibom.example.com   # the org policy from an AIterprise cloud
 aiterprise-scan defs status | verify | install | update | rollback   # signed definition bundles
+aiterprise-scan . --defs-version rel_…              # pin an installed definitions release for a repeatable audit
 ```
 
 Exit codes: `0` clean · `1` policy failure (`--fail-on`, default `high`) · `2` error or incomplete

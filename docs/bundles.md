@@ -35,8 +35,30 @@ release.
 
 Installed releases live in `~/.aiterprise/defs/<release_id>/`; `state.json` names the active one
 and is replaced atomically. Each file is re-checked against the installed manifest whenever it is
-loaded; a mismatch falls back to the wheel's copy with a warning. `AITERPRISE_DEFS=bundled` ignores
-installed bundles entirely.
+loaded; a mismatch falls back to the wheel's copy with a warning, and the report's `notes` say so.
+`AITERPRISE_DEFS=bundled` ignores installed bundles entirely.
+
+## Which definitions a scan used
+
+The JSON report names the release in `release_id` (`null` when only the data shipped with this
+version was used); with `version`, that is all the definition data behind the verdicts. The table
+header says `defs: rel_…` or `defs: bundled`.
+
+## Pinning a release
+
+An audit that must be repeatable pins the release:
+
+```bash
+aiterprise-scan . --defs-version rel_9f2c…   # the full id, as `defs status` or a report prints it
+AITERPRISE_DEFS=rel_9f2c… aiterprise-scan .  # the same for every command (the flag wins)
+aiterprise-scan . --defs-version bundled     # only the data shipped with this version
+```
+
+The release must be installed; it need not be the active one, so an older release still serves
+after `defs update` moved on. A pin is all or nothing: the installed `manifest.json` must hash to the
+id, and every file must still have the SHA-256 the manifest lists. Otherwise the scan does not run
+and exits 2 — a pinned scan never falls back to other data. Files a release does not carry come
+from the wheel, as they do without a pin.
 
 ## The root key
 

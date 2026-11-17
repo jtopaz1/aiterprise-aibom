@@ -25,8 +25,8 @@ from . import TOOL_NAME, __version__, providers, quality
 from .model import INACTIVE_STATUSES, SEVERITIES, Finding, ScanResult, sort_findings
 
 SCHEMA = "aiterprise-report/1"
-TOP_LEVEL_KEYS = ("schema", "tool", "version", "target", "mode", "started_at", "duration_s", "policy", "summary",
-                  "examined", "notes", "notices", "components", "findings", "exit_code")
+TOP_LEVEL_KEYS = ("schema", "tool", "version", "release_id", "target", "mode", "started_at", "duration_s", "policy",
+                  "summary", "examined", "notes", "notices", "components", "findings", "exit_code")
 
 
 class SchemaError(ValueError):
@@ -42,6 +42,7 @@ def build(result: ScanResult) -> dict[str, Any]:
         "schema": SCHEMA,
         "tool": TOOL_NAME,
         "version": __version__,
+        "release_id": result.release_id,  # with `version`, names the definition data the verdicts came from
         "target": result.target,
         "mode": result.mode,
         "started_at": result.started_at,

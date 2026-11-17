@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import os
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -241,6 +242,182 @@ class CliTests(unittest.TestCase):
             code, out, _ = self.run_cli(["defs", "update"])
         self.assertEqual(code, 0)
         self.assertIn("no AIT bundle", out)
+
+
+def taxonomy(version):
+    """The wheel's taxonomy under another version, so a scan with it still finds AI packages."""
+    real = json.loads(data._wheel("taxonomy.json").read_bytes())
+    return json.dumps({**real, "version": version}).encode()
+
+
+def clear_definition_caches():
+    """`data.load` and every cache a module derived from it (taxonomy, KEV, rules, ...)."""
+    for name, mod in list(sys.modules.items()):
+        if name.startswith("aiterprise_scan"):
+            for value in list(vars(mod).values()):
+                if callable(getattr(value, "cache_clear", None)) and hasattr(value, "cache_info"):
+                    value.cache_clear()
+
+
+class PinTests(unittest.TestCase):
+    """Which definitions a scan used, and `--defs-version` (design doc 13 §4.7: pinned release ids
+    for reproducible audits)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.home = Path(self.tmp.name) / "home"
+        self.fx = Fixture(Path(self.tmp.name))
+        self.project = Path(self.tmp.name) / "project"
+        self.project.mkdir()
+        (self.project / "requirements.txt").write_text("openai==1.40.0\n", encoding="utf-8")
+        self.env = mock.patch.dict(os.environ, {"AITERPRISE_HOME": str(self.home)})
+        self.env.start()
+        for k in ("AITERPRISE_API_KEY", "AITERPRISE_ROOT_KEY", "AITERPRISE_DEFS"):
+            os.environ.pop(k, None)
+        bundles.select(None)
+        bundles.WARNINGS.clear()
+        clear_definition_caches()
+
+    def tearDown(self):
+        bundles.select(None)
+        bundles.WARNINGS.clear()
+        self.env.stop()
+        clear_definition_caches()
+        self.tmp.cleanup()
+
+    def install(self, files=None, **kw):
+        files = files or {"taxonomy.json": taxonomy("bundle-test")}
+        return bundles.install(bundles.verify_dir(self.fx.make(files=files, **kw), ROOT_PUB, now=NOW))
+
+    def two_releases(self):
+        first = self.install(files={"taxonomy.json": taxonomy("first")}, created_at="2026-11-10T00:00:00Z")
+        second = self.install(files={"taxonomy.json": taxonomy("second")}, created_at="2026-11-11T00:00:00Z",
+                              parent=first)
+        return first, second
+
+    def scan(self, *extra, fmt="json"):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cli.main(["scan", str(self.project), "--offline", "--fail-on", "none", "--format", fmt, *extra])
+        text = out.getvalue()
+        doc = json.loads(text) if fmt == "json" and text.strip() else None
+        return code, doc if fmt == "json" else text, err.getvalue()
+
+    def test_the_report_names_the_release_its_definitions_came_from(self):
+        rid = self.install()
+        code, doc, err = self.scan()
+        self.assertEqual(code, 0, err)
+        self.assertEqual(doc["release_id"], rid)
+
+    def test_without_an_installed_release_the_report_names_none(self):
+        code, doc, err = self.scan()
+        self.assertEqual(code, 0, err)
+        self.assertIn("release_id", doc)
+        self.assertIsNone(doc["release_id"])
+
+    def test_the_table_header_names_the_release_instead_of_bundled(self):
+        rid = self.install()
+        code, text, err = self.scan(fmt="table")
+        self.assertEqual(code, 0, err)
+        header = text.splitlines()[0]
+        self.assertIn(f"defs: {rid[:16]}", header)
+        self.assertNotIn("bundled", header)
+
+    def test_the_table_header_says_bundled_when_no_release_is_installed(self):
+        code, text, err = self.scan(fmt="table")
+        self.assertIn("defs: bundled (", text.splitlines()[0])
+
+    def test_a_pin_uses_that_release_while_another_is_current(self):
+        first, second = self.two_releases()
+        self.assertEqual(bundles.state()["current"], second)
+        code, doc, err = self.scan("--defs-version", first)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(doc["release_id"], first)
+        self.assertEqual(data.load("taxonomy.json")["version"], "first")
+
+    def test_the_environment_variable_pins_the_same_way(self):
+        first, _ = self.two_releases()
+        with mock.patch.dict(os.environ, {"AITERPRISE_DEFS": first}):
+            code, doc, err = self.scan()
+        self.assertEqual(code, 0, err)
+        self.assertEqual(doc["release_id"], first)
+
+    def test_the_flag_wins_over_the_environment_variable(self):
+        first, second = self.two_releases()
+        with mock.patch.dict(os.environ, {"AITERPRISE_DEFS": first}):
+            code, doc, err = self.scan("--defs-version", second)
+        self.assertEqual(doc["release_id"], second)
+
+    def test_pinning_bundled_ignores_the_installed_release(self):
+        self.install()
+        code, doc, err = self.scan("--defs-version", "bundled")
+        self.assertEqual(code, 0, err)
+        self.assertIsNone(doc["release_id"])
+
+    def test_a_pin_to_a_release_that_is_not_installed_stops_the_scan(self):
+        installed = self.install()
+        code, doc, err = self.scan("--defs-version", "rel_" + "0" * 64)
+        self.assertEqual(code, 2)
+        self.assertIsNone(doc)
+        self.assertIn("not installed", err)
+        self.assertIn(installed, err)  # names what is installed
+
+    def test_a_pin_that_is_not_a_release_id_is_refused(self):
+        for bad in ("../../etc", "rel_xyz", "rel_" + "A" * 64, "latest"):
+            with self.subTest(bad=bad):
+                code, doc, err = self.scan("--defs-version", bad)
+                self.assertEqual(code, 2)
+                self.assertIsNone(doc)
+                self.assertIn("release id", err)
+
+    def test_a_pinned_release_with_a_changed_file_stops_the_scan(self):
+        rid = self.install()
+        (self.home / "defs" / rid / "content" / "taxonomy.json").write_bytes(b'{"version": "evil"}')
+        code, doc, err = self.scan("--defs-version", rid)
+        self.assertEqual(code, 2)
+        self.assertIsNone(doc)
+        self.assertIn("content/taxonomy.json", err)
+
+    def test_a_pinned_release_whose_manifest_was_edited_stops_the_scan(self):
+        rid = self.install()
+        path = self.home / "defs" / rid / "manifest.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["channel"] = "edited"
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        code, doc, err = self.scan("--defs-version", rid)
+        self.assertEqual(code, 2)
+        self.assertIn("manifest", err)
+
+    def test_a_scan_started_elsewhere_with_a_bad_pin_is_incomplete(self):
+        # `mcp serve` and the UI call run_scan directly; a pin from AITERPRISE_DEFS still binds them
+        from aiterprise_scan.scanner import ScanOptions, run_scan
+
+        with mock.patch.dict(os.environ, {"AITERPRISE_DEFS": "rel_" + "0" * 64}):
+            result = run_scan(ScanOptions(target=self.project, offline=True))
+        self.assertEqual(result.exit_code, 2)
+        self.assertIsNone(result.release_id)
+        self.assertTrue(any(n.startswith("definitions:") and "not installed" in n for n in result.notes),
+                        result.notes)
+
+    def test_defs_status_shows_the_pin_and_refuses_a_bad_one(self):
+        first, _ = self.two_releases()
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.dict(os.environ, {"AITERPRISE_DEFS": first}), contextlib.redirect_stdout(out):
+            self.assertEqual(cli.main(["defs", "status"]), 0)
+        self.assertIn(f"installed bundle: {first}", out.getvalue())
+        self.assertIn("pinned by AITERPRISE_DEFS", out.getvalue())
+        with mock.patch.dict(os.environ, {"AITERPRISE_DEFS": "latest"}), contextlib.redirect_stderr(err), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(cli.main(["defs", "status"]), 2)
+        self.assertIn("release id", err.getvalue())
+
+    def test_unpinned_a_changed_file_falls_back_and_the_report_says_so(self):
+        rid = self.install()
+        (self.home / "defs" / rid / "content" / "taxonomy.json").write_bytes(b'{"version": "evil"}')
+        code, doc, err = self.scan()
+        notes = [n for n in doc["notes"] if "taxonomy.json" in n]
+        self.assertEqual(len(notes), 1, doc["notes"])
+        self.assertIn("wheel", notes[0])
 
 
 if __name__ == "__main__":
