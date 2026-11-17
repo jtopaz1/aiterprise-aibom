@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Scan speed against design doc 13 §5.5: a cold scan of a 10,000-file monorepo in under 60 s, and
-a re-scan of it unchanged in under 10 s.
+"""Scan speed against design doc 13 §5.5: a cold scan of a 10,000-file monorepo in under 60 s (under
+120 s with live network checks), and a re-scan of it unchanged in under 10 s.
 
-    python tools/bench_scan.py [--files 10000] [--check SECONDS] [--check-warm SECONDS] [--work DIR]
-                               [--exe BINARY] [--json FILE]
+    python tools/bench_scan.py [--files 10000] [--online] [--check SECONDS] [--check-warm SECONDS]
+                               [--work DIR] [--exe BINARY] [--json FILE]
 
 It builds a monorepo of exactly `--files` files: packages of 100 files, each with a requirements.txt,
 a package.json, a README, three config files, eight TypeScript modules and the rest Python modules
@@ -11,12 +11,16 @@ copied from this interpreter's standard library (real code, real sizes; the tree
 Python versions, so the report names the version). One package also holds the killer demo's five
 planted problems, so the timed scan has to judge files, not just walk them.
 
-The tree is then scanned twice, offline, each time by the CLI in a new process (start-up, data
+The tree is then scanned twice (offline unless `--online`), each time by the CLI in a new process (start-up, data
 loading and the report included), with a cache directory that starts empty: the first scan is the
 cold one; the second is a re-scan of the unchanged tree, with the operating system's file cache
 warm and the per-file results the first scan kept (`scancache`). `--check` fails (exit 1) when the
 first scan takes longer than SECONDS, a planted problem is missed, or a scan does not exit 1;
 `--check-warm` when the second takes longer than its SECONDS.
+
+`--online` scans without `--offline`, so each scan also asks OSV and the package registries, and the
+check also fails unless every report shows that both answered (`killer_demo.mode_problems`). Neither
+mode uses SecDB: the scans get no API key and a home directory of their own, so no stored login.
 """
 
 from __future__ import annotations
@@ -119,10 +123,12 @@ def build_tree(root: Path, files: int, seed: int = 7) -> dict:
     return {"files": len(written), "bytes": sum(p.stat().st_size for p in written)}
 
 
-def _scan(root: Path, out: Path, cache: Path, exe: list[str] | None) -> tuple[float, int, dict]:
+def _scan(root: Path, out: Path, cache: Path, exe: list[str] | None,
+          online: bool = False) -> tuple[float, int, dict]:
     cmd = (exe or [sys.executable, "-m", "aiterprise_scan"]) + [
-        "scan", str(root), "--offline", "--format", "json", "--out", str(out)]
-    env = {**os.environ, "AITERPRISE_CACHE_DIR": str(cache), "AITERPRISE_DEFS": "bundled"}
+        "scan", str(root), "--format", "json", "--out", str(out)] + ([] if online else ["--offline"])
+    env = {**os.environ, "AITERPRISE_CACHE_DIR": str(cache), "AITERPRISE_DEFS": "bundled",
+           "AITERPRISE_HOME": str(cache.parent / "home")}
     env.pop("AITERPRISE_API_KEY", None)
     if not exe:
         env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "src")] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
@@ -133,19 +139,22 @@ def _scan(root: Path, out: Path, cache: Path, exe: list[str] | None) -> tuple[fl
     return seconds, code, report
 
 
-def run(work: Path, files: int, exe: list[str] | None = None) -> dict:
+def run(work: Path, files: int, exe: list[str] | None = None, online: bool = False) -> dict:
     tree = work / "mono"
     info = build_tree(tree, files)
     res = {**info, "python": platform.python_version(), "platform": platform.platform(terse=True),
-           "seconds": [], "exit": [], "missed": []}
+           "online": online, "seconds": [], "exit": [], "missed": [], "mode": []}
     for i in range(2):
-        seconds, code, report = _scan(tree, work / f"out{i}", work / "cache", exe)
+        seconds, code, report = _scan(tree, work / f"out{i}", work / "cache", exe, online=online)
         res["seconds"].append(round(seconds, 2))
         res["exit"].append(code)
         findings = report.get("findings", [])
         for label, test in killer_demo.EXPECT.items():
             if not any(test(f) for f in findings) and label not in res["missed"]:
                 res["missed"].append(label)
+        for problem in killer_demo.mode_problems(report, online):
+            if problem not in res["mode"]:
+                res["mode"].append(problem)
     res["peak_rss_mb"] = _children_peak_rss_mb()
     return res
 
@@ -169,12 +178,15 @@ def problems(res: dict, budget: float, warm_budget: float | None = None) -> list
                    "re-scan of an unchanged tree")
     out += [f"missed: {label}" for label in res["missed"]]
     out += [f"scan {i + 1} exited {code}, not 1" for i, code in enumerate(res["exit"]) if code != 1]
+    out += res.get("mode", [])
     return out
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--files", type=int, default=10_000)
+    ap.add_argument("--online", action="store_true",
+                    help="scan without --offline (OSV and the registries are asked; no SecDB) and fail unless they answered")
     ap.add_argument("--check", type=float, metavar="SECONDS", help="fail if the first scan takes longer")
     ap.add_argument("--check-warm", type=float, metavar="SECONDS",
                     help="with --check: also fail if the second scan (unchanged tree) takes longer")
@@ -188,12 +200,13 @@ def main(argv: list[str] | None = None) -> int:
         tmp = tempfile.TemporaryDirectory(prefix="aiterprise-bench-")
         work = Path(tmp.name)
     try:
-        res = run(work, args.files, [args.exe] if args.exe else None)
+        res = run(work, args.files, [args.exe] if args.exe else None, online=args.online)
     finally:
         if tmp is not None:
             tmp.cleanup()
     print(f"tree: {res['files']:,} files, {res['bytes'] / 1e6:.1f} MB "
           f"(Python {res['python']} standard-library sources; {res['platform']})")
+    print("mode: " + ("online (OSV and the package registries asked; no SecDB)" if args.online else "offline"))
     print(f"first scan (cold):  {res['seconds'][0]:6.1f} s, exit {res['exit'][0]}")
     print(f"second scan (warm): {res['seconds'][1]:6.1f} s, exit {res['exit'][1]}")
     print(f"planted problems found: {len(killer_demo.EXPECT) - len(res['missed'])}/{len(killer_demo.EXPECT)}")
