@@ -65,11 +65,25 @@ NAME_FAMILIES = ("ait.pkg.typosquat", "ait.pkg.dormant-release", "ait.pkg.versio
 PUBLISHER_RULES = ("ait.pkg.provenance-dropped", "ait.pkg.publisher-change")
 SKIP_DIRS = {"__pycache__", "bin", "Scripts", "include"}
 METHOD = ("fp_rate_measured = clean projects where the rule fired / clean projects whose scan examined something "
-          "that rule family judges; written only with at least min-samples such projects (tools/measure_fp.py)")
+          "that rule family judges; written only with at least min-samples such projects, and at 0 for a rule "
+          "listed in a data file that never fired (tools/measure_fp.py)")
 
 
 def family_of(rule_id: str) -> str | None:
     return next((p for p in FAMILIES if rule_id.startswith(p)), None)
+
+
+def listed_rules() -> dict[str, list[str]]:
+    """The rules listed in data files, by family. Each had its chance on every sample of its family,
+    so one that never fired was measured at 0 (a rule written in code is not listed: it keeps the
+    family's rate)."""
+    from aiterprise_scan import data
+
+    cmd = [r["id"] for r in data.load("command-rules.json")["rules"]]
+    poison = [r["id"] for r in data.load("poison-patterns.json")["rules"]]
+    return {"ait.mcp.desc.": [f"ait.mcp.desc.{i}" for i in poison],
+            "ait.mcp.cmd.": [f"ait.mcp.cmd.{i}" for i in cmd],
+            "ait.skill.": [f"ait.skill.desc.{i}" for i in poison] + [f"ait.skill.cmd.{i}" for i in cmd]}
 
 
 def read_project_list(path: Path) -> list[Path]:
@@ -186,7 +200,8 @@ def measure_names(names: dict[str, list[str]], client=None) -> dict:
             "flagged_rule": hits, "rule_family": {rule: rule for rule in hits}, "examples": {}}
 
 
-def to_quality(m: dict, corpus: str, min_samples: int, today: str, families: list[str] | None = None) -> dict:
+def to_quality(m: dict, corpus: str, min_samples: int, today: str, families: list[str] | None = None,
+               listed: dict[str, list[str]] | None = None) -> dict:
     rules: dict[str, dict] = {}
     for fam, n in sorted(m["chances"].items()):
         if n < min_samples or (families is not None and fam not in families):
@@ -195,11 +210,13 @@ def to_quality(m: dict, corpus: str, min_samples: int, today: str, families: lis
         key = fam if fam.endswith("*") else (fam + "*" if fam.endswith(".") else fam)
         rules[key] = {**base, "fp_rate_measured": round(m["flagged_family"].get(fam, 0) / n, 4),
                       "flagged": m["flagged_family"].get(fam, 0), "scope": "family"}
+        for rule in (listed or {}).get(fam, []):
+            rules[rule] = {**base, "fp_rate_measured": 0.0, "flagged": 0, "scope": "rule"}
         for rule, k in sorted(m["flagged_rule"].items()):
             if m["rule_family"].get(rule) == fam:
                 # no example paths: corpus directory names can identify the machine they came from
                 rules[rule] = {**base, "fp_rate_measured": round(k / n, 4), "flagged": k, "scope": "rule"}
-    return {"version": today.replace("-", "."), "method": METHOD, "rules": rules}
+    return {"version": today.replace("-", "."), "method": METHOD, "rules": dict(sorted(rules.items()))}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -242,7 +259,7 @@ def main(argv: list[str] | None = None) -> int:
         m = measure(dirs, progress)
     today = dt.date.today().isoformat()
     q = to_quality(m, f"{args.corpus_name} ({m['projects']} {m.get('unit', 'projects')})", args.min_samples, today,
-                   families)
+                   families, None if args.names_from else listed_rules())
     print(json.dumps({"chances": m["chances"], "flagged_family": m["flagged_family"],
                       "flagged_rule": m["flagged_rule"]}, indent=2))
     measured = [fam for fam in families if m["chances"].get(fam, 0) >= args.min_samples]

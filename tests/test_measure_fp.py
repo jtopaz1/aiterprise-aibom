@@ -93,6 +93,17 @@ class MainTest(unittest.TestCase):
         self.assertEqual(written["rules"]["ait.secret.*"], SECRETS)
         self.assertIn("ait.secret.private-key", written["rules"])
 
+    def test_a_listed_rule_that_never_fired_was_measured_at_zero(self):
+        # the command rules and poison patterns are listed in data files: each one had its chance on every
+        # sample, so one that stayed quiet has a measured rate of 0, not the family's rate
+        with tempfile.TemporaryDirectory() as tmp:
+            written = self.run_on_one_clean_skill(tmp, "--family", "ait.skill.", "--min-samples", "1")
+        for rule in ("ait.skill.desc.exfil.markdown-image", "ait.skill.cmd.cred.aws"):
+            entry = written["rules"][rule]
+            self.assertEqual((entry["fp_rate_measured"], entry["flagged"], entry["samples"], entry["scope"]),
+                             (0.0, 0, 1, "rule"), rule)
+        self.assertFalse(any(r.startswith("ait.mcp.") for r in written["rules"]))  # that family was not measured
+
     def test_merge_keeps_the_old_entry_of_a_family_with_too_few_samples(self):
         with tempfile.TemporaryDirectory() as tmp:
             written = self.run_on_one_clean_skill(tmp, "--family", "ait.skill.", "--min-samples", "5")

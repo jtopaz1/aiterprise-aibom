@@ -150,20 +150,22 @@ def render() -> str:
     cmd = _load("command-rules.json")["rules"]
     out += ["## Dangerous commands", "",
             "Matched in MCP server commands, skill scripts and package install scripts. The rule id is "
-            "`ait.mcp.cmd.<id>`, `ait.skill.cmd.<id>` or `ait.archive.cmd.<id>`.", "",
-            "| Id | Category | Severity | FP rate | Meaning |", "|---|---|---|---|---|"]
+            "`ait.mcp.cmd.<id>`, `ait.skill.cmd.<id>` or `ait.archive.cmd.<id>`. The FP rate is the one measured "
+            "on agent skills (`ait.skill.cmd.<id>`).", "",
+            "| Id | Category | Severity | FP rate (skills) | Meaning |", "|---|---|---|---|---|"]
     for r in cmd:
-        rate = _rate(rq(f"ait.mcp.cmd.{r['id']}"))
+        rate = _rate(rq(f"ait.skill.cmd.{r['id']}"))
         out.append(f"| `{r['id']}` | {r['category']} | {r['severity']} | {rate} | {_cell(r['description'])} |")
     out.append("")
 
     poison = _load("poison-patterns.json")["rules"]
     out += ["## Poisoned descriptions and instructions", "",
             "Matched in MCP tool descriptions and agent-skill text. The rule id is `ait.mcp.desc.<id>` or "
-            "`ait.skill.desc.<id>`.", "",
-            "| Id | Category | Severity | FP rate | Meaning |", "|---|---|---|---|---|"]
+            "`ait.skill.desc.<id>`. The FP rate is the one measured on agent skills (`ait.skill.desc.<id>`), whose "
+            "long bodies are harder on these patterns than tool descriptions are.", "",
+            "| Id | Category | Severity | FP rate (skills) | Meaning |", "|---|---|---|---|---|"]
     for r in poison:
-        rate = _rate(rq(f"ait.mcp.desc.{r['id']}"))
+        rate = _rate(rq(f"ait.skill.desc.{r['id']}"))
         out.append(f"| `{r['id']}` | {r['category']} | {r['severity']} | {rate} | {_cell(r['description'])} |")
     out.append("")
 

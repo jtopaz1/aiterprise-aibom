@@ -127,82 +127,94 @@ AI-provider and cloud keys in configuration and code, always reported redacted (
 
 ## Dangerous commands
 
-Matched in MCP server commands, skill scripts and package install scripts. The rule id is `ait.mcp.cmd.<id>`, `ait.skill.cmd.<id>` or `ait.archive.cmd.<id>`.
+Matched in MCP server commands, skill scripts and package install scripts. The rule id is `ait.mcp.cmd.<id>`, `ait.skill.cmd.<id>` or `ait.archive.cmd.<id>`. The FP rate is the one measured on agent skills (`ait.skill.cmd.<id>`).
 
-| Id | Category | Severity | FP rate | Meaning |
+| Id | Category | Severity | FP rate (skills) | Meaning |
 |---|---|---|---|---|
-| `download-exec.curl-pipe-shell` | download-exec | critical | not measured | Downloads a remote script and pipes it straight into a shell. |
-| `download-exec.curl-pipe-python` | download-exec | critical | not measured | Downloads remote code and pipes it into a Python interpreter. |
-| `download-exec.pipe-interpreter` | download-exec | critical | not measured | Downloads remote code and pipes it into a scripting interpreter. |
-| `download-exec.powershell-iex` | download-exec | critical | not measured | PowerShell downloads content and executes it with Invoke-Expression. |
-| `download-exec.powershell-encoded` | download-exec | critical | not measured | PowerShell -EncodedCommand runs a base64-obfuscated payload. |
-| `download-exec.certutil-urlcache` | download-exec | critical | not measured | certutil abused as a file downloader (LOLBAS). |
-| `download-exec.bitsadmin` | download-exec | high | not measured | bitsadmin abused to download a remote payload (LOLBAS). |
-| `download-exec.python-exec` | download-exec | critical | not measured | python -c calls exec() on a dynamically built/fetched string. |
-| `download-exec.node-eval-fetch` | download-exec | critical | not measured | node -e fetches remote content and spawns a process. |
-| `exec.base64-pipe-shell` | exec | critical | not measured | Decodes a base64 blob and pipes it into a shell/interpreter. |
-| `exec.eval-subshell` | exec | critical | not measured | eval executes code downloaded by a command substitution (download-and-execute). Shell init hooks such as eval "$(pyenv init -)" are not flagged. |
-| `revshell.bash-dev-tcp` | revshell | critical | not measured | Bash /dev/tcp reverse/bind shell. |
-| `revshell.netcat` | revshell | critical | not measured | netcat/ncat with -e spawns a shell to a remote host. |
-| `revshell.mkfifo` | revshell | critical | not measured | Named-pipe reverse shell (mkfifo + nc). |
-| `revshell.python-socket` | revshell | critical | not measured | Python socket reverse shell. |
-| `revshell.perl-socket` | revshell | critical | not measured | Perl socket reverse shell. |
-| `revshell.powershell-tcpclient` | revshell | critical | not measured | PowerShell TCPClient reverse shell. |
-| `cred.ssh-keys` | cred | critical | not measured | Reads or copies private SSH keys. |
-| `cred.aws` | cred | critical | not measured | Reads AWS credential files. |
-| `cred.env-file` | cred | critical | not measured | Sends or packs a .env secrets file (exfiltration). |
-| `cred.env-read` | cred | high | not measured | Reads or copies a .env secrets file (creating .env from a template is not flagged). |
-| `cred.keychain` | cred | critical | not measured | Dumps the macOS keychain. |
-| `cred.browser` | cred | critical | not measured | Reads browser cookie / saved-password stores. |
-| `cred.history` | cred | high | not measured | Reads shell/tool history files (may contain secrets). |
-| `cred.dotfiles` | cred | high | not measured | Reads credential-bearing dotfiles (.netrc/.npmrc/.pypirc/docker/kube). |
-| `cred.cloud-token` | cred | high | not measured | Prints a live cloud access token. |
-| `cred.env-exfil` | cred | critical | not measured | Pipes the process environment to a network client (secret exfil). |
-| `exfil.paste-webhook` | exfil | high | not measured | Contacts a known paste/webhook/collaborator exfiltration endpoint. |
-| `exfil.dns` | exfil | medium | not measured | DNS lookup of a command-substituted value (DNS exfiltration). |
-| `net.tunnel` | exfil | high | not measured | Opens an outbound tunnel exposing local services. |
-| `persist.shell-rc` | persist | high | not measured | Appends to a shell startup file (persistence). |
-| `persist.cron` | persist | high | not measured | Installs a cron job (persistence). |
-| `persist.launchd` | persist | high | not measured | Installs a macOS launch agent/daemon (persistence). |
-| `persist.systemd` | persist | high | not measured | Installs/enables a systemd service (persistence). |
-| `persist.schtasks` | persist | high | not measured | Creates a Windows scheduled task (persistence). |
-| `persist.registry-run` | persist | high | not measured | Adds a Windows Run registry key (persistence). |
-| `persist.ps-profile` | persist | high | not measured | Writes to the PowerShell profile (persistence). |
-| `docker.privileged` | privilege | high | not measured | Runs a privileged container (host-equivalent access). |
-| `docker.host-mount` | privilege | high | not measured | Mounts the host root or a sensitive path / docker.sock into a container. |
-| `docker.network-host` | privilege | high | not measured | Shares the host network namespace with a container. |
-| `docker.pid-host` | privilege | high | not measured | Shares the host PID namespace with a container. |
-| `privilege.sudo` | privilege | high | not measured | Elevates to root with sudo. |
-| `privilege.doas` | privilege | high | not measured | Elevates privileges with doas. |
-| `privilege.setuid` | privilege | high | not measured | Sets the setuid/setgid bit. |
-| `destroy.rm-rf-root` | destroy | critical | not measured | Recursively deletes a filesystem root or home directory. |
-| `destroy.no-preserve-root` | destroy | critical | not measured | rm with --no-preserve-root (removes protection against deleting /). |
-| `destroy.dd-disk` | destroy | critical | not measured | dd writes directly to a block device (data destruction). |
-| `destroy.mkfs` | destroy | critical | not measured | Formats a block device (data destruction). |
-| `destroy.fork-bomb` | destroy | critical | not measured | Shell fork bomb (resource exhaustion). |
-| `destroy.windows-format` | destroy | high | not measured | Formats/wipes a Windows volume. |
-| `destroy.windows-del` | destroy | high | not measured | Recursively deletes a Windows directory tree. |
-| `supply.npx-latest` | supply | medium | not measured | Runs an npm package at @latest (unpinned, rug-pullable). |
-| `supply.npx-unpinned` | supply | medium | not measured | Runs an npm package with no version pin (unpinned supply chain). |
-| `supply.pip-url` | supply | medium | not measured | pip install from a URL/VCS/archive (bypasses the index, unpinned). |
-| `hygiene.temp-dir` | hygiene | low | not measured | Runs code from a world-writable temporary directory. |
-| `net.plain-http` | net | low | not measured | Fetches over plaintext HTTP from a non-local host. |
-| `net.raw-ip-url` | net | low | not measured | Contacts a raw public IP address (no hostname). |
+| `download-exec.curl-pipe-shell` | download-exec | critical | 0.00 % (n=275) | Downloads a remote script and pipes it straight into a shell. |
+| `download-exec.curl-pipe-python` | download-exec | critical | 0.00 % (n=275) | Downloads remote code and pipes it into a Python interpreter. |
+| `download-exec.pipe-interpreter` | download-exec | critical | 0.00 % (n=275) | Downloads remote code and pipes it into a scripting interpreter. |
+| `download-exec.powershell-iex` | download-exec | critical | 0.00 % (n=275) | PowerShell downloads content and executes it with Invoke-Expression. |
+| `download-exec.powershell-encoded` | download-exec | critical | 0.00 % (n=275) | PowerShell -EncodedCommand runs a base64-obfuscated payload. |
+| `download-exec.certutil-urlcache` | download-exec | critical | 0.00 % (n=275) | certutil abused as a file downloader (LOLBAS). |
+| `download-exec.bitsadmin` | download-exec | high | 0.00 % (n=275) | bitsadmin abused to download a remote payload (LOLBAS). |
+| `download-exec.python-exec` | download-exec | critical | 0.00 % (n=275) | python -c calls exec() on a dynamically built/fetched string. |
+| `download-exec.node-eval-fetch` | download-exec | critical | 0.00 % (n=275) | node -e fetches remote content and spawns a process. |
+| `exec.base64-pipe-shell` | exec | critical | 0.00 % (n=275) | Decodes a base64 blob and pipes it into a shell/interpreter. |
+| `exec.eval-subshell` | exec | critical | 0.00 % (n=275) | eval executes code downloaded by a command substitution (download-and-execute). Shell init hooks such as eval "$(pyenv init -)" are not flagged. |
+| `revshell.bash-dev-tcp` | revshell | critical | 0.00 % (n=275) | Bash /dev/tcp reverse/bind shell. |
+| `revshell.netcat` | revshell | critical | 0.00 % (n=275) | netcat/ncat with -e spawns a shell to a remote host. |
+| `revshell.mkfifo` | revshell | critical | 0.00 % (n=275) | Named-pipe reverse shell (mkfifo + nc). |
+| `revshell.python-socket` | revshell | critical | 0.00 % (n=275) | Python socket reverse shell. |
+| `revshell.perl-socket` | revshell | critical | 0.00 % (n=275) | Perl socket reverse shell. |
+| `revshell.powershell-tcpclient` | revshell | critical | 0.00 % (n=275) | PowerShell TCPClient reverse shell. |
+| `cred.ssh-keys` | cred | critical | 0.00 % (n=275) | Reads or copies private SSH keys. |
+| `cred.aws` | cred | critical | 0.00 % (n=275) | Reads AWS credential files. |
+| `cred.env-file` | cred | critical | 0.00 % (n=275) | Sends or packs a .env secrets file (exfiltration). |
+| `cred.env-read` | cred | high | 0.00 % (n=275) | Reads or copies a .env secrets file (creating .env from a template is not flagged). |
+| `cred.keychain` | cred | critical | 0.00 % (n=275) | Dumps the macOS keychain. |
+| `cred.browser` | cred | critical | 0.00 % (n=275) | Reads browser cookie / saved-password stores. |
+| `cred.history` | cred | high | 0.00 % (n=275) | Reads shell/tool history files (may contain secrets). |
+| `cred.dotfiles` | cred | high | 0.00 % (n=275) | Reads credential-bearing dotfiles (.netrc/.npmrc/.pypirc/docker/kube). |
+| `cred.cloud-token` | cred | high | 0.00 % (n=275) | Prints a live cloud access token. |
+| `cred.env-exfil` | cred | critical | 0.00 % (n=275) | Pipes the process environment to a network client (secret exfil). |
+| `exfil.paste-webhook` | exfil | high | 0.00 % (n=275) | Contacts a known paste/webhook/collaborator exfiltration endpoint. |
+| `exfil.dns` | exfil | medium | 0.00 % (n=275) | DNS lookup of a command-substituted value (DNS exfiltration). |
+| `net.tunnel` | exfil | high | 0.00 % (n=275) | Opens an outbound tunnel exposing local services. |
+| `persist.shell-rc` | persist | high | 0.00 % (n=275) | Appends to a shell startup file (persistence). |
+| `persist.cron` | persist | high | 0.00 % (n=275) | Installs a cron job (persistence). |
+| `persist.launchd` | persist | high | 0.00 % (n=275) | Installs a macOS launch agent/daemon (persistence). |
+| `persist.systemd` | persist | high | 0.00 % (n=275) | Installs/enables a systemd service (persistence). |
+| `persist.schtasks` | persist | high | 0.00 % (n=275) | Creates a Windows scheduled task (persistence). |
+| `persist.registry-run` | persist | high | 0.00 % (n=275) | Adds a Windows Run registry key (persistence). |
+| `persist.ps-profile` | persist | high | 0.00 % (n=275) | Writes to the PowerShell profile (persistence). |
+| `docker.privileged` | privilege | high | 0.00 % (n=275) | Runs a privileged container (host-equivalent access). |
+| `docker.host-mount` | privilege | high | 0.00 % (n=275) | Mounts the host root or a sensitive path / docker.sock into a container. |
+| `docker.network-host` | privilege | high | 0.00 % (n=275) | Shares the host network namespace with a container. |
+| `docker.pid-host` | privilege | high | 0.00 % (n=275) | Shares the host PID namespace with a container. |
+| `privilege.sudo` | privilege | high | 0.00 % (n=275) | Elevates to root with sudo. |
+| `privilege.doas` | privilege | high | 0.00 % (n=275) | Elevates privileges with doas. |
+| `privilege.setuid` | privilege | high | 0.00 % (n=275) | Sets the setuid/setgid bit. |
+| `destroy.rm-rf-root` | destroy | critical | 0.00 % (n=275) | Recursively deletes a filesystem root or home directory. |
+| `destroy.no-preserve-root` | destroy | critical | 0.00 % (n=275) | rm with --no-preserve-root (removes protection against deleting /). |
+| `destroy.dd-disk` | destroy | critical | 0.00 % (n=275) | dd writes directly to a block device (data destruction). |
+| `destroy.mkfs` | destroy | critical | 0.00 % (n=275) | Formats a block device (data destruction). |
+| `destroy.fork-bomb` | destroy | critical | 0.00 % (n=275) | Shell fork bomb (resource exhaustion). |
+| `destroy.windows-format` | destroy | high | 0.00 % (n=275) | Formats/wipes a Windows volume. |
+| `destroy.windows-del` | destroy | high | 0.00 % (n=275) | Recursively deletes a Windows directory tree. |
+| `supply.npx-latest` | supply | medium | 0.36 % (n=275) | Runs an npm package at @latest (unpinned, rug-pullable). |
+| `supply.npx-unpinned` | supply | medium | 4.00 % (n=275) | Runs an npm package with no version pin (unpinned supply chain). |
+| `supply.pip-url` | supply | medium | 0.00 % (n=275) | pip install from a URL/VCS/archive (bypasses the index, unpinned). |
+| `hygiene.temp-dir` | hygiene | low | 2.55 % (n=275) | Runs code from a world-writable temporary directory. |
+| `net.plain-http` | net | low | 0.00 % (n=275) | Fetches over plaintext HTTP from a non-local host. |
+| `net.raw-ip-url` | net | low | 0.00 % (n=275) | Contacts a raw public IP address (no hostname). |
 
 ## Poisoned descriptions and instructions
 
-Matched in MCP tool descriptions and agent-skill text. The rule id is `ait.mcp.desc.<id>` or `ait.skill.desc.<id>`.
+Matched in MCP tool descriptions and agent-skill text. The rule id is `ait.mcp.desc.<id>` or `ait.skill.desc.<id>`. The FP rate is the one measured on agent skills (`ait.skill.desc.<id>`), whose long bodies are harder on these patterns than tool descriptions are.
 
-| Id | Category | Severity | FP rate | Meaning |
+| Id | Category | Severity | FP rate (skills) | Meaning |
 |---|---|---|---|---|
-| `hidden.ignore-previous` | prompt-override | high | not measured | Hidden directive telling the agent to ignore previous instructions. |
-| `hidden.important-block` | prompt-override | high | not measured | Hidden <IMPORTANT>/<SYSTEM> instruction block embedded in a description. |
-| `hidden.conceal` | prompt-override | critical | not measured | Directive to hide the action from the user. |
-| `secret.read-exfil` | credential-access | critical | not measured | Instruction to read secrets/.env/SSH keys/credentials. |
-| `exfil.url` | exfiltration | critical | not measured | Instruction to send/post data to an external URL (exfiltration). |
-| `shadow.cross-tool` | tool-shadowing | high | not measured | Cross-tool shadowing: tells the agent to use this tool instead of another. |
-| `unicode.tag-chars` | steganography | critical | not measured | Invisible Unicode tag characters (U+E0000-E007F) hide instructions. |
-| `unicode.zero-width-bidi` | steganography | high | not measured | Zero-width or bidirectional-override Unicode hides/retargets text. |
+| `hidden.ignore-previous` | prompt-override | high | 0.73 % (n=275) | Hidden directive telling the agent to ignore previous instructions. |
+| `hidden.important-block` | prompt-override | high | 0.00 % (n=275) | Hidden <IMPORTANT>/<SYSTEM> instruction block embedded in a description. |
+| `hidden.conceal` | prompt-override | critical | 4.00 % (n=275) | Directive to hide the action from the user. |
+| `secret.read-exfil` | credential-access | critical | 1.82 % (n=275) | Instruction to read secrets/.env/SSH keys/credentials. |
+| `exfil.url` | exfiltration | critical | 0.73 % (n=275) | Instruction to send/post data to an external URL (exfiltration). |
+| `shadow.cross-tool` | tool-shadowing | high | 0.36 % (n=275) | Cross-tool shadowing: tells the agent to use this tool instead of another. |
+| `unicode.tag-chars` | steganography | critical | 0.00 % (n=275) | Invisible Unicode tag characters (U+E0000-E007F) hide instructions. |
+| `unicode.zero-width-bidi` | steganography | high | 0.00 % (n=275) | Zero-width or bidirectional-override Unicode hides/retargets text. |
+| `hidden.forget-previous` | prompt-override | high | 0.00 % (n=275) | Directive to disregard or override the agent's earlier instructions or guardrails. |
+| `hidden.chat-template` | prompt-override | medium | 0.00 % (n=275) | Chat-template control tokens that forge a system or user turn inside the text (documentation of model formats shows them too). |
+| `hidden.self-conceal` | prompt-override | high | 0.00 % (n=275) | Directive to keep the instructions themselves, or what the agent does, out of its answer. |
+| `hidden.agent-addressed` | prompt-override | medium | 0.00 % (n=275) | Text addressed to the AI reading it rather than to a human reader. |
+| `shadow.precedence` | tool-shadowing | high | 0.00 % (n=275) | Claims precedence over other tools so the agent calls this one first. |
+| `exfil.context-smuggle` | exfiltration | critical | 0.00 % (n=275) | Instruction to smuggle the conversation or the system prompt out through a tool argument. |
+| `exfil.markdown-image` | exfiltration | critical | 0.00 % (n=275) | Image link whose URL has a slot for the agent to fill: data leaves when the image is rendered. |
+| `exfil.system-prompt` | exfiltration | high | 0.00 % (n=275) | Instruction to disclose the agent's system prompt or hidden instructions. |
+| `secret.agent-config` | credential-access | high | 0.00 % (n=275) | Instruction to read another agent's MCP config or a credential store (git, Docker, Kubernetes, PyPI, browser). |
+| `persistence.auto-approve` | permission-escalation | medium | 0.00 % (n=275) | Directive to switch off the agent's confirmation prompts or act without the user's approval. |
+| `unicode.mixed-script` | steganography | medium | 0.00 % (n=275) | A word that mixes Latin and Cyrillic letters (homoglyphs): it reads as one name and is another. |
+| `obfuscation.base64-blob` | steganography | medium | 0.00 % (n=275) | A long base64 blob: content a reviewer cannot read but the agent can decode. |
 
 ## Coverage
 
