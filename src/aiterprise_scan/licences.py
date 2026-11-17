@@ -23,7 +23,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
-from . import data, miniyaml, sources
+from . import data, miniyaml, scancache, sources
 from .callargs import KWARG_RE as _KWARG_RE
 from .callargs import call_args as _call_args
 from .callargs import line_at as _line_at
@@ -360,12 +360,8 @@ def _valid_id(value: str, root: Path | None, *, allow_single: bool, dataset: boo
             return False
         if low.startswith(_LOCAL_PREFIXES):
             return False
-    if root is not None:
-        try:
-            if (root / v).exists():
-                return False  # it is a local path that happens to look like an id
-        except OSError:
-            pass
+    if root is not None and _is_local_dir(root, v):
+        return False  # it is a local path that happens to look like an id
     return True
 
 
@@ -600,6 +596,24 @@ def _card_component(path: Path, root: Path, text: str) -> Component | None:
     )
 
 
+def _file_refs(text: str, variant: str) -> list[list]:
+    """A file's references as [hf_id, repo_type, line, revision, in code], before the check that
+    an id in code is not a folder of the scanned tree: that check reads the disk, so it is made
+    on every scan, while this list is kept between scans (`scancache`). `variant`: "py", "js" or
+    "" (a text file: links only)."""
+    refs = [[r.hf_id, r.repo_type, r.line, r.revision, True]
+            for r in (_scan_calls(text, None, python=variant == "py") if variant else [])]
+    return refs + [[r.hf_id, r.repo_type, r.line, r.revision, False] for r in _scan_urls(text)]
+
+
+def _is_local_dir(root: Path, value: str) -> bool:
+    """`_valid_id`'s last check, the only one that reads the disk."""
+    try:
+        return (root / value).exists()
+    except OSError:
+        return False
+
+
 def discover_model_refs(root: Path, files: list[Path]) -> list[Component]:
     """Hugging Face model / dataset references and local model / dataset cards."""
     root = Path(root)
@@ -633,13 +647,14 @@ def discover_model_refs(root: Path, files: list[Path]) -> list[Component]:
         except (OSError, TooLarge):
             continue
         rel = rel_posix(path, root)
-        refs: list[_Ref] = []
         source = "code-ref"
-        if is_py or is_js:
-            refs += _scan_calls(text, root, python=is_py)
-        elif is_nb:
-            refs += _notebook_refs(text, root)
-        refs += _scan_urls(text)
+        if is_nb:  # a notebook's lines depend on which references the folder check keeps: not kept
+            refs = _notebook_refs(text, root) + _scan_urls(text)
+        else:
+            mode = "py" if is_py else "js" if is_js else ""
+            kept = scancache.memo("model-refs", text, lambda t: _file_refs(t, mode), variant=mode)
+            refs = [_Ref(hf_id, repo_type, line, revision) for hf_id, repo_type, line, revision, in_code in kept
+                    if not (in_code and _is_local_dir(root, hf_id))]
         for ref in refs:
             if ref.repo_type == "dataset":
                 comp = Component(

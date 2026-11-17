@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from . import data, taxonomy
+from . import data, scancache, taxonomy
 from .callargs import commented as _commented, line_at, literal_args
 from .model import Component, Location
 from .textio import TooLarge, read_text
@@ -205,16 +205,55 @@ def _is_docker(name: str) -> bool:
     return low == "dockerfile" or low.startswith("dockerfile.") or low.endswith(".dockerfile")
 
 
+class _Recorder:
+    """What `_scan_text` finds in one file, as `_Found` calls with line numbers for locations: kept
+    between scans by `scancache` and replayed with the file's path (`_replay`)."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[Any]] = []
+
+    def add(self, ctype: str, name: str, loc: Location, how: str, source: str, version: str | None = None,
+            **props: Any) -> None:
+        self.calls.append(["add", ctype, name, loc.line, how, source, version, props])
+
+    def endpoint(self, value: str, loc: Location, how: str, source: str, fallback: str | None) -> None:
+        self.calls.append(["endpoint", value, loc.line, how, source, fallback])
+
+
+def _record(text: str, name: str) -> list[list[Any]]:
+    rec = _Recorder()
+    _scan_text(rec, text, "", name)
+    return rec.calls
+
+
+def _replay(found: _Found, call: list[Any], rel: str) -> None:
+    if call[0] == "add":
+        _, ctype, name, line, how, source, version, props = call
+        found.add(ctype, name, Location(rel, line), how, source, version, **props)
+    else:
+        _, value, line, how, source, fallback = call
+        found.endpoint(value, Location(rel, line), how, source, fallback)
+
+
 def _scan_file(found: _Found, path: Path, rel: str) -> None:
     name, suffix = path.name, path.suffix.lower()
-    docker = _is_docker(name)
     code = suffix in _PY or suffix in _JS or suffix in _OTHER_CODE
-    if not (code or docker or suffix in _CONFIG or name.lower().startswith(".env")) or name in _LOCKFILES:
+    if not (code or _is_docker(name) or suffix in _CONFIG or name.lower().startswith(".env")) or name in _LOCKFILES:
         return
     try:
         text = read_text(path, max_bytes=MAX_BYTES)
     except (OSError, TooLarge):
         return
+    # what a file holds depends on its text and its name (a Dockerfile, a suffix); an unchanged
+    # file's calls come from the last scan
+    for call in scancache.memo("services", text, lambda t: _record(t, name), variant=name):
+        _replay(found, call, rel)
+
+
+def _scan_text(found: _Found | _Recorder, text: str, rel: str, name: str) -> None:
+    suffix = Path(name).suffix.lower()
+    docker = _is_docker(name)
+    code = suffix in _PY or suffix in _JS or suffix in _OTHER_CODE
     env_labels = _spec()["ai_endpoints"]["env"]
     source = "code-ref" if code else "config"
     if "://" in text:
@@ -249,7 +288,7 @@ def _scan_file(found: _Found, path: Path, rel: str) -> None:
                           image=m.group(1))
 
 
-def _store_clients(found: _Found, text: str, rel: str) -> None:
+def _store_clients(found: _Found | _Recorder, text: str, rel: str) -> None:
     lowered = text.lower()
     for pattern, call in _store_calls():
         if call["uses"] not in lowered:

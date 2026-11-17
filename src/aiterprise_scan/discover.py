@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, NamedTuple
 
-from . import miniyaml, taxonomy, textio
+from . import miniyaml, scancache, taxonomy, textio
 from .model import Component, Finding, Location, normalize_name, not_analysable
 from .walk import rel_posix
 
@@ -123,11 +123,11 @@ def discover_imports(root: Path, files: list[Path]) -> list[Component]:
         path = Path(path)
         suffix = path.suffix.lower()
         if suffix in _PY_SUFFIXES:
-            extract = lambda text: _python_hits(text, imap, words)  # noqa: E731
+            kind, extract = "imports.py", lambda text: _python_hits(text, imap, words)  # noqa: E731
         elif suffix == ".ipynb":
-            extract = lambda text: _notebook_hits(text, imap)  # noqa: E731
+            kind, extract = "imports.ipynb", lambda text: _notebook_hits(text, imap)  # noqa: E731
         elif suffix in _JS_SUFFIXES:
-            extract = _js_hits
+            kind, extract = "imports.js", _js_hits
         else:
             continue
         try:
@@ -135,7 +135,7 @@ def discover_imports(root: Path, files: list[Path]) -> list[Component]:
         except (OSError, textio.TooLarge):
             continue
         try:
-            hits = extract(text)
+            hits = scancache.memo(kind, text, extract)  # an unchanged file's hits from the last scan
         except Exception:  # hostile / broken source never stops discovery
             continue
         rel = _rel(path, root)
