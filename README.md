@@ -150,6 +150,11 @@ pre-commit:
   hooks: [{ id: aiterprise-scan }]
 ```
 
+The hook scans the whole repository on every commit, so a re-scan takes an unchanged file's
+results from the last scan (kept under the file's SHA-256 in `~/.aiterprise/cache/scan`;
+`--no-cache` turns this off). On the 10,000-file benchmark tree a re-scan takes 4.4 s against 49.8 s
+for the first scan (Windows, Python 3.11); CI fails if a re-scan takes over 10 s.
+
 GitLab CI (findings in the merge request's Code Quality widget) and VS Code / Cursor tasks (findings in the
 Problems panel): templates in [`templates/`](templates/), described in [Editors and CI](docs/integrations.md).
 
@@ -177,7 +182,7 @@ MCP: `aiterprise-scan mcp serve` exposes `scan_ai_supply_chain` to any MCP clien
 python -m venv .venv && .venv/bin/pip install -e .
 PYTHONPATH=src python -m unittest discover -s tests -p "test_*.py"
 python tools/killer_demo.py            # the five-problem acceptance demo; exit 0 only if all five hit
-python tools/bench_scan.py --check 60  # cold scan of a 10,000-file monorepo against the 60 s target
+python tools/bench_scan.py --check 60 --check-warm 10  # a 10,000-file monorepo: cold scan against 60 s, re-scan against 10 s
 python tools/bench_models.py --check   # 2 GiB safetensors, 1 GiB PyTorch zip and pickle against their budgets (4 GiB of disk)
 python tools/build_malicious.py --zip PyPI-all.zip --zip npm-all.zip --replace   # refresh the MAL snapshot
 python tools/build_vuln_subset.py --zip PyPI-all.zip --zip npm-all.zip           # refresh the AI advisory subset
