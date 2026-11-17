@@ -378,7 +378,7 @@ class PolicyTests(unittest.TestCase):
     def test_deny_packages_and_ranges(self):
         p = pol.parse_policy({"deny_packages": ["pkg:pypi/litellm@1.82.7", "pkg:npm/axios@>=1.14.0"]})
         comps = [lib("litellm", "1.82.7"), lib("litellm", "1.83.0"), lib("axios", "1.14.1", eco="npm")]
-        fs = pol.denied_package_findings(comps, p)
+        fs = pol.package_policy_findings(comps, p)
         self.assertEqual(sorted(f.component.display for f in fs), ["pkg:npm/axios@1.14.1", "pkg:pypi/litellm@1.82.7"])
 
     def test_fail_on_threshold(self):

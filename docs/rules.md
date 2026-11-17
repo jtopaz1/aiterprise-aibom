@@ -78,6 +78,8 @@ Severities are defaults; `aibom.policy.yaml` decides which ones fail the build (
 | Rule | Severity | FP rate | Meaning |
 |---|---|---|---|
 | `ait.policy.denied-package` | high | not measured | Matches `deny_packages` in the policy. |
+| `ait.policy.denied-licence` | high | not measured | A package's licence matches `deny_package_licences` in the policy (with OR, only when every choice does). |
+| `ait.policy.licence-not-allowed` | medium | not measured | A package's licence cannot be met from `allow_package_licences` in the policy. |
 
 ## Third-party providers (your own key)
 

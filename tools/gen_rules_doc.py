@@ -71,6 +71,8 @@ CODE_RULES: dict[str, list[tuple[str, str, str]]] = {
     ],
     "Policy": [
         ("ait.policy.denied-package", "high", "Matches `deny_packages` in the policy."),
+        ("ait.policy.denied-licence", "high", "A package's licence matches `deny_package_licences` in the policy (with OR, only when every choice does)."),
+        ("ait.policy.licence-not-allowed", "medium", "A package's licence cannot be met from `allow_package_licences` in the policy."),
     ],
     # Not AIterprise rules: a provider's own result, shown under `ext.<provider>.*` and never
     # measured or tuned here, so the FP column always reads "not measured".

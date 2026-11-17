@@ -11,6 +11,8 @@
     deny_packages: ["pkg:pypi/litellm@1.82.7"]
     allow_model_licences: [mit, apache-2.0, llama3]
     deny_model_licences: [cc-by-nc-4.0]
+    allow_package_licences: [mit, apache-2.0, bsd-*, isc]
+    deny_package_licences: [agpl-3.0, sspl-1.0]
     suppressions:                    # expiry mandatory
       - finding: 1a2b3c4d5e6f7a8b    # fingerprint, advisory id, or rule id
         until: 2027-06-30
@@ -54,7 +56,8 @@ POLICY_FILENAMES = ("aibom.policy.yaml", "aibom.policy.yml", "aibom.policy.json"
 USE_CONTEXTS = ("commercial", "internal", "research", "non-profit")
 KNOWN_KEYS = {
     "version", "use_context", "fail_on", "ignore", "allow_packages", "deny_packages",
-    "allow_model_licences", "deny_model_licences", "suppressions", "baseline",
+    "allow_model_licences", "deny_model_licences", "allow_package_licences", "deny_package_licences",
+    "suppressions", "baseline",
 }
 NEVER_AUTO_SILENCED = {"ait.pkg.malicious"}
 SNYK_DEFAULT_DAYS = 30
@@ -205,6 +208,8 @@ class Policy:
     deny_packages: list[PackagePattern] = field(default_factory=list)
     allow_model_licences: list[str] = field(default_factory=list)
     deny_model_licences: list[str] = field(default_factory=list)
+    allow_package_licences: list[str] = field(default_factory=list)
+    deny_package_licences: list[str] = field(default_factory=list)
     suppressions: list[Suppression] = field(default_factory=list)
     baseline: str | None = None
     errors: list[str] = field(default_factory=list)
@@ -274,7 +279,7 @@ def parse_policy(doc: Any, path: str | None = None) -> Policy:
                 getattr(pol, key).append(PackagePattern.parse(raw))
             except ValueError as err:
                 pol.errors.append(f"{key}: {err}")
-    for key in ("allow_model_licences", "deny_model_licences"):
+    for key in ("allow_model_licences", "deny_model_licences", "allow_package_licences", "deny_package_licences"):
         setattr(pol, key, [str(x).lower() for x in _as_list(doc.get(key), key, pol.errors)])
     for i, item in enumerate(_as_list(doc.get("suppressions"), "suppressions", pol.errors)):
         if not isinstance(item, dict):
@@ -437,13 +442,164 @@ def load_baseline(path: Path) -> set[str]:
 # Application
 # --------------------------------------------------------------------------------------------
 
-def denied_package_findings(components: list[Component], policy: Policy, result=None) -> list[Finding]:
-    """A finding for each component the policy's deny list names. Given a `result`, records the
-    coverage; a policy without a deny list is not a consulted source."""
-    if not policy.deny_packages:
+def package_policy_findings(components: list[Component], policy: Policy, result=None) -> list[Finding]:
+    """The policy's package rules: `deny_packages`, and each package's licence against
+    `deny_package_licences` and `allow_package_licences`. Given a `result`, records the coverage once
+    for all of them; a policy with none of these lists is not a consulted source."""
+    if not (policy.deny_packages or policy.deny_package_licences or policy.allow_package_licences):
         return []
-    out = _denied(components, policy)
+    out = _denied(components, policy) if policy.deny_packages else []
+    out += _licence_findings(components, policy, result)
     sources.count(result, sources.POLICY, (c for c in components if c.ctype == "library"), out)
+    return out
+
+
+# --------------------------------------------------------------------------------------------
+# Package licences: SPDX expressions against the allow and deny lists
+# --------------------------------------------------------------------------------------------
+
+_SPDX_TOKEN = re.compile(r"\(|\)|[^\s()]+")
+_SPDX_OPS = ("AND", "OR", "WITH")
+
+
+def _spdx_tree(expr: str) -> tuple:
+    """`("id", text)`, `("with", licence, exception)`, `("and", [...])` or `("or", [...])`. Text that
+    is not an SPDX expression ("SEE LICENSE IN LICENSE.md") is one id: it matches only itself."""
+    tokens = _SPDX_TOKEN.findall(expr)
+    pos = 0
+
+    def peek() -> str | None:
+        return tokens[pos].upper() if pos < len(tokens) else None
+
+    def take() -> str:
+        nonlocal pos
+        pos += 1
+        return tokens[pos - 1]
+
+    def parse(op: str) -> tuple:  # OR binds loosest, then AND
+        parts = [parse("AND") if op == "OR" else parse_with()]
+        while peek() == op:
+            take()
+            parts.append(parse("AND") if op == "OR" else parse_with())
+        return parts[0] if len(parts) == 1 else (op.lower(), parts)
+
+    def parse_with() -> tuple:
+        node = parse_atom()
+        if peek() != "WITH":
+            return node
+        take()
+        if node[0] != "id" or peek() in (None, "(", ")", *_SPDX_OPS):
+            raise ValueError
+        return ("with", node[1], take())
+
+    def parse_atom() -> tuple:
+        tok = peek()
+        if tok in (None, ")", *_SPDX_OPS):
+            raise ValueError
+        take()
+        if tok != "(":
+            return ("id", tokens[pos - 1])
+        node = parse("OR")
+        if peek() != ")":
+            raise ValueError
+        take()
+        return node
+
+    try:
+        tree = parse("OR")
+        if pos != len(tokens):
+            raise ValueError
+        return tree
+    except ValueError:
+        return ("id", expr.strip())
+
+
+def _canon_licence(value: str) -> str:
+    text = " ".join(value.lower().split())
+    return text[:-1] + "-or-later" if text.endswith("+") else text
+
+
+def _licence_matches(licence: str, pattern: str) -> bool:
+    """A policy entry is a glob (`gpl-*`); a bare family (`gpl-3.0`) covers its `-only` and
+    `-or-later` ids, and `gpl-3.0-only` covers the deprecated bare `GPL-3.0`. Case is ignored."""
+    lic, pat = _canon_licence(licence), _canon_licence(pattern)
+    return (fnmatch.fnmatchcase(lic, pat) or re.sub(r"-(only|or-later)$", "", lic) == pat
+            or pat == lic + "-only")
+
+
+def _leaf_texts(node: tuple) -> list[str]:
+    """What a leaf can be matched as: the licence, and with an exception also the whole phrase."""
+    return [node[1]] if node[0] == "id" else [f"{node[1]} WITH {node[2]}", node[1]]
+
+
+def _denied_by(node: tuple, deny: list[str]) -> str | None:
+    """The deny entry every way of meeting the expression runs into; None if one way avoids them."""
+    if node[0] in ("id", "with"):
+        return next((p for text in _leaf_texts(node) for p in deny if _licence_matches(text, p)), None)
+    hits = [_denied_by(child, deny) for child in node[1]]
+    if node[0] == "and":
+        return next((h for h in hits if h), None)
+    return hits[0] if all(hits) else None  # OR: a choice, denied only if every choice is
+
+
+def _allowed_by(node: tuple, allow: list[str]) -> bool:
+    if node[0] in ("id", "with"):
+        return any(_licence_matches(text, p) for text in _leaf_texts(node) for p in allow)
+    results = [_allowed_by(child, allow) for child in node[1]]
+    return all(results) if node[0] == "and" else any(results)
+
+
+def licence_verdict(expr: str, allow: list[str], deny: list[str]) -> tuple[str | None, str | None]:
+    """`("denied", entry)`, `("not-allowed", None)` or `(None, None)` for one package licence. OR
+    is a choice (one acceptable licence is enough), AND needs every part; denied wins."""
+    tree = _spdx_tree(expr)
+    if deny:
+        hit = _denied_by(tree, deny)
+        if hit:
+            return "denied", hit
+    if allow and not _allowed_by(tree, allow):
+        return "not-allowed", None
+    return None, None
+
+
+def _licence_findings(components: list[Component], policy: Policy, result=None) -> list[Finding]:
+    allow, deny = policy.allow_package_licences, policy.deny_package_licences
+    if not (allow or deny):
+        return []
+    out: list[Finding] = []
+    unknown: list[str] = []
+    for comp in components:
+        if comp.ctype != "library":
+            continue
+        if not comp.licence:
+            unknown.append(comp.name)
+            continue
+        kind, entry = licence_verdict(comp.licence, allow, deny)
+        if kind == "denied":
+            out.append(Finding(
+                rule_id="ait.policy.denied-licence",
+                title=f"Package licence denied by policy: {comp.licence} (matches {entry})",
+                severity="high", verdict="suspicious", confidence=90, component=comp,
+                evidence=[Evidence("policy", entry, None, {"policy": policy.path, "list": "deny_package_licences",
+                                                           "matched": entry, "licence": comp.licence})],
+                remediation="Replace the package, or change the policy with a reviewed exception.",
+                maps_to=[OWASP_SUPPLY_CHAIN],
+            ))
+        elif kind == "not-allowed":
+            out.append(Finding(
+                rule_id="ait.policy.licence-not-allowed",
+                title=f"Package licence not in allow_package_licences: {comp.licence}",
+                severity="medium", verdict="suspicious", confidence=90, component=comp,
+                evidence=[Evidence("policy", "allow_package_licences", None,
+                                   {"policy": policy.path, "list": "allow_package_licences", "licence": comp.licence})],
+                remediation="Check the licence's terms; add it to allow_package_licences if acceptable, or replace "
+                            "the package.",
+                maps_to=[OWASP_SUPPLY_CHAIN],
+            ))
+    if allow and unknown and result is not None:
+        names = list(dict.fromkeys(unknown))
+        result.notes.append(f"policy: {len(names)} package(s) have no known licence, so allow_package_licences could "
+                            "not be checked for them: " + ", ".join(names[:5]) + (" …" if len(names) > 5 else ""))
     return out
 
 
