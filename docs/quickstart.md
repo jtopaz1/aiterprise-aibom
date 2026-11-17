@@ -84,5 +84,7 @@ aiterprise-scan . --baseline .aiterprise/baseline.json
 `python tools/killer_demo.py` builds a small repository with five planted problems — the
 compromised `litellm 1.82.7`, `transformers 4.44.0` with a known CVE, a `model.pt` whose pickle
 runs a shell command, an MCP server with a poisoned tool description, and a Llama 3 model under its
-conditional licence — and passes only if one offline scan finds all five and exits 1. CI runs it on
-every push; the release runs it against the container image and every binary.
+conditional licence — and passes only if one offline scan finds all five and exits 1. With
+`--online` the scan also asks OSV and the package registries, and the demo fails unless the report
+shows they answered. CI runs both on every push; the release runs it against the container image and
+every binary.
