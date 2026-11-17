@@ -100,6 +100,7 @@ ignore:
 allow_packages: ["pkg:pypi/openai@>=1.40"]
 deny_packages: ["pkg:pypi/litellm@1.82.7"]
 deny_model_licences: [cc-by-nc-4.0]
+deny_package_licences: [agpl-3.0]   # SPDX: "MIT OR AGPL-3.0-only" passes, "MIT AND AGPL-3.0-only" does not
 suppressions:                    # expiry is mandatory
   - finding: 1a2b3c4d5e6f7a8b    # fingerprint, advisory id or rule id
     until: 2027-06-30
