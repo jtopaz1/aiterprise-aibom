@@ -164,7 +164,7 @@ jobs:
         with:
           path: kd
           offline: "true"
-          upload-sarif: "false"   # code scanning is not available to this private repository
+          upload-sarif: "false"   # the planted problems must not become code-scanning alerts on this repository
       - name: The gate failed with exit code 1 and the three reports were written
         env:
           OUTCOME: ${{ steps.bad.outcome }}

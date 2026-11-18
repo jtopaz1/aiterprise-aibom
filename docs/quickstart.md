@@ -6,11 +6,6 @@
 pipx install aiterprise-scan          # or: pip install aiterprise-scan
 ```
 
-!!! note "Not released yet"
-    Nothing is published so far, so the command above and the other ways below work from the first
-    tagged release. Until then, install from a checkout of the repository with `pip install .`
-    (see [Implementation status](STATUS.md)).
-
 Other ways, all from the same release:
 
 - a single-file binary for Linux, macOS or Windows (x86-64 or arm64) from the GitHub release (each file has a
@@ -68,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jtopaz1/aiterprise-aibom/action@main
+      - uses: jtopaz1/aiterprise-aibom/action@v0.1.0
         with:
           fail-on: high
           api-key: ${{ secrets.AITERPRISE_API_KEY }}   # optional: SecDB judgements
@@ -85,7 +80,7 @@ pre-commit:
 
 ```yaml
 - repo: https://github.com/jtopaz1/aiterprise-aibom
-  rev: main
+  rev: v0.1.0
   hooks: [{ id: aiterprise-scan }]
 ```
 

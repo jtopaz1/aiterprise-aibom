@@ -2,6 +2,11 @@
 
 <!-- mcp-name: io.github.jtopaz1/aiterprise-scan -->
 
+[![CI](https://github.com/jtopaz1/aiterprise-aibom/actions/workflows/ci.yml/badge.svg)](https://github.com/jtopaz1/aiterprise-aibom/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/aiterprise-scan)](https://pypi.org/project/aiterprise-scan/)
+[![Python](https://img.shields.io/pypi/pyversions/aiterprise-scan)](https://pypi.org/project/aiterprise-scan/)
+[![Licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue)](https://github.com/jtopaz1/aiterprise-aibom/blob/main/LICENSE)
+
 The open-source AI supply-chain scanner you can run offline: an AI-BOM with teeth. One command walks
 a repository, a model file, a package archive, an agent configuration or a third-party AI-BOM,
 inventories every AI component, and judges it — every finding carries its evidence, what was
@@ -12,10 +17,6 @@ pipx install aiterprise-scan        # or: pip install .   · or a single-file bi
 aiterprise-scan .                   # scan the current repository
 aiterprise-scan ui                  # local web UI: history, findings, diff, suppressions
 ```
-
-> **Not released yet.** Nothing is published so far: `pipx install aiterprise-scan`, the binaries and
-> the container image arrive with the first tagged release ([RELEASING.md](https://github.com/jtopaz1/aiterprise-aibom/blob/main/RELEASING.md)). Until then,
-> install from a checkout with `pip install .`.
 
 Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ · docs in [`docs/`](https://github.com/jtopaz1/aiterprise-aibom/blob/main/docs/index.md)
 
@@ -130,7 +131,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jtopaz1/aiterprise-aibom/action@main
+      - uses: jtopaz1/aiterprise-aibom/action@v0.1.0
         with:
           fail-on: high
           api-key: ${{ secrets.AITERPRISE_API_KEY }}   # optional: SecDB judgements
@@ -147,7 +148,7 @@ pre-commit:
 
 ```yaml
 - repo: https://github.com/jtopaz1/aiterprise-aibom
-  rev: main
+  rev: v0.1.0
   hooks: [{ id: aiterprise-scan }]
 ```
 
@@ -159,7 +160,7 @@ for the first scan (Windows, Python 3.11); CI fails if a re-scan takes over 10 s
 GitLab CI (findings in the merge request's Code Quality widget) and VS Code / Cursor tasks (findings in the
 Problems panel): templates in [`templates/`](https://github.com/jtopaz1/aiterprise-aibom/tree/main/templates), described in [Editors and CI](https://github.com/jtopaz1/aiterprise-aibom/blob/main/docs/integrations.md).
 
-Docker (published with the first tagged release): `docker run --rm -v "$PWD:/src" ghcr.io/jtopaz1/aiterprise-scan:latest`
+Docker: `docker run --rm -v "$PWD:/src" ghcr.io/jtopaz1/aiterprise-scan:latest`
 
 MCP: `aiterprise-scan mcp serve` exposes `scan_ai_supply_chain` to any MCP client over stdio
 (registry manifest: [`server.json`](https://github.com/jtopaz1/aiterprise-aibom/blob/main/server.json)).

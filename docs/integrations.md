@@ -49,6 +49,6 @@ the job summary, uploads SARIF to code scanning and gates the build.
 
 ```yaml
 - repo: https://github.com/jtopaz1/aiterprise-aibom
-  rev: main
+  rev: v0.1.0
   hooks: [{ id: aiterprise-scan }]
 ```
