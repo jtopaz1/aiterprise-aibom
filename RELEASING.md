@@ -39,6 +39,17 @@ that only a real tag exercises are signing, the PyPI upload, the ghcr.io push an
    - the PyPI page links into the repository (its README links and the project URLs) and shows the
      demo image from it, so every link and the image are broken for everyone else until it is public.
 
+4. **When it goes public** (Settings, all by the owner; the history was checked on 2026-11-18: no
+   token, password, private key, database URL, local path or real e-mail address in any commit or
+   branch, only the noreply addresses of the committing accounts):
+   - turn on *Private vulnerability reporting* (Security): `SECURITY.md` sends reporters there;
+   - turn on *Secret scanning* and *Push protection*. `tests/test_mcp.py` holds a made-up
+     `sk-proj-` key and `tests/test_secrets.py` AWS's documented example key, both to test redaction;
+     close an alert on either as *used in tests*;
+   - restrict the `pypi` environment to tags `v*` (Environments → Deployment branches and tags);
+   - after the first release, check that the `ghcr.io/jtopaz1/aiterprise-scan` package is public
+     (Packages → Package settings) so `docker run` works without signing in.
+
 ## Each release
 
 1. Set `__version__` in `src/aiterprise_scan/__init__.py`, the two `version` fields in `server.json`,
