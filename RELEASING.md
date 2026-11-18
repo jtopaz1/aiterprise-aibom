@@ -36,14 +36,32 @@ that only a real tag exercises are signing, the PyPI upload, the ghcr.io push an
    - Sigstore signing still writes the repository name, the workflow path and the commit to the
      **public** Rekor transparency log, and the sdist on PyPI is the source code. A release makes the
      code public whatever the repository setting says.
+   - the PyPI page links into the repository (its README links and the project URLs) and shows the
+     demo image from it, so every link and the image are broken for everyone else until it is public.
 
 ## Each release
 
 1. Set `__version__` in `src/aiterprise_scan/__init__.py` and the two `version` fields in `server.json`
    (a test fails if they differ).
-2. Run the checks listed under *Reproduce* in `docs/STATUS.md`.
-3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`. The `dist` job refuses a tag that does not
+2. For the first release, remove the "Not released yet" notes from `README.md`, `docs/index.md` and
+   `docs/quickstart.md` in this same commit. The README is the PyPI description and is frozen at
+   upload; the `dist` job refuses to upload one that still says it is not released.
+3. Run the checks listed under *Reproduce* in `docs/STATUS.md`.
+4. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`. The `dist` job refuses a tag that does not
    match `__version__`.
+
+## What is checked before anything is uploaded
+
+The `dist` job, before the wheel and sdist go anywhere (every pull request runs the same, without
+`--release`):
+
+- `twine check --strict`: the metadata and the README render as PyPI will render them;
+- `tools/check_dist.py dist --release`: exactly one wheel and one sdist of `__version__`; the sdist holds
+  the package, its metadata and the licence files only (no tests: they plant malicious samples on
+  purpose and cannot run without their fixtures), the wheel the package and its `.dist-info` only, no
+  compiled files; both carry every module and every declared data file; the description does not say
+  "Not released yet";
+- the wheel installed into a clean virtual environment, `defs status` and the killer demo.
 
 ## Cannot be undone
 
@@ -51,8 +69,6 @@ that only a real tag exercises are signing, the PyPI upload, the ghcr.io push an
 - Rekor entries are permanent.
 
 ## After the first PyPI release
-
-Remove the "Not released yet" notes from `README.md`, `docs/index.md` and `docs/quickstart.md`.
 
 Publish `server.json` to the MCP registry (`mcp-publisher login github`, then `mcp-publisher publish`).
 The registry checks that the PyPI description carries `mcp-name: io.github.jtopaz1/aiterprise-scan`,

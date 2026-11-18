@@ -1,0 +1,5 @@
+# The sdist carries the package, its metadata and the licence files only (tools/check_dist.py checks it).
+# The tests stay in the repository: without their fixtures they cannot run from an sdist, and the
+# fixtures plant malicious samples on purpose.
+prune tests
+global-exclude *.py[cod]

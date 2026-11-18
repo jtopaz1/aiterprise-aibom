@@ -52,5 +52,61 @@ class McpRegistryManifestTests(unittest.TestCase):
         self.assertLessEqual(len(doc["version"]), 255)
 
 
+class PyPIPageTests(unittest.TestCase):
+    """The README is the PyPI description: PyPI resolves no relative link or image in it."""
+
+    def test_readme_links_and_images_are_absolute(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        targets = re.findall(r"\]\(\s*<?([^)\s>]+)", readme) + re.findall(r"""(?:src|href)\s*=\s*["']([^"']+)""",
+                                                                            readme)
+        relative = [t for t in targets if not re.match(r"(https?://|mailto:|#)", t)]
+        self.assertEqual(relative, [])
+        self.assertTrue(targets, "no links found: the pattern no longer reads the README")
+        # a link into this repository names a file or folder that exists on main
+        repo = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))["repository"]["url"]
+        owner_repo = repo.removeprefix("https://github.com/")
+        ours = [m.group(1) for t in targets
+                for m in [re.match(re.escape(repo) + r"/(?:blob|tree)/main/([^#?]+)", t)
+                          or re.match(r"https://raw\.githubusercontent\.com/" + re.escape(owner_repo) + r"/main/([^#?]+)", t)]
+                if m]
+        self.assertTrue(ours, "no links into the repository found")
+        self.assertEqual([p for p in ours if not (ROOT / p).exists()], [])
+
+
+class PackageMetadataTests(unittest.TestCase):
+    def setUp(self):
+        import tomllib
+
+        self.pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        self.project = self.pyproject["project"]
+
+    def test_the_build_backend_understands_a_licence_expression(self):
+        # PEP 639 (`license = "Apache-2.0"`, `license-files`) is read by setuptools 77 and later only;
+        # an older one refuses the pyproject, so a lower floor lets a packager's build fail
+        if not (isinstance(self.project.get("license"), str) or "license-files" in self.project):
+            self.skipTest("no PEP 639 fields")
+        floors = [re.fullmatch(r"setuptools\s*>=\s*(\d+)(?:\.\d+)*", r) for r in self.pyproject["build-system"]["requires"]]
+        floor = next(int(m.group(1)) for m in floors if m)
+        self.assertGreaterEqual(floor, 77)
+
+    def test_project_urls_point_at_the_repository(self):
+        repo = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))["repository"]["url"]
+        urls = self.project.get("urls", {})
+        self.assertEqual(urls.get("Source"), repo)
+        self.assertEqual(urls.get("Issues"), repo + "/issues")
+        for name, url in urls.items():
+            self.assertTrue(url.startswith(repo + "/") or url == repo, (name, url))
+
+    def test_classifiers_name_only_the_pythons_ci_runs(self):
+        named = sorted(c.rsplit(":: ", 1)[1] for c in self.project["classifiers"]
+                       if re.fullmatch(r"Programming Language :: Python :: 3\.\d+", c))
+        self.assertTrue(named, "no Python version classifiers")
+        floor = re.fullmatch(r">=\s*(3\.\d+)", self.project["requires-python"]).group(1)
+        self.assertEqual(min(named, key=lambda v: int(v.split(".")[1])), floor)
+        ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        for version in named:
+            self.assertIn(f'"{version}"', ci, f"Python {version} is classified but no CI job runs it")
+
+
 if __name__ == "__main__":
     unittest.main()
