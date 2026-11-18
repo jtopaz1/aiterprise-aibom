@@ -14,15 +14,15 @@ aiterprise-scan ui                  # local web UI: history, findings, diff, sup
 ```
 
 > **Not released yet.** Nothing is published so far: `pipx install aiterprise-scan`, the binaries and
-> the container image arrive with the first tagged release ([RELEASING.md](RELEASING.md)). Until then,
+> the container image arrive with the first tagged release ([RELEASING.md](https://github.com/jtopaz1/aiterprise-aibom/blob/main/RELEASING.md)). Until then,
 > install from a checkout with `pip install .`.
 
-Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ · docs in [`docs/`](docs/index.md)
+Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ · docs in [`docs/`](https://github.com/jtopaz1/aiterprise-aibom/blob/main/docs/index.md)
 
-![One offline scan of a repository with five planted problems: a poisoned MCP tool description, a pickle that runs os.system, the malicious litellm 1.82.7, a transformers CVE and the Llama 3 licence's 700M-user clause](docs/assets/killer-demo.svg)
+![One offline scan of a repository with five planted problems: a poisoned MCP tool description, a pickle that runs os.system, the malicious litellm 1.82.7, a transformers CVE and the Llama 3 licence's 700M-user clause](https://raw.githubusercontent.com/jtopaz1/aiterprise-aibom/main/docs/assets/killer-demo.svg)
 
 *One offline scan of a four-file repository with five planted problems, all found
-([`tools/killer_demo.py`](tools/killer_demo.py)); an excerpt of the table report.*
+([`tools/killer_demo.py`](https://github.com/jtopaz1/aiterprise-aibom/blob/main/tools/killer_demo.py)); an excerpt of the table report.*
 
 ## What it finds
 
@@ -37,7 +37,7 @@ Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ 
 | Licences | Model and dataset licence verdicts (Llama, Gemma, OpenRAIL, Mistral, Qwen, DBRX, DeepSeek, Falcon, CC-BY-NC, …) against your `use_context` — advisory, not legal advice; written into the AI-BOM's `licenses[]`. Package licences go there too, from `package-lock.json` offline and from deps.dev online | `ait.licence.*` |
 | Secrets | AI-provider keys in configs and code, reported redacted | `ait.secret.*` |
 | Prompts, endpoints, vector stores | Listed in the AI-BOM, not judged: agent instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, Copilot and Cursor rules, …), sub-agents and their tool grants, prompt templates and hub prompts; the AI APIs the code calls (provider URLs, `OPENAI_BASE_URL` and other endpoint variables, a client's `base_url`); vector stores (Chroma, Qdrant, Milvus, Weaviate, pgvector, LanceDB, FAISS, Pinecone). The text of a prompt is never copied, and credentials are cut from URLs | — |
-| Third-party (your own key) | `--byo virustotal=ENV_VAR`: VirusTotal's verdict on model files and package archives, by SHA-256 only — labelled VirusTotal, never uploaded, cached, sent to SecDB or merged into AIterprise data ([docs](docs/providers.md)) | `ext.virustotal.*` |
+| Third-party (your own key) | `--byo virustotal=ENV_VAR`: VirusTotal's verdict on model files and package archives, by SHA-256 only — labelled VirusTotal, never uploaded, cached, sent to SecDB or merged into AIterprise data ([docs](https://github.com/jtopaz1/aiterprise-aibom/blob/main/docs/providers.md)) | `ext.virustotal.*` |
 
 Inputs: `requirements*.txt`, `pyproject.toml` (PEP 621 + Poetry), `Pipfile(.lock)`, `poetry.lock`,
 `uv.lock`, `environment.yml`, `package.json`, `package-lock.json` v1–v3, `pnpm-lock.yaml`,
@@ -157,12 +157,12 @@ results from the last scan (kept under the file's SHA-256 in `~/.aiterprise/cach
 for the first scan (Windows, Python 3.11); CI fails if a re-scan takes over 10 s.
 
 GitLab CI (findings in the merge request's Code Quality widget) and VS Code / Cursor tasks (findings in the
-Problems panel): templates in [`templates/`](templates/), described in [Editors and CI](docs/integrations.md).
+Problems panel): templates in [`templates/`](https://github.com/jtopaz1/aiterprise-aibom/tree/main/templates), described in [Editors and CI](https://github.com/jtopaz1/aiterprise-aibom/blob/main/docs/integrations.md).
 
 Docker (published with the first tagged release): `docker run --rm -v "$PWD:/src" ghcr.io/jtopaz1/aiterprise-scan:latest`
 
 MCP: `aiterprise-scan mcp serve` exposes `scan_ai_supply_chain` to any MCP client over stdio
-(registry manifest: [`server.json`](server.json)).
+(registry manifest: [`server.json`](https://github.com/jtopaz1/aiterprise-aibom/blob/main/server.json)).
 
 ## Principles
 
@@ -175,7 +175,7 @@ MCP: `aiterprise-scan mcp serve` exposes `scan_ai_supply_chain` to any MCP clien
   many items had data; unverified checks are reported as unverified, never as safe.
 - **No invented numbers.** A rule shows a false-positive rate only after it was measured on a
   corpus (`tools/measure_fp.py`); otherwise `fp_rate_measured: null`. The corpora and their limits:
-  [docs/fp-methodology.md](docs/fp-methodology.md).
+  [docs/fp-methodology.md](https://github.com/jtopaz1/aiterprise-aibom/blob/main/docs/fp-methodology.md).
 
 ## Development
 
@@ -192,8 +192,8 @@ python tools/build_kev.py --url                                                 
 python tools/check_licences.py                                                   # release licence check
 ```
 
-Contributing (DCO sign-off, how a detection rule is accepted): [CONTRIBUTING.md](CONTRIBUTING.md).
-Reporting a vulnerability and the disclosure policy: [SECURITY.md](SECURITY.md).
-What is built, what is not, and the data provenance: [docs/STATUS.md](docs/STATUS.md).
-The project's own terms (scan, gated scan, gate, policy root, source, report document): [GLOSSARY.md](GLOSSARY.md).
+Contributing (DCO sign-off, how a detection rule is accepted): [CONTRIBUTING.md](https://github.com/jtopaz1/aiterprise-aibom/blob/main/CONTRIBUTING.md).
+Reporting a vulnerability and the disclosure policy: [SECURITY.md](https://github.com/jtopaz1/aiterprise-aibom/blob/main/SECURITY.md).
+What is built, what is not, and the data provenance: [docs/STATUS.md](https://github.com/jtopaz1/aiterprise-aibom/blob/main/docs/STATUS.md).
+The project's own terms (scan, gated scan, gate, policy root, source, report document): [GLOSSARY.md](https://github.com/jtopaz1/aiterprise-aibom/blob/main/GLOSSARY.md).
 Design of record: `aiterprise-doc/13-APP-AIBOM.md` (AI2).
