@@ -73,6 +73,33 @@ class PyPIPageTests(unittest.TestCase):
         self.assertEqual([p for p in ours if not (ROOT / p).exists()], [])
 
 
+class ReleasedDocsTests(unittest.TestCase):
+    """What the docs tell people to install and pin matches the version being released."""
+
+    DOCS = ("README.md", "docs/index.md", "docs/quickstart.md", "docs/integrations.md")
+
+    def _read(self, name):
+        return (ROOT / name).read_text(encoding="utf-8")
+
+    def test_the_action_and_the_hook_are_pinned_to_this_release(self):
+        from aiterprise_scan import __version__
+
+        pins = []
+        for name in self.DOCS:
+            text = self._read(name)
+            pins += [(name, "action", m) for m in re.findall(r"uses:\s*jtopaz1/aiterprise-aibom/action@(\S+)", text)]
+            hook = re.findall(r"repo:\s*https://github\.com/jtopaz1/aiterprise-aibom\s*\n\s*rev:\s*(\S+)", text)
+            pins += [(name, "pre-commit", m) for m in hook]
+        self.assertGreaterEqual(len([p for p in pins if p[1] == "action"]), 2, pins)
+        self.assertGreaterEqual(len([p for p in pins if p[1] == "pre-commit"]), 3, pins)
+        self.assertEqual([p for p in pins if p[2] != f"v{__version__}"], [])
+
+    def test_the_docs_no_longer_say_it_is_unreleased(self):
+        for name in self.DOCS:
+            text = self._read(name)
+            self.assertNotRegex(text, r"(?i)not released yet|nothing is published|with the first tagged release", name)
+
+
 class DistChecksRunTests(unittest.TestCase):
     """What PyPI gets is checked on every pull request, and again by the release before the upload."""
 

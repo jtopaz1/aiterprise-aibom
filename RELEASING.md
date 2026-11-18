@@ -41,8 +41,9 @@ that only a real tag exercises are signing, the PyPI upload, the ghcr.io push an
 
 ## Each release
 
-1. Set `__version__` in `src/aiterprise_scan/__init__.py` and the two `version` fields in `server.json`
-   (a test fails if they differ).
+1. Set `__version__` in `src/aiterprise_scan/__init__.py`, the two `version` fields in `server.json`,
+   and the pins the docs tell people to use: `action@vX.Y.Z` and the pre-commit `rev: vX.Y.Z` in
+   `README.md`, `docs/quickstart.md` and `docs/integrations.md` (tests fail if any of them differ).
 2. For the first release, remove the "Not released yet" notes from `README.md`, `docs/index.md` and
    `docs/quickstart.md` in this same commit. The README is the PyPI description and is frozen at
    upload; the `dist` job refuses to upload one that still says it is not released.

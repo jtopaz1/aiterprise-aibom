@@ -11,10 +11,6 @@ aiterprise-scan .            # scan the current repository
 aiterprise-scan ui           # local web UI: history, findings, diff, suppressions
 ```
 
-!!! note "Not released yet"
-    Nothing is published so far. `pipx install aiterprise-scan` works from the first tagged release;
-    until then, install from a checkout with `pip install .` (see [Implementation status](STATUS.md)).
-
 Apache-2.0 · no runtime dependencies (standard library only) · Python 3.11+
 
 ![One offline scan of a repository with five planted problems, all found](assets/killer-demo.svg)
