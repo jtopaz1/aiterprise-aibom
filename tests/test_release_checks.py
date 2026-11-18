@@ -73,6 +73,28 @@ class PyPIPageTests(unittest.TestCase):
         self.assertEqual([p for p in ours if not (ROOT / p).exists()], [])
 
 
+class DistChecksRunTests(unittest.TestCase):
+    """What PyPI gets is checked on every pull request, and again by the release before the upload."""
+
+    def _steps(self, workflow, job):
+        text = (ROOT / ".github" / "workflows" / workflow).read_text(encoding="utf-8")
+        body = re.search(rf"^  {job}:\n(.*?)(?=^  \S|\Z)", text, re.MULTILINE | re.DOTALL).group(1)
+        return [line.strip() for line in body.splitlines()]
+
+    def test_every_pull_request_checks_the_dist(self):
+        steps = self._steps("ci.yml", "wheel")
+        self.assertIn("python -m twine check --strict dist/*", steps)
+        self.assertIn("python tools/check_dist.py dist", steps)
+
+    def test_the_release_checks_the_dist_right_after_building_it(self):
+        steps = self._steps("release.yml", "dist")
+        build = steps.index("python -m build")
+        self.assertEqual(steps.index("python -m twine check --strict dist/*"), build + 4)
+        self.assertEqual(steps.index("python tools/check_dist.py dist --release"), build + 5)
+        self.assertIn("needs: sign", self._steps("release.yml", "pypi"))
+        self.assertIn("needs: [dist, binaries]", self._steps("release.yml", "sign"))
+
+
 class PackageMetadataTests(unittest.TestCase):
     def setUp(self):
         import tomllib

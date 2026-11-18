@@ -103,6 +103,11 @@ class CheckDistTests(unittest.TestCase):
         s[f"aiterprise_scan-{V}/.env"] = "KEY=1"
         self.assertProblem(self.dist(sdist=s).problems(), "sdist", ".env")
 
+    def test_only_the_package_and_its_metadata_ship_under_src(self):
+        s = sdist_members()
+        s[f"aiterprise_scan-{V}/src/scratch.py"] = ""
+        self.assertProblem(self.dist(sdist=s).problems(), "sdist", "src/scratch.py")
+
     def test_compiled_files_are_refused(self):
         w = wheel_members()
         w["aiterprise_scan/__pycache__/cli.cpython-311.pyc"] = ""
