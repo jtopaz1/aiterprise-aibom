@@ -1,0 +1,71 @@
+name: False positive
+description: A finding on something that is not a risk.
+labels: ["false positive"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Logged in to SecDB, `aiterprise-scan report-fp RULE` sends the report with your consent instead of this form.
+        The opposite, an input a rule should catch and does not (an evasion), goes to a
+        [private advisory](https://github.com/jtopaz1/aiterprise-aibom/security/advisories/new), not here (SECURITY.md).
+  - type: input
+    id: rule
+    attributes:
+      label: Rule id
+      description: Each finding in the report names its rule; in `report.json` it is `rule_id`.
+      placeholder: ait.pkg.malicious
+    validations:
+      required: true
+  - type: textarea
+    id: finding
+    attributes:
+      label: The finding
+      description: The finding as the report shows it, with its evidence. Secrets in a report are already redacted.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: input
+    attributes:
+      label: The smallest input that triggers it
+      description: The line, file or config that the finding points at, cut down as far as it still fires.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it is not a risk
+      description: For example, where the package, model or command comes from and what it really does.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `aiterprise-scan version`.
+      placeholder: aiterprise-scan 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How it was installed
+      options:
+        - pip or pipx from the git tag
+        - a single-file binary from a release
+        - the container image (ghcr.io)
+        - the GitHub Action
+        - the pre-commit hook
+        - the GitLab CI template or the VS Code / Cursor tasks
+        - a checkout (pip install -e .)
+        - other
+    validations:
+      required: true
+  - type: dropdown
+    id: online
+    attributes:
+      label: Online or offline
+      options:
+        - offline (--offline)
+        - online
+        - online, logged in to SecDB

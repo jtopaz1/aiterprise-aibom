@@ -3,15 +3,21 @@
 ## Install
 
 ```bash
-pipx install aiterprise-scan          # or: pip install aiterprise-scan
+pipx install git+https://github.com/jtopaz1/aiterprise-aibom@v0.1.0      # or: pip install git+https://github.com/jtopaz1/aiterprise-aibom@v0.1.0
 ```
 
 Other ways, all from the same release:
 
-- a single-file binary for Linux, macOS or Windows (x86-64 or arm64) from the GitHub release (each file has a
-  Sigstore bundle and is listed in `SHA256SUMS`);
-- the container image: `docker run --rm -v "$PWD:/src" ghcr.io/jtopaz1/aiterprise-scan:latest`;
-- `uvx aiterprise-scan …` without installing.
+- a single-file binary for Linux, macOS or Windows (x86-64 or arm64) from the [v0.1.0 release](https://github.com/jtopaz1/aiterprise-aibom/releases/tag/v0.1.0).
+  Each file is listed in `SHA256SUMS` and has a Sigstore bundle made by the release workflow at the tag:
+
+  ```bash
+  cosign verify-blob --bundle aiterprise-scan-linux-x86_64.sigstore.json \
+    --certificate-identity https://github.com/jtopaz1/aiterprise-aibom/.github/workflows/release.yml@refs/tags/v0.1.0 \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com aiterprise-scan-linux-x86_64
+  ```
+
+- the container image: `docker run --rm -v "$PWD:/src" ghcr.io/jtopaz1/aiterprise-scan:0.1.0`.
 
 ## First scan
 
