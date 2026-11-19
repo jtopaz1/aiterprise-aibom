@@ -17,7 +17,7 @@ rule's measured false-positive rate where there is one. It runs offline, with no
 - `docker run --rm -v "$PWD:/src" ghcr.io/jtopaz1/aiterprise-scan:0.1.0`
 - in CI: `uses: jtopaz1/aiterprise-aibom/action@v0.1.0`, or the pre-commit hook at `rev: v0.1.0`
 
-PyPI refused this release's upload, so `pip install aiterprise-scan` does not find it yet.
+It is not on PyPI: `pip install aiterprise-scan` finds nothing. In GitLab CI, the template installs this release's wheel.
 
 Every file of the release is listed in `SHA256SUMS` and has a Sigstore bundle signed by the release
 workflow at this tag:

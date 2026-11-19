@@ -80,6 +80,8 @@ jobs:
 
   pypi:
     needs: sign
+    # off until the owner has a PyPI trusted publisher and sets the repository variable (RELEASING.md)
+    if: vars.PUBLISH_TO_PYPI == 'true'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
