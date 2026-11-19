@@ -4,10 +4,15 @@ Pushing a tag `vX.Y.Z` runs `.github/workflows/release.yml`:
 
 ```text
 dist ──────┐                      wheel + sdist, licence check, killer demo, self-SBOM
-binaries ──┴─ sign ─┬─ pypi       Sigstore bundle per file, SHA256SUMS; then PyPI (trusted publishing)
+binaries ──┴─ sign ─┬─ pypi       Sigstore bundle per file, SHA256SUMS; then PyPI, only when switched on
                     ├─ image      ghcr.io/<owner>/aiterprise-scan with provenance and SBOM
                     └─ github-release (needs sign and image, not pypi)
 ```
+
+**PyPI is off.** The project has no PyPI account, so the `pypi` job runs only when the repository
+variable `PUBLISH_TO_PYPI` is `true` ([Publishing to PyPI](#publishing-to-pypi-optional)). People
+install from the git tag, the release's binaries and wheel, or the image; the GitLab template
+installs the release's wheel.
 
 A refused PyPI upload does not hold back the GitHub Release. Fix the cause (for `invalid-publisher`,
 the pending publisher's five values below) and re-run the failed `pypi` job of the same run; nothing
@@ -17,7 +22,7 @@ publishes the run's own signed files only after each matches `SHA256SUMS` and ca
 signature made by `release.yml` at that tag.
 
 `v0.1.0` was tagged on 2026-11-18: signing and the ghcr.io image went out; PyPI refused the upload
-(`invalid-publisher`: no pending publisher matched). Its GitHub release was published on 2026-11-19
+three times (`invalid-publisher`: there was no PyPI account, so no publisher). Its GitHub release was published on 2026-11-19
 by `publish-release` from run 44243042031: 20 files, each of the 10 that are not bundles checked
 against `SHA256SUMS` and its signature first.
 
@@ -28,18 +33,8 @@ push and the GitHub release.
 
 ## One-time setup (needs the repository owner)
 
-1. **PyPI trusted publisher.** The name `aiterprise-scan` is free on PyPI (checked 2026-11-16). Sign in
-   at pypi.org, open *Publishing*, and add a *pending publisher*:
-
-   | Field | Value |
-   |---|---|
-   | PyPI project name | `aiterprise-scan` |
-   | Owner | `jtopaz1` |
-   | Repository name | `aiterprise-aibom` |
-   | Workflow name | `release.yml` |
-   | Environment name | `pypi` |
-
-   No token is stored anywhere; the `pypi` job proves its identity to PyPI with GitHub's OIDC token.
+1. **PyPI** is optional and off; [Publishing to PyPI](#publishing-to-pypi-optional) says how to
+   turn it on.
 2. **The `pypi` environment** is created by GitHub the first time the job runs. Add required reviewers
    to it (Settings → Environments) if a release should wait for a person.
 3. **Decide the repository's visibility first.** While the repository is private:
@@ -68,7 +63,8 @@ push and the GitHub release.
 1. Set `__version__` in `src/aiterprise_scan/__init__.py`, the two `version` fields in `server.json`,
    and the pins the docs tell people to use, in `README.md` and `docs/` (tests fail if any of them
    differ): `action@vX.Y.Z`, the pre-commit `rev: vX.Y.Z`, `git+…@vX.Y.Z`, the image tag `:X.Y.Z`,
-   the `releases/tag/vX.Y.Z` links and the tag in the `cosign verify-blob` example.
+   the `releases/tag/vX.Y.Z` links, the tag in the `cosign verify-blob` example, and the wheel URL
+   that the GitLab template installs (`AIBOM_INSTALL`).
 2. Add the release's section to `CHANGELOG.md`, newest first: `## X.Y.Z — YYYY-MM-DD`, then what
    changed for someone who runs the scanner. It becomes the GitHub release's notes
    (`tools/release_notes.py`); a test fails while `__version__` has no section, and so does the
@@ -81,7 +77,8 @@ push and the GitHub release.
    demo: pip from the git tag (Linux, macOS, Windows, on the Python floor), the six binaries
    downloaded from the release after every file of it matched `SHA256SUMS` and its Sigstore
    signature, the ghcr.io image and `latest` pulled without signing in, the Action and the
-   pre-commit hook at the tag, and PyPI once it has the release (until then a warning).
+   pre-commit hook at the tag, the GitLab template with the install it ships, and PyPI when
+   `PUBLISH_TO_PYPI` is on (then a version missing from PyPI fails).
 
 ## What is checked before anything is uploaded
 
@@ -101,17 +98,34 @@ The `dist` job, before the wheel and sdist go anywhere (every pull request runs 
 - A version uploaded to PyPI can be yanked but its number can never be reused.
 - Rekor entries are permanent.
 
-## After the first PyPI release
+## Publishing to PyPI (optional)
 
-PyPI refused the v0.1.0 upload, so the docs install from the git tag and offer neither
-`pipx install aiterprise-scan` nor `uvx`; `PublishedChannelsTests` holds them to that. Once the
-`pypi` job of a release run has succeeded (the `published` workflow's `pypi` job then installs it
-instead of warning):
+Without PyPI, `pip install aiterprise-scan` finds nothing and the name is not reserved; everything
+else works. To publish there:
 
-- let the docs say `pipx install aiterprise-scan` (and `uvx aiterprise-scan`), and allow those in
-  `PublishedChannelsTests.test_the_docs_install_only_what_was_published`;
-- put the PyPI version and Python-versions badges back in the README.
+1. Create a PyPI account at pypi.org (two-factor authentication is required). The name
+   `aiterprise-scan` was free on 2026-11-19.
+2. Under *Your account → Publishing*, add a GitHub *pending publisher*:
 
-Publish `server.json` to the MCP registry (`mcp-publisher login github`, then `mcp-publisher publish`).
-The registry checks that the PyPI description carries `mcp-name: io.github.jtopaz1/aiterprise-scan`,
-which the README already does, so this cannot happen before the PyPI upload.
+   | Field | Value |
+   |---|---|
+   | PyPI project name | `aiterprise-scan` |
+   | Owner | `jtopaz1` |
+   | Repository name | `aiterprise-aibom` |
+   | Workflow name | `release.yml` |
+   | Environment name | `pypi` |
+
+   No token is stored anywhere; the `pypi` job proves its identity to PyPI with GitHub's OIDC token.
+3. Set the repository variable `PUBLISH_TO_PYPI` to `true` (Settings → Secrets and variables →
+   Actions → Variables). The next tag uploads. For v0.1.0, re-run the failed `pypi` job of run
+   44243042031: that run predates the switch. Re-running it also re-runs that run's
+   `github-release` job; check the release notes afterwards (`tools/release_notes.py v0.1.0`).
+4. Once PyPI has the release, `published`'s `pypi` job installs it on Linux, macOS and Windows.
+   Then let the docs say `pipx install aiterprise-scan` and allow it in
+   `PublishedChannelsTests.test_the_docs_install_only_what_was_published`, and put the PyPI version
+   and Python-versions badges in the README.
+
+Publishing `server.json` to the MCP registry (`mcp-publisher login github`, then
+`mcp-publisher publish`) needs a package the registry can check: the manifest names the PyPI
+package, whose description carries `mcp-name: io.github.jtopaz1/aiterprise-scan`, so it waits for
+PyPI (or for the manifest to name the ghcr.io image instead).

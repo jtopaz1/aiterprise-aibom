@@ -100,6 +100,31 @@ class ReleasedDocsTests(unittest.TestCase):
             self.assertNotRegex(text, r"(?i)not released yet|nothing is published|with the first tagged release", name)
 
 
+PYPI_SWITCH = "if: vars.PUBLISH_TO_PYPI == 'true'"
+
+
+class PyPIOptInTests(unittest.TestCase):
+    """The project has no PyPI account: publishing there is off until the owner sets PUBLISH_TO_PYPI."""
+
+    def test_a_release_uploads_to_pypi_only_when_switched_on(self):
+        job = DistChecksRunTests()._steps("release.yml", "pypi")
+        self.assertIn(PYPI_SWITCH, job)
+        self.assertIn("needs: sign", job)
+
+    def test_the_gitlab_template_installs_the_release_wheel_not_pypi(self):
+        from aiterprise_scan import __version__ as v
+
+        from aiterprise_scan import miniyaml
+
+        text = (ROOT / "templates" / "gitlab" / "aiterprise-scan.gitlab-ci.yml").read_text(encoding="utf-8")
+        install = miniyaml.load(text)["aiterprise-scan"]["variables"]["AIBOM_INSTALL"]
+        self.assertEqual(install, "https://github.com/jtopaz1/aiterprise-aibom/releases/download/"
+                                  f"v{v}/aiterprise_scan-{v}-py3-none-any.whl")
+        self.assertNotIn("until the first PyPI release", text)
+        self.assertNotRegex((ROOT / "docs" / "integrations.md").read_text(encoding="utf-8"),
+                            r"(?i)until the first PyPI release")
+
+
 class PublishedChannelsTests(unittest.TestCase):
     """What the docs tell people to install is what was published, and published.yml installs each of
     those from where it was published and holds it to the killer demo."""
@@ -180,13 +205,24 @@ class PublishedChannelsTests(unittest.TestCase):
         self.assertIn("needs: [version, release-files]", self._job("release-binaries"))
         self.assertIn("matches SHA256SUMS", self._job("release-binaries"))
 
-    def test_pypi_is_installed_once_it_has_the_release_and_reported_until_then(self):
+    def test_pypi_is_checked_only_when_the_project_publishes_there_and_then_strictly(self):
         job = self._job("pypi")
-        self.assertIn("https://pypi.org/pypi/aiterprise-scan/$V/json", job)
-        self.assertIn("::warning", job)
-        self.assertIn('install --quiet "aiterprise-scan==$V"', job)
+        self.assertIn(PYPI_SWITCH, job)
+        self.assertNotIn("::warning", job)   # switched on, a version missing from PyPI is a failure
+        self.assertIn('--index-url https://pypi.org/simple "aiterprise-scan==$V"', job)
+        self.assertIn("os: [ubuntu-latest, macos-latest, windows-latest]", job)
+        self.assertIn('python-version: "3.11"', job)
+        self.assertIn('= "aiterprise-scan $V"', job)
         self.assertIn("tools/killer_demo.py", job)
-        self.assertRegex(job, r"\*\) exit 1")   # anything but 200 or 404 fails
+
+    def test_the_gitlab_template_is_run_as_shipped_with_its_own_install(self):
+        job = self._job("gitlab-template")
+        self.assertIn("container: python:3.12-slim", job)
+        self.assertNotRegex(job, r"(?m)^\s+AIBOM_INSTALL:")   # the template's own, not one set here
+        self.assertIn('job["variables"]["AIBOM_INSTALL"]', job)
+        self.assertIn("templates/gitlab/aiterprise-scan.gitlab-ci.yml", job)
+        self.assertIn('test "$bad" = "1"', job)
+        self.assertIn('test "$good" = "0"', job)
 
     def test_no_expression_is_spliced_into_a_script(self):
         # values reach shell code through env only; a `${{ }}` inside `run:` is pasted into the script

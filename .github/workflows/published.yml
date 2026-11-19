@@ -3,7 +3,7 @@ name: published
 # What the docs tell people to install, installed from where it was published and held to the killer
 # demo: pip from the git tag, the six release binaries (after every file of the release has been
 # checked against SHA256SUMS and its Sigstore signature), the ghcr.io image pulled without signing in,
-# the GitHub Action and the pre-commit hook at the tag, and PyPI once PyPI has the release.
+# the GitHub Action and the pre-commit hook at the tag, and PyPI on Linux, macOS and Windows.
 # Runs by hand after a release, weekly so a deleted asset or a private image shows up, and on any
 # pull request that changes it. The version is the checkout's __version__, which the docs pin.
 on:
@@ -225,32 +225,65 @@ jobs:
           test "$bad" = "1"
           test "$good" = "0"
 
-  pypi:
+  gitlab-template:
+    # the GitLab job's script, in the image it names, installing what the template itself installs
     needs: version
     runs-on: ubuntu-latest
+    container: python:3.12-slim
+    env:
+      AIBOM_FAIL_ON: high
+      AIBOM_ARGS: --offline
     steps:
       - uses: actions/checkout@v4
-      - id: listed
-        name: Does PyPI have the release?
+      - name: The template's script blocks the killer demo (exit 1) and passes a clean project (exit 0)
+        shell: bash
+        run: |
+          python -c "import sys; sys.path.insert(0, 'tools'); import killer_demo, pathlib; killer_demo.build_repo(pathlib.Path('kd'))"
+          python - templates/gitlab/aiterprise-scan.gitlab-ci.yml <<'PY'
+          import sys
+          sys.path.insert(0, "src")
+          from aiterprise_scan import miniyaml
+          job = miniyaml.load(open(sys.argv[1], encoding="utf-8").read())["aiterprise-scan"]
+          with open("job.sh", "w", encoding="utf-8") as f:
+              f.write("export AIBOM_INSTALL='" + job["variables"]["AIBOM_INSTALL"] + "'\n")
+              f.write("\n".join(job["script"]) + "\n")
+          PY
+          cat job.sh
+          set +e
+          AIBOM_PATH=kd bash -e job.sh
+          bad=$?
+          rm -rf aiterprise-report
+          AIBOM_PATH=tests/golden/F02-clean-python bash -e job.sh
+          good=$?
+          set -e
+          echo "killer demo: exit $bad (want 1); clean project: exit $good (want 0)"
+          test "$bad" = "1"
+          test "$good" = "0"
+
+  pypi:
+    needs: version
+    # only when the project publishes to PyPI (release.yml's pypi job, RELEASING.md)
+    if: vars.PUBLISH_TO_PYPI == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4   # tools/killer_demo.py only; the scanner comes from PyPI
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: pip install from PyPI into a clean virtual environment, then the killer demo
+        shell: bash
         env:
           V: ${{ needs.version.outputs.version }}
         run: |
-          code=$(curl -sS -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/aiterprise-scan/$V/json")
-          echo "PyPI answered $code for aiterprise-scan $V"
-          case "$code" in
-            200) echo "listed=true" >> "$GITHUB_OUTPUT" ;;
-            404) echo "listed=false" >> "$GITHUB_OUTPUT"
-                 echo "::warning title=Not on PyPI::aiterprise-scan $V is not on PyPI, so the docs do not offer it (RELEASING.md)" ;;
-            *) exit 1 ;;
-          esac
-      - if: steps.listed.outputs.listed == 'true'
-        name: pip install from PyPI into a clean virtual environment, then the killer demo
-        env:
-          V: ${{ needs.version.outputs.version }}
-        run: |
-          python3 -m venv "$RUNNER_TEMP/venv"
-          "$RUNNER_TEMP/venv/bin/pip" install --quiet "aiterprise-scan==$V"
-          got=$("$RUNNER_TEMP/venv/bin/aiterprise-scan" version)
+          python -m venv "$RUNNER_TEMP/venv"
+          bin="$RUNNER_TEMP/venv/bin"; [ -d "$bin" ] || bin="$RUNNER_TEMP/venv/Scripts"
+          "$bin/python" -m pip install --quiet --no-cache-dir --index-url https://pypi.org/simple "aiterprise-scan==$V"
+          exe="$bin/aiterprise-scan"; [ -f "$exe.exe" ] && exe="$exe.exe"
+          got=$("$exe" version | tr -d '\r')
           echo "$got"
           test "$got" = "aiterprise-scan $V"
-          python3 tools/killer_demo.py --exe "$RUNNER_TEMP/venv/bin/aiterprise-scan"
+          python tools/killer_demo.py --exe "$exe"

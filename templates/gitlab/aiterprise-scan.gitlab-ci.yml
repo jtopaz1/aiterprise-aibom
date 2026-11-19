@@ -10,7 +10,8 @@
 # AIBOM_FAIL_ON severe; aibom.policy.yaml in the project decides the rest, as it does locally.
 #
 # Variables:
-#   AIBOM_INSTALL  what pip installs (until the first PyPI release: a wheel URL or git+https://…)
+#   AIBOM_INSTALL  what pip installs: the release's wheel from GitHub (the image has no git, so a
+#                  git+https:// URL needs an image that has it)
 #   AIBOM_PATH     what to scan; keep "." so the widget's paths match the repository's
 #   AIBOM_FAIL_ON  critical, high, medium, low, info or none
 #   AIBOM_ARGS     extra arguments, e.g. --offline
@@ -20,7 +21,7 @@ aiterprise-scan:
   stage: test
   image: python:3.12-slim
   variables:
-    AIBOM_INSTALL: "aiterprise-scan"
+    AIBOM_INSTALL: "https://github.com/jtopaz1/aiterprise-aibom/releases/download/v0.1.0/aiterprise_scan-0.1.0-py3-none-any.whl"
     AIBOM_PATH: "."
     AIBOM_FAIL_ON: "high"
     AIBOM_ARGS: ""
