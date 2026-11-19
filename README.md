@@ -22,6 +22,7 @@ aiterprise-scan ui       # local web UI: history, findings, diff, suppressions
 Or a single-file binary for Linux, macOS or Windows (x86-64 or arm64) from the [v0.1.0 release](https://github.com/jtopaz1/aiterprise-aibom/releases/tag/v0.1.0),
 each with a Sigstore bundle, or the image: `docker run --rm -v "$PWD:/src" ghcr.io/jtopaz1/aiterprise-scan:0.1.0`.
 Every one of these is installed from where it was published and held to the killer demo each week ([`published`](https://github.com/jtopaz1/aiterprise-aibom/actions/workflows/published.yml)).
+It is not on PyPI: a package named `aiterprise-scan` there would not be this project.
 
 Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ · docs in [`docs/`](https://github.com/jtopaz1/aiterprise-aibom/blob/main/docs/index.md)
 
@@ -157,8 +158,8 @@ pre-commit:
   hooks: [{ id: aiterprise-scan }]
 ```
 
-The hook scans the whole repository on every commit, so a re-scan takes an unchanged file's
-results from the last scan (kept under the file's SHA-256 in `~/.aiterprise/cache/scan`;
+The hook scans the whole repository offline (`--fail-on high`) on every commit, so a re-scan
+takes an unchanged file's results from the last scan (kept under the file's SHA-256 in `~/.aiterprise/cache/scan`;
 `--no-cache` turns this off). On the 10,000-file benchmark tree a re-scan takes 4.4 s against 49.8 s
 for the first scan (Windows, Python 3.11); CI fails if a re-scan takes over 10 s.
 
@@ -168,7 +169,9 @@ Problems panel): templates in [`templates/`](https://github.com/jtopaz1/aiterpri
 Docker: `docker run --rm -v "$PWD:/src" ghcr.io/jtopaz1/aiterprise-scan:latest`
 
 MCP: `aiterprise-scan mcp serve` exposes `scan_ai_supply_chain` to any MCP client over stdio
-(registry manifest: [`server.json`](https://github.com/jtopaz1/aiterprise-aibom/blob/main/server.json)).
+It is not in the MCP registry yet: the registry checks the package its manifest
+([`server.json`](https://github.com/jtopaz1/aiterprise-aibom/blob/main/server.json)) names, which is the
+PyPI package the project does not publish.
 
 ## Principles
 
@@ -202,4 +205,4 @@ Contributing (DCO sign-off, how a detection rule is accepted): [CONTRIBUTING.md]
 Reporting a vulnerability and the disclosure policy: [SECURITY.md](https://github.com/jtopaz1/aiterprise-aibom/blob/main/SECURITY.md).
 What is built, what is not, and the data provenance: [docs/STATUS.md](https://github.com/jtopaz1/aiterprise-aibom/blob/main/docs/STATUS.md).
 The project's own terms (scan, gated scan, gate, policy root, source, report document): [GLOSSARY.md](https://github.com/jtopaz1/aiterprise-aibom/blob/main/GLOSSARY.md).
-Design of record: `aiterprise-doc/13-APP-AIBOM.md` (AI2).
+Design of record: `aiterprise-doc/13-APP-AIBOM.md` (AI2), an internal document that is not public.

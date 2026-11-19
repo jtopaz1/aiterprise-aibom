@@ -6,6 +6,8 @@
 pipx install git+https://github.com/jtopaz1/aiterprise-aibom@v0.1.0      # or: pip install git+https://github.com/jtopaz1/aiterprise-aibom@v0.1.0
 ```
 
+It is not on PyPI: a package named `aiterprise-scan` there would not be this project.
+
 Other ways, all from the same release:
 
 - a single-file binary for Linux, macOS or Windows (x86-64 or arm64) from the [v0.1.0 release](https://github.com/jtopaz1/aiterprise-aibom/releases/tag/v0.1.0).
@@ -18,6 +20,11 @@ Other ways, all from the same release:
   ```
 
 - the container image: `docker run --rm -v "$PWD:/src" ghcr.io/jtopaz1/aiterprise-scan:0.1.0`.
+  Its build provenance is attested on GitHub:
+
+  ```bash
+  gh attestation verify oci://ghcr.io/jtopaz1/aiterprise-scan:0.1.0 --repo jtopaz1/aiterprise-aibom
+  ```
 
 ## First scan
 
@@ -105,4 +112,5 @@ runs a shell command, an MCP server with a poisoned tool description, and a Llam
 conditional licence — and passes only if one offline scan finds all five and exits 1. With
 `--online` the scan also asks OSV, the package registries and deps.dev, and the demo fails unless
 the report shows they answered. CI runs both on every push; the release runs it against the container image and
-every binary.
+every binary, and the `published` workflow runs it every week against each install channel as
+published.

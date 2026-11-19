@@ -5,9 +5,9 @@
 | Command | What it does |
 |---|---|
 | `scan [target]` | scan a repository, directory, model file, archive or BOM |
-| `mcp [serve]` | judge MCP servers and agent skills only (skills are read inside the scanned directory, not from the machine's own folders); `mcp serve` runs the MCP tool over stdio |
+| `mcp [serve]` | judge MCP servers and agent skills only (skills inside the scanned directory; with `--agent-configs` also the machine's skills folders); `mcp serve` runs the MCP tool over stdio |
 | `bom [target]` | emit an AI-BOM without risk judgement (fast compliance mode) |
-| `policy lint FILE` | validate a policy file |
+| `policy lint [FILE]` | validate a policy file (default: the current directory's `aibom.policy.yaml`, `.yml`, `.json` or `.aiterprise/policy.yaml`) |
 | `policy pull [--cloud URL] [--out FILE]` | download the organisation's policy from an AIterprise cloud — see [Policy](policy.md#org-policy-from-the-cloud) |
 | `defs status \| verify \| install \| update \| rollback` | definition data and signed bundles — see [Definition bundles](bundles.md) |
 | `login` / `logout` / `status` | SecDB account — see [SecDB](secdb.md) |
@@ -20,7 +20,7 @@
 
 | Flag | Meaning |
 |---|---|
-| `--bom FILE` | judge this CycloneDX (1.4–1.7) or SPDX 2.x JSON file |
+| `--bom FILE` | judge this CycloneDX (1.4–1.7) or SPDX 2.x JSON file (repeatable) |
 | `--offline` | bundled definitions and cache only; no network |
 | `--all-files` | do not honour `.gitignore` (only the one at the root of the target is read). Dependency and cache directories such as `node_modules`, `.venv` and `site-packages` are skipped either way, and a walk stops at 200,000 files with a note in the report |
 | `--exclude GLOB` | skip paths matching GLOB, relative to the target (repeatable), e.g. `'tests/**'` |

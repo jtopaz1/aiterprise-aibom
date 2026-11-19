@@ -35,7 +35,7 @@ include:
 
 The job runs on merge requests and on the default branch. A merge request shows the new findings
 in its Code Quality widget (`--format codequality`, a Code Climate issue list), the job log shows
-the table, and `aiterprise-report/` keeps the Markdown report, the Code Quality report and the AI-BOM
+the table, and `aiterprise-report/` keeps the table, Markdown and Code Quality reports and the AI-BOM
 (CycloneDX 1.6, the newest version GitLab reads). Set `AIBOM_FAIL_ON`, `AIBOM_PATH` and `AIBOM_ARGS`
 as job variables; a SecDB key goes in a masked CI/CD variable named `AITERPRISE_API_KEY`. The job
 installs the release's wheel from GitHub (`AIBOM_INSTALL`); the image has no git, so a `git+https://`

@@ -162,6 +162,16 @@ class PublishedChannelsTests(unittest.TestCase):
         self.assertTrue(releases)
         self.assertEqual([r for r in releases if r[1] != f"v{v}"], [])
 
+    def test_the_image_attestation_the_quickstart_shows_is_verified_as_shown(self):
+        from aiterprise_scan import __version__ as v
+
+        quickstart = (ROOT / "docs" / "quickstart.md").read_text(encoding="utf-8")
+        self.assertIn(f"gh attestation verify oci://ghcr.io/jtopaz1/aiterprise-scan:{v} "
+                      "--repo jtopaz1/aiterprise-aibom", quickstart)
+        image = self._job("image")
+        self.assertIn('gh attestation verify "oci://$IMAGE:$V" --repo "$REPO"', image)
+        self.assertRegex(image, r"(?m)^      attestations: read$")
+
     def test_it_runs_by_hand_weekly_and_when_it_changes(self):
         text = self.WORKFLOW.read_text(encoding="utf-8")
         self.assertRegex(text, r"(?m)^on:\n  workflow_dispatch:\n  schedule:\n    - cron: ")
