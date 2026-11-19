@@ -17,7 +17,9 @@ publishes the run's own signed files only after each matches `SHA256SUMS` and ca
 signature made by `release.yml` at that tag.
 
 `v0.1.0` was tagged on 2026-11-18: signing and the ghcr.io image went out; PyPI refused the upload
-(`invalid-publisher`: no pending publisher matched).
+(`invalid-publisher`: no pending publisher matched). Its GitHub release was published on 2026-11-19
+by `publish-release` from run 44243042031: 20 files, each of the 10 that are not bundles checked
+against `SHA256SUMS` and its signature first.
 
 CI already runs most of a release on every pull request: the wheel, the sdist, the self-SBOM, the six
 binaries (Linux, macOS and Windows on x86-64 and arm64, each held to the killer demo) and the
