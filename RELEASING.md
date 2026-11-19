@@ -17,7 +17,9 @@ publishes the run's own signed files only after each matches `SHA256SUMS` and ca
 signature made by `release.yml` at that tag.
 
 `v0.1.0` was tagged on 2026-11-18: signing and the ghcr.io image went out; PyPI refused the upload
-(`invalid-publisher`: no pending publisher matched).
+(`invalid-publisher`: no pending publisher matched). Its GitHub release was published on 2026-11-19
+by `publish-release` from run 44243042031: 20 files, each of the 10 that are not bundles checked
+against `SHA256SUMS` and its signature first.
 
 CI already runs most of a release on every pull request: the wheel, the sdist, the self-SBOM, the six
 binaries (Linux, macOS and Windows on x86-64 and arm64, each held to the killer demo) and the
@@ -64,14 +66,21 @@ push and the GitHub release.
 ## Each release
 
 1. Set `__version__` in `src/aiterprise_scan/__init__.py`, the two `version` fields in `server.json`,
-   and the pins the docs tell people to use: `action@vX.Y.Z` and the pre-commit `rev: vX.Y.Z` in
-   `README.md`, `docs/quickstart.md` and `docs/integrations.md` (tests fail if any of them differ).
+   and the pins the docs tell people to use, in `README.md` and `docs/` (tests fail if any of them
+   differ): `action@vX.Y.Z`, the pre-commit `rev: vX.Y.Z`, `git+…@vX.Y.Z`, the image tag `:X.Y.Z`,
+   the `releases/tag/vX.Y.Z` links and the tag in the `cosign verify-blob` example.
 2. For the first release, remove the "Not released yet" notes from `README.md`, `docs/index.md` and
    `docs/quickstart.md` in this same commit. The README is the PyPI description and is frozen at
    upload; the `dist` job refuses to upload one that still says it is not released.
 3. Run the checks listed under *Reproduce* in `docs/STATUS.md`.
 4. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`. The `dist` job refuses a tag that does not
    match `__version__`.
+5. Once the release run is done, run the `published` workflow by hand (it also runs weekly). It
+   installs everything the docs offer from where it was published and holds each to the killer
+   demo: pip from the git tag (Linux, macOS, Windows, on the Python floor), the six binaries
+   downloaded from the release after every file of it matched `SHA256SUMS` and its Sigstore
+   signature, the ghcr.io image and `latest` pulled without signing in, the Action and the
+   pre-commit hook at the tag, and PyPI once it has the release (until then a warning).
 
 ## What is checked before anything is uploaded
 
@@ -92,6 +101,15 @@ The `dist` job, before the wheel and sdist go anywhere (every pull request runs 
 - Rekor entries are permanent.
 
 ## After the first PyPI release
+
+PyPI refused the v0.1.0 upload, so the docs install from the git tag and offer neither
+`pipx install aiterprise-scan` nor `uvx`; `PublishedChannelsTests` holds them to that. Once the
+`pypi` job of a release run has succeeded (the `published` workflow's `pypi` job then installs it
+instead of warning):
+
+- let the docs say `pipx install aiterprise-scan` (and `uvx aiterprise-scan`), and allow those in
+  `PublishedChannelsTests.test_the_docs_install_only_what_was_published`;
+- put the PyPI version and Python-versions badges back in the README.
 
 Publish `server.json` to the MCP registry (`mcp-publisher login github`, then `mcp-publisher publish`).
 The registry checks that the PyPI description carries `mcp-name: io.github.jtopaz1/aiterprise-scan`,

@@ -16,7 +16,7 @@ to `.vscode/tasks.json` in your project (or merge its `tasks` into the one you h
 | AIBOM: this machine's MCP servers and skills | The agent configs and skills folders of this machine, into the Problems panel |
 | AIBOM: open the local dashboard | `aiterprise-scan ui` |
 
-The tasks expect `aiterprise-scan` on the `PATH` (for example `pipx install aiterprise-scan`).
+The tasks expect `aiterprise-scan` on the `PATH` (for example `pipx install git+https://github.com/jtopaz1/aiterprise-aibom@v0.1.0`).
 The Problems panel is fed by `--format compact`: one line per new finding,
 
 ```text
