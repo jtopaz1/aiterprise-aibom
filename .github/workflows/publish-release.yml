@@ -58,8 +58,15 @@ jobs:
               --certificate-identity "https://github.com/${REPO}/.github/workflows/release.yml@refs/tags/${TAG}" \
               --certificate-oidc-issuer https://token.actions.githubusercontent.com "$f"
           done
+      - uses: actions/checkout@v4
+        with:
+          path: source   # this workflow's ref, for the CHANGELOG; the files come from the release run
+      - name: The release notes are the tag's CHANGELOG section
+        env:
+          TAG: ${{ inputs.tag }}
+        run: python3 source/tools/release_notes.py "$TAG" > notes.md
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag }}
           files: signed/*
-          generate_release_notes: true
+          body_path: notes.md
