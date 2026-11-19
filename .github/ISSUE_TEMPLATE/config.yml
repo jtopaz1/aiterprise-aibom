@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: A vulnerability in the scanner, or an input a rule should catch and does not
+    url: https://github.com/jtopaz1/aiterprise-aibom/security/advisories/new
+    about: Report it privately (SECURITY.md). A published evasion helps attackers before the rule is fixed.
+  - name: How to use it
+    url: https://github.com/jtopaz1/aiterprise-aibom/blob/main/docs/index.md
+    about: The docs, from the first scan to policies, baselines and CI.

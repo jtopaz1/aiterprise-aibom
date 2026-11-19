@@ -1,0 +1,58 @@
+name: Bug
+description: The scanner crashed, hung, gave a wrong exit code, or wrote a broken report.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A vulnerability in the scanner, or an input a rule should catch and does not (an evasion), goes to a
+        [private advisory](https://github.com/jtopaz1/aiterprise-aibom/security/advisories/new) instead
+        (SECURITY.md). A finding that should not be there is a false positive: use that form.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `aiterprise-scan version`.
+      placeholder: aiterprise-scan 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How it was installed
+      options:
+        - pip or pipx from the git tag
+        - a single-file binary from a release
+        - the container image (ghcr.io)
+        - the GitHub Action
+        - the pre-commit hook
+        - the GitLab CI template or the VS Code / Cursor tasks
+        - a checkout (pip install -e .)
+        - other (say below)
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and Python
+      placeholder: Ubuntu 24.04, Python 3.12
+  - type: textarea
+    id: command
+    attributes:
+      label: The command
+      description: The whole command line, with `--offline` if you used it.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened, and what you expected
+      description: The output, the exit code and the traceback if there is one. Secrets in a report are already redacted; check anything else you paste.
+    validations:
+      required: true
+  - type: textarea
+    id: input
+    attributes:
+      label: The smallest input that shows it
+      description: A file or a few files, inline or attached. Never attach a real malicious sample here.
