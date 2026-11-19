@@ -6,12 +6,23 @@ Pushing a tag `vX.Y.Z` runs `.github/workflows/release.yml`:
 dist ──────┐                      wheel + sdist, licence check, killer demo, self-SBOM
 binaries ──┴─ sign ─┬─ pypi       Sigstore bundle per file, SHA256SUMS; then PyPI (trusted publishing)
                     ├─ image      ghcr.io/<owner>/aiterprise-scan with provenance and SBOM
-                    └─ github-release (needs sign, pypi and image)
+                    └─ github-release (needs sign and image, not pypi)
 ```
 
-No release has been made yet. CI already runs most of it on every pull request: the wheel, the sdist,
-the self-SBOM, the six binaries (Linux, macOS and Windows on x86-64 and arm64, each held to the killer demo) and the container image. The parts
-that only a real tag exercises are signing, the PyPI upload, the ghcr.io push and the GitHub release.
+A refused PyPI upload does not hold back the GitHub Release. Fix the cause (for `invalid-publisher`,
+the pending publisher's five values below) and re-run the failed `pypi` job of the same run; nothing
+is rebuilt. A release run made before `github-release` stopped waiting for PyPI (v0.1.0) is published
+with the `publish-release` workflow instead: run it by hand with the tag and the run's id. It
+publishes the run's own signed files only after each matches `SHA256SUMS` and carries a Sigstore
+signature made by `release.yml` at that tag.
+
+`v0.1.0` was tagged on 2026-11-18: signing and the ghcr.io image went out; PyPI refused the upload
+(`invalid-publisher`: no pending publisher matched).
+
+CI already runs most of a release on every pull request: the wheel, the sdist, the self-SBOM, the six
+binaries (Linux, macOS and Windows on x86-64 and arm64, each held to the killer demo) and the
+container image. The parts that only a real tag exercises are signing, the PyPI upload, the ghcr.io
+push and the GitHub release.
 
 ## One-time setup (needs the repository owner)
 

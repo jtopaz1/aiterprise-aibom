@@ -122,6 +122,53 @@ class DistChecksRunTests(unittest.TestCase):
         self.assertIn("needs: [dist, binaries]", self._steps("release.yml", "sign"))
 
 
+class GitHubReleaseTests(unittest.TestCase):
+    """The signed files reach a GitHub Release even when an upload to PyPI fails."""
+
+    WORKFLOWS = ROOT / ".github" / "workflows"
+
+    def _job(self, workflow, job):
+        text = (self.WORKFLOWS / workflow).read_text(encoding="utf-8")
+        return re.search(rf"^  {job}:\n(.*?)(?=^  \S|\Z)", text, re.MULTILINE | re.DOTALL).group(1)
+
+    def test_the_github_release_does_not_wait_for_pypi(self):
+        needs = re.search(r"^    needs:\s*\[([^\]]*)\]", self._job("release.yml", "github-release"), re.MULTILINE)
+        names = {n.strip() for n in needs.group(1).split(",")}
+        self.assertIn("sign", names)
+        self.assertNotIn("pypi", names)
+
+    def test_a_release_run_can_be_published_later_and_only_after_its_signatures_check_out(self):
+        text = (self.WORKFLOWS / "publish-release.yml").read_text(encoding="utf-8")
+        self.assertRegex(text, r"(?m)^on:\n  workflow_dispatch:")
+        self.assertNotRegex(text, r"(?m)^  (push|pull_request|schedule):")
+        job = self._job("publish-release.yml", "publish")
+        order = [job.index(s) for s in (
+            "actions/download-artifact",
+            "sha256sum -c SHA256SUMS",
+            "--certificate-identity \"https://github.com/${REPO}/.github/workflows/release.yml@refs/tags/${TAG}\"",
+            "--certificate-oidc-issuer https://token.actions.githubusercontent.com",
+            "softprops/action-gh-release")]
+        self.assertEqual(order, sorted(order), "the release step must come after the checks")
+        # inputs reach shell code through the environment only, never spliced into a script
+        for line in job.splitlines():
+            if "${{ inputs." in line:
+                self.assertRegex(line.strip(), r"^[A-Z_]+: \$\{\{ inputs\.[a-z-]+ \}\}$|^(tag_name|run-id): ", line)
+
+    def test_the_tag_and_run_are_checked_before_anything_is_read(self):
+        job = self._job("publish-release.yml", "publish")
+        self.assertIn('[[ "$TAG" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]', job)
+        self.assertIn('[[ "$RUN" =~ ^[0-9]+$ ]]', job)
+        self.assertLess(job.index('[[ "$RUN" =~'), job.index("actions/download-artifact"))
+        # the run must be one of release.yml, started by the push of this very tag
+        cond = re.search(r'^\s*if (.*); then\n\s*echo "run \$RUN is not the release run of \$TAG"\n\s*exit 1', job,
+                         re.MULTILINE)
+        self.assertIsNotNone(cond, "the run check is gone")
+        for clause in ('[ "$path" != ".github/workflows/release.yml" ]', '[ "$branch" != "$TAG" ]',
+                       '[ "$event" != "push" ]'):
+            self.assertIn(clause, cond.group(1).split(" || "))
+        self.assertLess(cond.start(), job.index("actions/download-artifact"))
+
+
 class PackageMetadataTests(unittest.TestCase):
     def setUp(self):
         import tomllib
