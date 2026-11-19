@@ -1,0 +1,27 @@
+name: Idea or missing coverage
+description: Something the scanner should discover, judge or report that it does not, other than an evasion.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        An input that slips past an existing rule is an evasion: report it through a
+        [private advisory](https://github.com/jtopaz1/aiterprise-aibom/security/advisories/new) (SECURITY.md).
+        New detection rules are welcome as pull requests too; CONTRIBUTING.md says how they are accepted.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you need
+      description: The component, ecosystem, format or report you work with, and what the scanner should say about it.
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Public sources
+      description: Advisories, incident write-ups or format specifications the rule or feature could be built from (never another scanner's rules or data).
+  - type: textarea
+    id: example
+    attributes:
+      label: An example
+      description: A harmless input that shows it, or the output you would expect.
