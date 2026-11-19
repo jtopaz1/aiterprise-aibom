@@ -69,9 +69,10 @@ push and the GitHub release.
    and the pins the docs tell people to use, in `README.md` and `docs/` (tests fail if any of them
    differ): `action@vX.Y.Z`, the pre-commit `rev: vX.Y.Z`, `git+…@vX.Y.Z`, the image tag `:X.Y.Z`,
    the `releases/tag/vX.Y.Z` links and the tag in the `cosign verify-blob` example.
-2. For the first release, remove the "Not released yet" notes from `README.md`, `docs/index.md` and
-   `docs/quickstart.md` in this same commit. The README is the PyPI description and is frozen at
-   upload; the `dist` job refuses to upload one that still says it is not released.
+2. Add the release's section to `CHANGELOG.md`, newest first: `## X.Y.Z — YYYY-MM-DD`, then what
+   changed for someone who runs the scanner. It becomes the GitHub release's notes
+   (`tools/release_notes.py`); a test fails while `__version__` has no section, and so does the
+   `github-release` job. Its links must be absolute: a release page resolves no relative link.
 3. Run the checks listed under *Reproduce* in `docs/STATUS.md`.
 4. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`. The `dist` job refuses a tag that does not
    match `__version__`.
