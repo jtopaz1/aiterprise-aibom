@@ -35,28 +35,25 @@ push and the GitHub release.
 
 1. **PyPI** is optional and off; [Publishing to PyPI](#publishing-to-pypi-optional) says how to
    turn it on.
-2. **The `pypi` environment** is created by GitHub the first time the job runs. Add required reviewers
-   to it (Settings → Environments) if a release should wait for a person.
-3. **Decide the repository's visibility first.** While the repository is private:
-   - the image job skips GitHub artifact attestation (it needs a public repository or Enterprise Cloud);
-     the image still carries BuildKit provenance and an SBOM;
-   - the action's SARIF upload to code scanning is not available;
-   - Sigstore signing still writes the repository name, the workflow path and the commit to the
-     **public** Rekor transparency log, and the sdist on PyPI is the source code. A release makes the
-     code public whatever the repository setting says.
-   - the PyPI page links into the repository (its README links and the project URLs) and shows the
-     demo image from it, so every link and the image are broken for everyone else until it is public.
-
-4. **When it goes public** (Settings, all by the owner; the history was checked on 2026-11-18: no
-   token, password, private key, database URL, local path or real e-mail address in any commit or
-   branch, only the noreply addresses of the committing accounts):
-   - turn on *Private vulnerability reporting* (Security): `SECURITY.md` sends reporters there;
-   - turn on *Secret scanning* and *Push protection*. `tests/test_mcp.py` holds a made-up
-     `sk-proj-` key and `tests/test_secrets.py` AWS's documented example key, both to test redaction;
-     close an alert on either as *used in tests*;
-   - restrict the `pypi` environment to tags `v*` (Environments → Deployment branches and tags);
-   - after the first release, check that the `ghcr.io/jtopaz1/aiterprise-scan` package is public
-     (Packages → Package settings) so `docker run` works without signing in.
+2. **The `pypi` environment** exists (GitHub made it when v0.1.0's job first ran). Add required
+   reviewers to it (Settings → Environments) if a release should wait for a person, and restrict it
+   to tags `v*` (Deployment branches and tags) before turning PyPI on.
+3. **The repository is public** (since 2026-11-18; the history was checked that day: no token,
+   password, private key, database URL, local path or real e-mail address in any commit or branch,
+   only the noreply addresses of the committing accounts). That is what lets the image job add a
+   GitHub artifact attestation (v0.1.0's image has one), the action upload SARIF to code scanning,
+   and the release links and the README's demo image work for everyone. Sigstore signing writes
+   the repository name, the workflow path and the commit to the **public** Rekor log either way.
+   The `ghcr.io/jtopaz1/aiterprise-scan` package is public too: `published` pulls it without
+   signing in every week.
+4. **Still to switch on** (Settings, by the owner):
+   - *Private vulnerability reporting* (Security): `SECURITY.md` and the issue chooser's "Report a
+     vulnerability" link send reporters there, and neither can take a report until it is on;
+   - *Secret scanning* and *Push protection*. `tests/test_mcp.py` holds a made-up `sk-proj-` key and
+     `tests/test_secrets.py` AWS's documented example key, both to test redaction; close an alert on
+     either as *used in tests*;
+   - the repository's description and topics (the About box), which search and the GitHub topic
+     pages use.
 
 ## Each release
 
@@ -76,9 +73,10 @@ push and the GitHub release.
    installs everything the docs offer from where it was published and holds each to the killer
    demo: pip from the git tag (Linux, macOS, Windows, on the Python floor), the six binaries
    downloaded from the release after every file of it matched `SHA256SUMS` and its Sigstore
-   signature, the ghcr.io image and `latest` pulled without signing in, the Action and the
-   pre-commit hook at the tag, the GitLab template with the install it ships, and PyPI when
-   `PUBLISH_TO_PYPI` is on (then a version missing from PyPI fails).
+   signature, the ghcr.io image and `latest` pulled without signing in (and the image's build
+   attestation verified), the Action and the pre-commit hook at the tag, the GitLab template with
+   the install it ships, and PyPI when `PUBLISH_TO_PYPI` is on (then a version missing from PyPI
+   fails).
 
 ## What is checked before anything is uploaded
 

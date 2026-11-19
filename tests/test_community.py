@@ -27,8 +27,20 @@ def _required(el):
 
 
 class IssueFormTests(unittest.TestCase):
-    def test_the_forms_are_the_three_kinds_of_report(self):
-        self.assertEqual(sorted(_forms()), ["bug.yml", "false-positive.yml", "feature.yml"])
+    def test_the_forms_are_the_three_kinds_of_report_and_a_contact_request(self):
+        self.assertEqual(sorted(_forms()), ["bug.yml", "false-positive.yml", "feature.yml",
+                                            "security-contact.yml"])
+
+    def test_a_reporter_without_private_reporting_can_ask_for_a_contact_and_say_nothing(self):
+        # Private vulnerability reporting is the owner's switch; until it is on, this is the way in.
+        form = _forms()["security-contact.yml"]
+        self.assertEqual(form.get("title"), "Security contact request")
+        # nothing to type the problem into: a notice and one box to tick
+        self.assertEqual(sorted({el["type"] for el in form["body"]}), ["checkboxes", "markdown"])
+        options = _fields(form)["no-details"]["attributes"]["options"]
+        self.assertTrue(options and all(o.get("required") is True for o in options))
+        security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+        self.assertIn(f'"{form["name"]}"', security)
 
     def test_each_form_is_one_github_reads(self):
         for name, form in _forms().items():

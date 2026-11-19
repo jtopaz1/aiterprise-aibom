@@ -2,10 +2,12 @@ name: published
 
 # What the docs tell people to install, installed from where it was published and held to the killer
 # demo: pip from the git tag, the six release binaries (after every file of the release has been
-# checked against SHA256SUMS and its Sigstore signature), the ghcr.io image pulled without signing in,
-# the GitHub Action and the pre-commit hook at the tag, and PyPI on Linux, macOS and Windows.
-# Runs by hand after a release, weekly so a deleted asset or a private image shows up, and on any
-# pull request that changes it. The version is the checkout's __version__, which the docs pin.
+# checked against SHA256SUMS and its Sigstore signature), the ghcr.io image pulled without signing in
+# (and its build attestation verified), the GitHub Action and the pre-commit hook at the tag, the
+# GitLab template with the install it ships, and PyPI on Linux, macOS and Windows when
+# PUBLISH_TO_PYPI is on. Runs by hand after a release, weekly so a deleted asset or a private image
+# shows up, and on any pull request that changes it. The version is the checkout's __version__,
+# which the docs pin.
 on:
   workflow_dispatch:
   schedule:
@@ -136,8 +138,18 @@ jobs:
   image:
     needs: version
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: read
     steps:
       - uses: actions/checkout@v4
+      - name: The image's build attestation, verified as the quickstart shows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: ${{ needs.version.outputs.version }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/aiterprise-scan
+          REPO: ${{ github.repository }}
+        run: gh attestation verify "oci://$IMAGE:$V" --repo "$REPO"
       - name: The image of the release and latest, pulled without signing in, then the killer demo
         env:
           V: ${{ needs.version.outputs.version }}

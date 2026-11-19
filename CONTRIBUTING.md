@@ -78,5 +78,10 @@ clean projects, include the run in the pull request; if not, say so, and the rul
 - One change per pull request, with the tests that prove it, and `docs/STATUS.md` updated when
   something is built, changed or found not to work.
 - Describe what you ran and what you did not.
-- False positives: `aiterprise-scan report-fp RULE` (with consent, when logged in to SecDB) or an
-  issue with the smallest input that triggers it.
+- Say what someone running the scanner will notice. A release's `CHANGELOG.md` section, which
+  becomes its GitHub release notes, is written from that.
+- The pull-request template's checklist repeats these steps: tick what you ran.
+- False positives: `aiterprise-scan report-fp RULE` (with consent, when logged in to SecDB) or the
+  **False positive** issue form, with the smallest input that triggers it. Bugs and missing
+  coverage have their own forms; blank issues are off. Vulnerabilities and evasions go to a
+  private report ([SECURITY.md](SECURITY.md)), never an issue.

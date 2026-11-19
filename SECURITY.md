@@ -3,13 +3,19 @@
 ## Reporting a vulnerability
 
 Please report vulnerabilities in `aiterprise-scan` privately through GitHub's
-"Report a vulnerability" (Security Advisories) on this repository. Do not open a public issue.
+"Report a vulnerability" (Security Advisories) on this repository. Do not open a public issue
+with the details.
+
+If the Security tab shows no "Report a vulnerability" button, open an issue with the
+"Security contact request" form instead. It asks for nothing about the problem; a maintainer
+replies with a private channel.
+
 We aim to acknowledge reports within 3 business days.
 
 ## Disclosure policy
 
-- **In scope:** the scanner, its GitHub Action, pre-commit hook and CI templates, and the
-  definition data and signed bundles in this repository. A crafted file, package or agent config
+- **In scope:** the scanner, its GitHub Action, pre-commit hook and CI templates, the
+  release's binaries and container image, and the definition data and signed bundles in this repository. A crafted file, package or agent config
   that makes the scanner run code, read or write outside what it scans, follow a link out of an
   archive, hang or exhaust memory, print a secret unredacted, or post scanned text into a
   pull-request comment as live Markdown is a vulnerability.

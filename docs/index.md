@@ -38,10 +38,15 @@ The full list with severities and measured rates: [Rules reference](rules.md).
 
 - [Quickstart](quickstart.md) — install, first scan, CI.
 - [Command line](cli.md) — every command and flag.
+- [Editors and CI](integrations.md) — GitHub Actions, pre-commit, GitLab CI, VS Code and Cursor.
 - [Policy and suppressions](policy.md) — gate the build, accept a risk with an expiry.
+- [False-positive rates](fp-methodology.md) — what a rule's rate means and how it was measured.
 - [SecDB](secdb.md) — optional signed-in judgements, plans and limits.
 - [Third-party providers](providers.md) — VirusTotal with your own key: what is sent, what never is.
 - [Definition bundles](bundles.md) — signed updates to the malicious-package and KEV data.
 - [Local web UI](ui.md) — history, diff, suppressions, account.
 - [Privacy](privacy.md) — exactly what leaves the machine, and when.
 - [Implementation status](STATUS.md) — what is built, what is not, data provenance.
+- [Changelog](https://github.com/jtopaz1/aiterprise-aibom/blob/main/CHANGELOG.md) and
+  [releases](https://github.com/jtopaz1/aiterprise-aibom/releases) — what changed, the binaries
+  and their signatures.

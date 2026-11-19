@@ -33,7 +33,7 @@
     },
     {
       "label": "AIBOM: this machine's MCP servers and skills",
-      "detail": "Claude, Cursor, VS Code, Codex, Windsurf, Gemini and OpenClaw configs and the skills folders of this machine.",
+      "detail": "Claude, Cursor, VS Code, Codex, Windsurf, Gemini, OpenClaw and DeepSeek Harness configs and the skills folders of this machine.",
       "type": "shell",
       "command": "aiterprise-scan",
       "args": ["mcp", "--agent-configs", "--format", "compact"],
