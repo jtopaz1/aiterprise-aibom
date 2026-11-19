@@ -3,8 +3,9 @@
 <!-- mcp-name: io.github.jtopaz1/aiterprise-scan -->
 
 [![CI](https://github.com/jtopaz1/aiterprise-aibom/actions/workflows/ci.yml/badge.svg)](https://github.com/jtopaz1/aiterprise-aibom/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/aiterprise-scan)](https://pypi.org/project/aiterprise-scan/)
-[![Python](https://img.shields.io/pypi/pyversions/aiterprise-scan)](https://pypi.org/project/aiterprise-scan/)
+[![Release](https://img.shields.io/github/v/release/jtopaz1/aiterprise-aibom)](https://github.com/jtopaz1/aiterprise-aibom/releases/latest)
+[![Every install channel](https://github.com/jtopaz1/aiterprise-aibom/actions/workflows/published.yml/badge.svg)](https://github.com/jtopaz1/aiterprise-aibom/actions/workflows/published.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://github.com/jtopaz1/aiterprise-aibom/blob/main/pyproject.toml)
 [![Licence: Apache-2.0](https://img.shields.io/badge/licence-Apache--2.0-blue)](https://github.com/jtopaz1/aiterprise-aibom/blob/main/LICENSE)
 
 The open-source AI supply-chain scanner you can run offline: an AI-BOM with teeth. One command walks
@@ -13,10 +14,14 @@ inventories every AI component, and judges it — every finding carries its evid
 consulted to reach it, and the rule's measured false-positive rate where one exists.
 
 ```bash
-pipx install aiterprise-scan        # or: pip install .   · or a single-file binary from Releases
-aiterprise-scan .                   # scan the current repository
-aiterprise-scan ui                  # local web UI: history, findings, diff, suppressions
+pipx install git+https://github.com/jtopaz1/aiterprise-aibom@v0.1.0
+aiterprise-scan .        # scan the current repository
+aiterprise-scan ui       # local web UI: history, findings, diff, suppressions
 ```
+
+Or a single-file binary for Linux, macOS or Windows (x86-64 or arm64) from the [v0.1.0 release](https://github.com/jtopaz1/aiterprise-aibom/releases/tag/v0.1.0),
+each with a Sigstore bundle, or the image: `docker run --rm -v "$PWD:/src" ghcr.io/jtopaz1/aiterprise-scan:0.1.0`.
+Every one of these is installed from where it was published and held to the killer demo each week ([`published`](https://github.com/jtopaz1/aiterprise-aibom/actions/workflows/published.yml)).
 
 Apache-2.0 · zero runtime dependencies (standard library only) · Python 3.11+ · docs in [`docs/`](https://github.com/jtopaz1/aiterprise-aibom/blob/main/docs/index.md)
 

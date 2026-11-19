@@ -100,6 +100,108 @@ class ReleasedDocsTests(unittest.TestCase):
             self.assertNotRegex(text, r"(?i)not released yet|nothing is published|with the first tagged release", name)
 
 
+class PublishedChannelsTests(unittest.TestCase):
+    """What the docs tell people to install is what was published, and published.yml installs each of
+    those from where it was published and holds it to the killer demo."""
+
+    REPO = "https://github.com/jtopaz1/aiterprise-aibom"
+    WORKFLOWS = ROOT / ".github" / "workflows"
+    WORKFLOW = WORKFLOWS / "published.yml"
+
+    def _docs(self):
+        return {name: (ROOT / name).read_text(encoding="utf-8") for name in ReleasedDocsTests.DOCS}
+
+    def _job(self, name):
+        text = self.WORKFLOW.read_text(encoding="utf-8")
+        found = re.search(rf"^  {re.escape(name)}:\n(.*?)(?=^  \S|\Z)", text, re.MULTILINE | re.DOTALL)
+        self.assertIsNotNone(found, f"published.yml has no job {name}")
+        return found.group(1)
+
+    def test_the_docs_install_only_what_was_published(self):
+        from aiterprise_scan import __version__ as v
+
+        docs = self._docs()
+        # PyPI refused the v0.1.0 upload (RELEASING.md): until PyPI has a release, no doc offers it
+        allowed = {".", "-e .", f"git+{self.REPO}@v{v}"}
+        installs = [(name, m) for name, text in docs.items()
+                    for m in re.findall(r"\bpipx? install\s+((?:-e\s+)?[^\s`#)]+)", text)]
+        self.assertTrue([i for i in installs if i[1].startswith("git+")], installs)
+        self.assertEqual([i for i in installs if i[1] not in allowed], [])
+        self.assertEqual([n for n, t in docs.items() if re.search(r"\buvx\b", t)], [])
+        images = [(name, tag) for name, text in docs.items()
+                  for tag in re.findall(r"ghcr\.io/jtopaz1/aiterprise-scan(?::([\w.-]+))?", text)]
+        self.assertTrue(images)
+        self.assertEqual([i for i in images if i[1] not in ("", "latest", v)], [])
+        releases = [(name, tag) for name, text in docs.items()
+                    for tag in re.findall(re.escape(self.REPO) + r"/releases/tag/(\S+?)[)\s]", text)]
+        self.assertTrue(releases)
+        self.assertEqual([r for r in releases if r[1] != f"v{v}"], [])
+
+    def test_it_runs_by_hand_weekly_and_when_it_changes(self):
+        text = self.WORKFLOW.read_text(encoding="utf-8")
+        self.assertRegex(text, r"(?m)^on:\n  workflow_dispatch:\n  schedule:\n    - cron: ")
+        self.assertRegex(text, r"(?m)^  pull_request:\n    paths: \[\.github/workflows/published\.yml\]$")
+        self.assertNotRegex(text, r"(?m)^  push:")
+
+    def test_each_channel_is_installed_from_where_it_was_published_and_runs_the_killer_demo(self):
+        pip = self._job("pip-from-the-tag")
+        self.assertIn('pip install --quiet "git+https://github.com/${REPO}@v${V}"', pip)
+        self.assertIn('python-version: "3.11"', pip)   # the floor the docs give
+        image = self._job("image")
+        self.assertIn('for tag in "$V" latest; do', image)
+        self.assertNotIn("docker/login-action", image)   # pulled the way a stranger pulls it
+        binaries = self._job("release-binaries")
+        self.assertIn('for f in "$FILE" SHA256SUMS; do', binaries)
+        self.assertIn('"https://github.com/${REPO}/releases/download/${TAG}/${f}"', binaries)
+        built = re.findall(r"name: ([\w-]+), exe", (self.WORKFLOWS / "binaries.yml").read_text(encoding="utf-8"))
+        self.assertEqual(sorted(re.findall(r"name: ([\w-]+), exe", binaries)), sorted(built))
+        for name, job in (("pip-from-the-tag", pip), ("image", image), ("release-binaries", binaries)):
+            self.assertIn("tools/killer_demo.py", job, name)
+            self.assertIn('= "aiterprise-scan $V"', job, f"{name} does not check the version it got")
+        action = self._job("action")
+        self.assertIn("ref: v${{ needs.version.outputs.version }}", action)
+        self.assertEqual(re.findall(r"uses: (\./\S+)", action), ["./published/action", "./published/action"])
+        self.assertIn('test "$KD" = "1"', action)
+        self.assertIn('test "$CLEAN" = "0"', action)
+        hook = self._job("pre-commit")
+        self.assertEqual(re.findall(r"pre-commit try-repo .*", hook),
+                         ['pre-commit try-repo "https://github.com/${REPO}" aiterprise-scan --ref "v${V}" --all-files)'] * 2)
+        self.assertIn('test "$bad" = "1"', hook)
+        self.assertIn('test "$good" = "0"', hook)
+
+    def test_the_release_files_are_checked_before_a_binary_is_trusted(self):
+        files = self._job("release-files")
+        order = [files.index(s) for s in (
+            "gh release download",
+            "sha256sum -c SHA256SUMS",
+            '--certificate-identity "https://github.com/${REPO}/.github/workflows/release.yml@refs/tags/${TAG}"',
+            "--certificate-oidc-issuer https://token.actions.githubusercontent.com")]
+        self.assertEqual(order, sorted(order))
+        self.assertIn("needs: [version, release-files]", self._job("release-binaries"))
+        self.assertIn("matches SHA256SUMS", self._job("release-binaries"))
+
+    def test_pypi_is_installed_once_it_has_the_release_and_reported_until_then(self):
+        job = self._job("pypi")
+        self.assertIn("https://pypi.org/pypi/aiterprise-scan/$V/json", job)
+        self.assertIn("::warning", job)
+        self.assertIn('install --quiet "aiterprise-scan==$V"', job)
+        self.assertIn("tools/killer_demo.py", job)
+        self.assertRegex(job, r"\*\) exit 1")   # anything but 200 or 404 fails
+
+    def test_no_expression_is_spliced_into_a_script(self):
+        # values reach shell code through env only; a `${{ }}` inside `run:` is pasted into the script
+        in_run, indent, scripts = False, 0, 0
+        for line in self.WORKFLOW.read_text(encoding="utf-8").splitlines():
+            if in_run and line.strip() and len(line) - len(line.lstrip()) <= indent:
+                in_run = False
+            if in_run or re.match(r"\s*(- )?run: ", line):
+                self.assertNotIn("${{", line)
+            block = re.match(r"(\s*)(?:- )?run: \|", line)
+            if block:
+                in_run, indent, scripts = True, len(block.group(1)), scripts + 1
+        self.assertGreaterEqual(scripts, 7)
+
+
 class DistChecksRunTests(unittest.TestCase):
     """What PyPI gets is checked on every pull request, and again by the release before the upload."""
 

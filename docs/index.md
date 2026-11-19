@@ -6,7 +6,7 @@ component and judges each one. Every finding carries its evidence, which sources
 and the rule's measured false-positive rate where one exists.
 
 ```bash
-pipx install aiterprise-scan
+pipx install git+https://github.com/jtopaz1/aiterprise-aibom@v0.1.0
 aiterprise-scan .            # scan the current repository
 aiterprise-scan ui           # local web UI: history, findings, diff, suppressions
 ```

@@ -1,0 +1,256 @@
+name: published
+
+# What the docs tell people to install, installed from where it was published and held to the killer
+# demo: pip from the git tag, the six release binaries (after every file of the release has been
+# checked against SHA256SUMS and its Sigstore signature), the ghcr.io image pulled without signing in,
+# the GitHub Action and the pre-commit hook at the tag, and PyPI once PyPI has the release.
+# Runs by hand after a release, weekly so a deleted asset or a private image shows up, and on any
+# pull request that changes it. The version is the checkout's __version__, which the docs pin.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 5 * * 1"
+  pull_request:
+    paths: [.github/workflows/published.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          v=$(PYTHONPATH=src python3 -c "import aiterprise_scan; print(aiterprise_scan.__version__)")
+          echo "checking the published channels of $v"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+  pip-from-the-tag:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4   # tools/killer_demo.py only; the scanner comes from the tag
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: pip install from the tag into a clean virtual environment, then the killer demo
+        shell: bash
+        env:
+          V: ${{ needs.version.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          bin="$RUNNER_TEMP/venv/bin"; [ -d "$bin" ] || bin="$RUNNER_TEMP/venv/Scripts"
+          "$bin/python" -m pip install --quiet "git+https://github.com/${REPO}@v${V}"
+          exe="$bin/aiterprise-scan"; [ -f "$exe.exe" ] && exe="$exe.exe"
+          got=$("$exe" version | tr -d '\r')
+          echo "$got"
+          test "$got" = "aiterprise-scan $V"
+          python tools/killer_demo.py --exe "$exe"
+
+  release-files:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: sigstore/cosign-installer@v3
+      - name: Every file of the release matches SHA256SUMS and carries release.yml's signature at the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.version.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir release && cd release
+          gh release download "$TAG" --repo "$REPO"
+          ls -l
+          sha256sum -c SHA256SUMS
+          for f in $(ls | grep -v '\.sigstore\.json$'); do
+            cosign verify-blob --bundle "$f.sigstore.json" \
+              --certificate-identity "https://github.com/${REPO}/.github/workflows/release.yml@refs/tags/${TAG}" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com "$f"
+          done
+          # what the release says it carries: six binaries, the wheel, the sdist and the scanner's own SBOM
+          for name in linux-x86_64 linux-arm64 macos-x86_64 macos-arm64 windows-x86_64.exe windows-arm64.exe; do
+            test -f "aiterprise-scan-$name"
+          done
+          test "$(ls *.whl | wc -l)" = 1
+          test "$(ls *.tar.gz | wc -l)" = 1
+          test -f "aiterprise-scan-${TAG}.cdx.json"
+
+  release-binaries:
+    needs: [version, release-files]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, name: linux-x86_64, exe: "" }
+          - { os: ubuntu-24.04-arm, name: linux-arm64, exe: "" }
+          - { os: macos-15-intel, name: macos-x86_64, exe: "" }
+          - { os: macos-latest, name: macos-arm64, exe: "" }
+          - { os: windows-latest, name: windows-x86_64, exe: ".exe" }
+          - { os: windows-11-arm, name: windows-arm64, exe: ".exe" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: The binary, downloaded the way a person downloads it, then the killer demo
+        shell: bash
+        env:
+          V: ${{ needs.version.outputs.version }}
+          TAG: v${{ needs.version.outputs.version }}
+          REPO: ${{ github.repository }}
+          FILE: aiterprise-scan-${{ matrix.name }}${{ matrix.exe }}
+        run: |
+          mkdir dl
+          for f in "$FILE" SHA256SUMS; do
+            curl -fsSL -o "dl/$f" "https://github.com/${REPO}/releases/download/${TAG}/${f}"
+          done
+          # SHA256SUMS itself was checked against its signature by release-files
+          python - dl "$FILE" <<'PY'
+          import hashlib, pathlib, sys
+          folder, name = pathlib.Path(sys.argv[1]), sys.argv[2]
+          sums = {}
+          for line in (folder / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
+              digest, _, file = line.partition("  ")
+              sums[file.lstrip("*")] = digest
+          got = hashlib.sha256((folder / name).read_bytes()).hexdigest()
+          if sums.get(name) != got:
+              sys.exit(f"{name}: sha256 {got} is not the one SHA256SUMS gives ({sums.get(name)})")
+          print(f"{name} matches SHA256SUMS")
+          PY
+          chmod +x "dl/$FILE"
+          got=$("dl/$FILE" version | tr -d '\r')
+          echo "$got"
+          test "$got" = "aiterprise-scan $V"
+          python tools/killer_demo.py --exe "dl/$FILE"
+
+  image:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The image of the release and latest, pulled without signing in, then the killer demo
+        env:
+          V: ${{ needs.version.outputs.version }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/aiterprise-scan
+        run: |
+          for tag in "$V" latest; do
+            docker pull --quiet "$IMAGE:$tag"
+            got=$(docker run --rm "$IMAGE:$tag" version)
+            echo "$tag: $got"
+            test "$got" = "aiterprise-scan $V"
+          done
+          # the demo repository is mounted at the same path, so the paths in the scan's arguments hold
+          work="$RUNNER_TEMP/kd-image"
+          mkdir -p "$work" && chmod 777 "$work"
+          printf '#!/bin/sh\nexec docker run --rm -v "%s:%s" -e AITERPRISE_CACHE_DIR -e AITERPRISE_DEFS "%s" "$@"\n' \
+            "$work" "$work" "$IMAGE:$V" > "$RUNNER_TEMP/scan-in-image"
+          chmod +x "$RUNNER_TEMP/scan-in-image"
+          python3 tools/killer_demo.py --work "$work" --exe "$RUNNER_TEMP/scan-in-image"
+
+  action:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # the action exactly as `uses: jtopaz1/aiterprise-aibom/action@vX.Y.Z` gets it: the tag's tree
+      - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.version.outputs.version }}
+          path: published
+      - name: The killer demo repository
+        run: python3 -c "import sys; sys.path.insert(0, 'tools'); import killer_demo, pathlib; killer_demo.build_repo(pathlib.Path('kd'))"
+      - id: kd
+        uses: ./published/action
+        continue-on-error: true
+        with:
+          path: kd
+          offline: "true"
+          upload-sarif: "false"
+          comment: "false"
+      - id: clean
+        uses: ./published/action
+        with:
+          path: tests/golden/F02-clean-python
+          offline: "true"
+          upload-sarif: "false"
+          comment: "false"
+      - name: The action fails the killer demo (exit 1) and passes a clean project (exit 0)
+        env:
+          KD: ${{ steps.kd.outputs.exit-code }}
+          CLEAN: ${{ steps.clean.outputs.exit-code }}
+        run: |
+          echo "killer demo: exit $KD; clean project: exit $CLEAN"
+          test "$KD" = "1"
+          test "$CLEAN" = "0"
+
+  pre-commit:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pre-commit
+        run: python -m pip install --quiet pre-commit==4.3.0
+      - name: The hook at the tag blocks the killer-demo repository and passes a clean one
+        env:
+          V: ${{ needs.version.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          python -c "import sys; sys.path.insert(0, 'tools'); import killer_demo, pathlib; killer_demo.build_repo(pathlib.Path(sys.argv[1]))" "$RUNNER_TEMP/bad"
+          cp -r tests/golden/F02-clean-python "$RUNNER_TEMP/good"
+          for d in bad good; do
+            git -C "$RUNNER_TEMP/$d" init -q
+            git -C "$RUNNER_TEMP/$d" add -A
+            git -C "$RUNNER_TEMP/$d" -c user.name=ci -c user.email=ci@example.invalid commit -q -m "fixture"
+          done
+          set +e
+          (cd "$RUNNER_TEMP/bad" && pre-commit try-repo "https://github.com/${REPO}" aiterprise-scan --ref "v${V}" --all-files)
+          bad=$?
+          (cd "$RUNNER_TEMP/good" && pre-commit try-repo "https://github.com/${REPO}" aiterprise-scan --ref "v${V}" --all-files)
+          good=$?
+          set -e
+          echo "killer demo: exit $bad (want 1); clean project: exit $good (want 0)"
+          test "$bad" = "1"
+          test "$good" = "0"
+
+  pypi:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: listed
+        name: Does PyPI have the release?
+        env:
+          V: ${{ needs.version.outputs.version }}
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/aiterprise-scan/$V/json")
+          echo "PyPI answered $code for aiterprise-scan $V"
+          case "$code" in
+            200) echo "listed=true" >> "$GITHUB_OUTPUT" ;;
+            404) echo "listed=false" >> "$GITHUB_OUTPUT"
+                 echo "::warning title=Not on PyPI::aiterprise-scan $V is not on PyPI, so the docs do not offer it (RELEASING.md)" ;;
+            *) exit 1 ;;
+          esac
+      - if: steps.listed.outputs.listed == 'true'
+        name: pip install from PyPI into a clean virtual environment, then the killer demo
+        env:
+          V: ${{ needs.version.outputs.version }}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet "aiterprise-scan==$V"
+          got=$("$RUNNER_TEMP/venv/bin/aiterprise-scan" version)
+          echo "$got"
+          test "$got" = "aiterprise-scan $V"
+          python3 tools/killer_demo.py --exe "$RUNNER_TEMP/venv/bin/aiterprise-scan"
