@@ -135,7 +135,8 @@ jobs:
           push-to-registry: true
 
   github-release:
-    needs: [sign, pypi, image]
+    # not on pypi: a refused upload must not hold back the signed files (re-run the pypi job later)
+    needs: [sign, image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
