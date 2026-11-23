@@ -2,9 +2,9 @@
  "schema": "ait-kev/1",
  "source": "CISA Known Exploited Vulnerabilities catalog",
  "licence": "CC0-1.0",
- "catalog_version": "2026.11.13",
- "date_released": "2026-11-13T20:24:18.3008Z",
- "count": 1781,
+ "catalog_version": "2026.11.20",
+ "date_released": "2026-11-20T17:48:39.1516Z",
+ "count": 1790,
  "cves": {
   "CVE-2002-0367": {
    "dateAdded": "2022-03-03",
@@ -6650,7 +6650,7 @@
   },
   "CVE-2023-28461": {
    "dateAdded": "2024-11-25",
-   "vendorProject": "Array Networks ",
+   "vendorProject": "Array Networks",
    "product": "AG/vxAG ArrayOS",
    "knownRansomwareCampaignUse": "Known"
   },
@@ -7330,6 +7330,12 @@
    "dateAdded": "2025-06-25",
    "vendorProject": "D-Link",
    "product": "DIR-859 Router",
+   "knownRansomwareCampaignUse": "Unknown"
+  },
+  "CVE-2024-10441": {
+   "dateAdded": "2026-11-18",
+   "vendorProject": "Synology",
+   "product": "DiskStation Manager (DSM)",
    "knownRansomwareCampaignUse": "Unknown"
   },
   "CVE-2024-1086": {
@@ -8144,19 +8150,19 @@
   },
   "CVE-2024-57726": {
    "dateAdded": "2026-04-24",
-   "vendorProject": "SimpleHelp ",
+   "vendorProject": "SimpleHelp",
    "product": "SimpleHelp",
    "knownRansomwareCampaignUse": "Known"
   },
   "CVE-2024-57727": {
    "dateAdded": "2025-02-13",
-   "vendorProject": "SimpleHelp ",
+   "vendorProject": "SimpleHelp",
    "product": "SimpleHelp",
    "knownRansomwareCampaignUse": "Known"
   },
   "CVE-2024-57728": {
    "dateAdded": "2026-04-24",
-   "vendorProject": "SimpleHelp ",
+   "vendorProject": "SimpleHelp",
    "product": "SimpleHelp",
    "knownRansomwareCampaignUse": "Known"
   },
@@ -8964,6 +8970,12 @@
    "product": "Active! Mail",
    "knownRansomwareCampaignUse": "Unknown"
   },
+  "CVE-2025-42884": {
+   "dateAdded": "2026-11-20",
+   "vendorProject": "SAP",
+   "product": "NetWeaver",
+   "knownRansomwareCampaignUse": "Unknown"
+  },
   "CVE-2025-42999": {
    "dateAdded": "2025-05-15",
    "vendorProject": "SAP",
@@ -9362,7 +9374,7 @@
   },
   "CVE-2025-66644": {
    "dateAdded": "2025-12-08",
-   "vendorProject": "Array Networks ",
+   "vendorProject": "Array Networks",
    "product": "ArrayOS AG",
    "knownRansomwareCampaignUse": "Unknown"
   },
@@ -9582,6 +9594,12 @@
    "product": "UnrealIRCd",
    "knownRansomwareCampaignUse": "Unknown"
   },
+  "CVE-2026-115731": {
+   "dateAdded": "2026-11-17",
+   "vendorProject": "Perforce",
+   "product": "Puppet Enterprise",
+   "knownRansomwareCampaignUse": "Unknown"
+  },
   "CVE-2026-11645": {
    "dateAdded": "2026-06-09",
    "vendorProject": "Google",
@@ -9630,6 +9648,12 @@
    "product": "Aspera Faspex",
    "knownRansomwareCampaignUse": "Unknown"
   },
+  "CVE-2026-123890": {
+   "dateAdded": "2026-11-20",
+   "vendorProject": "Broadcom",
+   "product": "VMware vCenter",
+   "knownRansomwareCampaignUse": "Unknown"
+  },
   "CVE-2026-124194": {
    "dateAdded": "2026-11-10",
    "vendorProject": "Microsoft",
@@ -9652,6 +9676,12 @@
    "dateAdded": "2026-01-29",
    "vendorProject": "Ivanti",
    "product": "Endpoint Manager Mobile (EPMM)",
+   "knownRansomwareCampaignUse": "Unknown"
+  },
+  "CVE-2026-129448": {
+   "dateAdded": "2026-11-20",
+   "vendorProject": "Apache",
+   "product": "Roller",
    "knownRansomwareCampaignUse": "Unknown"
   },
   "CVE-2026-1340": {
@@ -10086,6 +10116,12 @@
    "product": "Marimo",
    "knownRansomwareCampaignUse": "Unknown"
   },
+  "CVE-2026-40217": {
+   "dateAdded": "2026-11-18",
+   "vendorProject": "BerriAI",
+   "product": "LiteLLM",
+   "knownRansomwareCampaignUse": "Unknown"
+  },
   "CVE-2026-41091": {
    "dateAdded": "2026-05-20",
    "vendorProject": "Microsoft",
@@ -10196,7 +10232,7 @@
   },
   "CVE-2026-48558": {
    "dateAdded": "2026-06-29",
-   "vendorProject": "SimpleHelp ",
+   "vendorProject": "SimpleHelp",
    "product": "SimpleHelp",
    "knownRansomwareCampaignUse": "Unknown"
   },
@@ -10470,6 +10506,12 @@
    "product": "Secure Email Gateway",
    "knownRansomwareCampaignUse": "Unknown"
   },
+  "CVE-2026-76466": {
+   "dateAdded": "2026-11-20",
+   "vendorProject": "Cisco",
+   "product": "Expressway Series",
+   "knownRansomwareCampaignUse": "Unknown"
+  },
   "CVE-2026-76504": {
    "dateAdded": "2026-09-30",
    "vendorProject": "Cisco",
@@ -10618,6 +10660,18 @@
    "dateAdded": "2026-10-04",
    "vendorProject": "Citrix",
    "product": "NetScaler",
+   "knownRansomwareCampaignUse": "Unknown"
+  },
+  "CVE-2026-90436": {
+   "dateAdded": "2026-11-18",
+   "vendorProject": "Apache",
+   "product": "Axis",
+   "knownRansomwareCampaignUse": "Unknown"
+  },
+  "CVE-2026-90817": {
+   "dateAdded": "2026-11-18",
+   "vendorProject": "Vanderbilt University",
+   "product": "Research Electronic Data Capture (REDCap)",
    "knownRansomwareCampaignUse": "Unknown"
   },
   "CVE-2026-9082": {
